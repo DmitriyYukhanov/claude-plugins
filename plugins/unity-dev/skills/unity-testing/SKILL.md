@@ -81,6 +81,7 @@ public class FeaturePlayModeTests
     [TearDown]
     public void TearDown()
     {
+        // DestroyImmediate for EditMode tests; use Destroy for PlayMode
         Object.DestroyImmediate(_testObject);
     }
 

@@ -53,7 +53,7 @@ Sort by static/non-static first, then by member type, then by visibility:
 - **TryGetComponent**: Use to avoid null reference exceptions
 
 ### Code Organization
-- **Namespaces**: Prevent nested namespaces
+- **Namespaces**: Avoid nested namespaces
 - **Regions**: Use only when necessary (interface implementations, auto-generated code)
 - **File Structure**: One type per file (except generic interface base classes)
 - **Imports**: Ensure all referenced types have proper `using` directives

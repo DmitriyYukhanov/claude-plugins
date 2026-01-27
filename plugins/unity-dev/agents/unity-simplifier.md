@@ -21,7 +21,7 @@ void Start()
 
 **After:**
 ```csharp
-[SerializeField] private Rigidbody _rigidbody;
+private Rigidbody _rigidbody;
 
 private void Awake()
 {

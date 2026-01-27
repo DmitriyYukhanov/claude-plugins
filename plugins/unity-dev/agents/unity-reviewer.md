@@ -82,7 +82,7 @@ Flag these with high confidence:
 - `string + string` in hot paths (use StringBuilder)
 - Static event without cleanup (memory leak)
 - `async void` without try-catch (unhandled exceptions)
-- `?.` operator on Unity objects (use explicit null check or TryGetComponent)
+- `?.` operator on destroyed Unity objects (use explicit null check with == or implicit bool conversion)
 
 ## Your Task
 
