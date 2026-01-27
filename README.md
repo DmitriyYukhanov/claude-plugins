@@ -1,66 +1,34 @@
-# unity-dev
+# Dmitriy's Claude Code Plugins
 
-A Claude Code plugin for Unity C# development with architecture design, coding guidelines, testing patterns, and specialized review agents.
+Personal collection of Claude Code plugins for Unity development and productivity.
 
 ## Installation
 
-```bash
-/plugin install unity-dev@DmitriyYukhanov/claude-plugins
-```
-
-## Features
-
-### Command: `/unity-dev`
-
-Orchestrates a complete Unity development workflow:
-
-1. **Discovery** - Analyzes project structure and requirements
-2. **Architecture** - Designs component hierarchies, interfaces, test stubs, Mermaid diagrams
-3. **Implementation** - Follows Unity C# coding guidelines
-4. **Review** - Unity-specific code review for performance, lifecycle, serialization issues
-5. **Testing** - EditMode and PlayMode test patterns
-
-### Skills (Reference Knowledge)
-
-- **unity-architect** - Architecture patterns, Mermaid diagrams, test stub templates
-- **unity-coder** - C# naming conventions, member ordering, Unity-specific guidelines
-- **unity-testing** - EditMode/PlayMode patterns, performance testing, code coverage
-
-### Agents (Autonomous Tasks)
-
-- **unity-reviewer** - Parallel code reviewer for Unity-specific issues
-- **unity-simplifier** - Code simplification following Unity patterns
-
-## Usage
+Add this marketplace to Claude Code:
 
 ```bash
-# Full development workflow
-/unity-dev Add player health system with damage and healing
-
-# Individual phases
-/unity-dev architect only - Design a save system
-/unity-dev review only - Review recent changes
+/plugin marketplace add DmitriyYukhanov/claude-plugins
 ```
 
-## What It Checks
+Then install plugins:
 
-### Performance
-- Uncached `GetComponent` in Update loops
-- Allocations in hot paths (LINQ, string concatenation)
-- Missing object pooling
+```bash
+/plugin install unity-dev
+```
 
-### Lifecycle
-- Proper Awake/Start/OnEnable/OnDisable/OnDestroy usage
-- Event subscription/unsubscription symmetry
-- Static state cleanup with `[RuntimeInitializeOnLoadMethod]`
+## Available Plugins
 
-### Serialization
-- Correct use of `[SerializeField]` and `[field:SerializeField]`
-- Missing `[System.Serializable]` on nested classes
+### unity-dev
 
-### Platform
-- IL2CPP compatibility (no runtime reflection)
-- Platform-specific `#if` directives
+Unity C# development workflow with:
+- `/unity-dev` command for full workflow orchestration
+- Architecture design with Mermaid diagrams
+- C# coding guidelines following Microsoft conventions
+- EditMode/PlayMode testing patterns
+- Unity-specific code review agent
+- Code simplification agent
+
+[View documentation](./plugins/unity-dev/README.md)
 
 ## License
 

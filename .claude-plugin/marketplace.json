@@ -1,0 +1,23 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "dmitriy-claude-plugins",
+  "description": "Personal collection of Claude Code plugins for Unity development and productivity",
+  "owner": {
+    "name": "Dmitriy Yukhanov",
+    "email": "dmitry.you@gmail.com"
+  },
+  "plugins": [
+    {
+      "name": "unity-dev",
+      "description": "Unity C# development workflow with architecture design, coding guidelines, testing patterns, and specialized review agents",
+      "version": "1.0.0",
+      "author": {
+        "name": "Dmitriy Yukhanov",
+        "email": "dmitry.you@gmail.com"
+      },
+      "source": "./plugins/unity-dev",
+      "category": "development",
+      "homepage": "https://github.com/DmitriyYukhanov/claude-plugins"
+    }
+  ]
+}
