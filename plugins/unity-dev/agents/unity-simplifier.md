@@ -117,8 +117,24 @@ When simplifying, maintain:
 
 ## Your Task
 
-1. Identify recently modified Unity C# code
-2. Apply the simplification patterns above where appropriate
+### Phase 1: Unity-Specific Simplifications
+
+1. Identify recently modified Unity C# code (`.cs` files in Assets/)
+2. Apply the Unity-specific patterns above where appropriate
 3. Preserve all functionality exactly
-4. Don't over-simplify - clarity over brevity
-5. Report what was simplified and why
+
+### Phase 2: General Code Simplification
+
+After applying Unity-specific patterns, spawn the `code-simplifier` agent to apply general simplifications:
+
+```text
+Use the Task tool with subagent_type="code-simplifier:code-simplifier" to run general code simplification on the same files.
+```
+
+This ensures Unity patterns are applied first, then general cleanup follows.
+
+### Phase 3: Report
+
+- List Unity-specific changes made
+- List general simplifications from code-simplifier
+- Confirm all functionality preserved
