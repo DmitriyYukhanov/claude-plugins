@@ -8,6 +8,24 @@ A Claude Code plugin for Unity C# development with architecture design, coding g
 /plugin install unity-dev@DmitriyYukhanov/claude-plugins
 ```
 
+## Dependencies
+
+This plugin delegates to standard Claude Code plugins for enhanced functionality:
+
+| Agent | Delegates To | Purpose |
+|-------|--------------|---------|
+| `unity-reviewer` | `feature-dev:code-reviewer` | General code quality, logic, and bug detection |
+| `unity-simplifier` | `code-simplifier:code-simplifier` | General code cleanup after Unity-specific patterns |
+
+**Required plugins** (install from official marketplace):
+
+```bash
+/plugin install feature-dev
+/plugin install code-simplifier
+```
+
+The Unity agents apply domain-specific patterns first, then delegate to general-purpose agents for comprehensive coverage.
+
 ## Features
 
 ### Command: `/unity-dev`
@@ -28,8 +46,8 @@ Orchestrates a complete Unity development workflow:
 
 ### Agents (Autonomous Tasks)
 
-- **unity-reviewer** - Parallel code reviewer for Unity-specific issues
-- **unity-simplifier** - Code simplification following Unity patterns
+- **unity-reviewer** - Unity-specific review, then chains to `feature-dev:code-reviewer`
+- **unity-simplifier** - Unity patterns, then chains to `code-simplifier:code-simplifier`
 
 ## Usage
 

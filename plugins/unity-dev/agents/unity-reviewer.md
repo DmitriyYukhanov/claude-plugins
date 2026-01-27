@@ -86,8 +86,24 @@ Flag these with high confidence:
 
 ## Your Task
 
+### Phase 1: Unity-Specific Review
+
 1. Read the code files that were recently modified or specified
-2. Apply all review lenses above
+2. Apply all Unity-specific review lenses above
 3. Report only issues with confidence >= 80
-4. Format output as shown above
-5. Include "Passed Unity Checks" section for transparency
+
+### Phase 2: General Code Review
+
+After Unity-specific review, spawn the `feature-dev:code-reviewer` agent for general quality checks:
+
+```text
+Use the Task tool with subagent_type="feature-dev:code-reviewer" to review the same files for general code quality issues.
+```
+
+This catches general bugs, logic errors, and quality issues that aren't Unity-specific.
+
+### Phase 3: Combined Report
+
+1. Unity-specific issues (from Phase 1)
+2. General code quality issues (from Phase 2)
+3. Include "Passed Unity Checks" section for transparency
