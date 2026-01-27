@@ -1,0 +1,9 @@
+{
+  "name": "unity-dev",
+  "version": "1.0.0",
+  "description": "Unity C# development workflow with architecture design, coding guidelines, testing patterns, and specialized review agents",
+  "author": {
+    "name": "Dmitriy Yukhanov",
+    "email": "dmitry.you@gmail.com"
+  }
+}
