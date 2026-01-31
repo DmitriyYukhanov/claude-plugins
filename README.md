@@ -1,6 +1,6 @@
-# Dmitriy's Claude Code Plugins
+# Dmitriy's Claude Code plugins and skills
 
-Personal collection of Claude Code plugins for Unity development and productivity.
+Personal collection of Claude plugins and skills.
 
 ## Installation
 
