@@ -18,6 +18,18 @@
       "source": "./plugins/unity-dev",
       "category": "development",
       "homepage": "https://github.com/DmitriyYukhanov/claude-plugins"
+    },
+    {
+      "name": "agent-teams",
+      "description": "Set up and orchestrate Claude Code agent teams - multiple instances working together with shared tasks, messaging, and coordination",
+      "version": "1.0.0",
+      "author": {
+        "name": "Dmitriy Yukhanov",
+        "email": "dmitry.you@gmail.com"
+      },
+      "source": "./plugins/agent-teams",
+      "category": "productivity",
+      "homepage": "https://github.com/DmitriyYukhanov/claude-plugins"
     }
   ]
 }

@@ -30,6 +30,17 @@ Unity C# development workflow with:
 
 [View documentation](./plugins/unity-dev/README.md)
 
+### agent-teams
+
+Set up and orchestrate Claude Code agent teams with:
+- Auto-activating skill for agent team setup and coordination
+- Teams vs subagents decision guide
+- Display modes (in-process and split pane)
+- Prompt templates for code review, debugging, and exploration
+- Configuration reference with architecture, permissions, and limitations
+
+[View documentation](./plugins/agent-teams/README.md)
+
 ## License
 
 MIT

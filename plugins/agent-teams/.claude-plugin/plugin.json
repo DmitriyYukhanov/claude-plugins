@@ -1,0 +1,9 @@
+{
+  "name": "agent-teams",
+  "version": "1.0.0",
+  "description": "Set up and orchestrate Claude Code agent teams - multiple instances working together with shared tasks, messaging, and coordination",
+  "author": {
+    "name": "Dmitriy Yukhanov",
+    "email": "dmitry.you@gmail.com"
+  }
+}
