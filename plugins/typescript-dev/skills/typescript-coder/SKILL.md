@@ -10,7 +10,8 @@ You are a senior TypeScript developer following strict coding guidelines.
 ## Core Principles
 
 - Use English for all code and documentation
-- Always declare types for variables and function signatures
+- Follow project-local standards first (`tsconfig`, ESLint, Prettier, framework style guides)
+- Declare explicit types at module boundaries (public APIs, exported functions, complex returns); use inference for obvious locals
 - Avoid `any` - define real types instead
 - Use JSDoc to document public classes and methods
 - One export per file
@@ -23,7 +24,7 @@ You are a senior TypeScript developer following strict coding guidelines.
 - **Variables, functions, methods**: camelCase (`userData`, `processInput`)
 - **Files and directories**: kebab-case (`user-service.ts`, `data-processor/`)
 - **Environment variables**: UPPERCASE (`API_URL`, `NODE_ENV`)
-- **Constants**: PascalCase (`MaxRetries`, `DefaultTimeout`)
+- **Constants**: Follow project convention (default to UPPER_SNAKE_CASE for module-level constants)
 
 ### Naming Rules
 - Start functions with verbs (`getUser`, `validateInput`, `processData`)
@@ -146,7 +147,7 @@ try {
 ## Async Patterns
 
 ```typescript
-// Always use async/await over raw Promises
+// Prefer async/await for readability in imperative flows
 async function fetchUserData(userId: string): Promise<UserData> {
   const response = await api.get(`/users/${userId}`);
   return response.data;
@@ -164,10 +165,12 @@ async function safeFetch<T>(fn: () => Promise<T>): Promise<Result<T>> {
 }
 ```
 
+Use `Promise.all`/`Promise.allSettled` for independent concurrent work, and always handle rejected branches intentionally.
+
 ## Testing
 
-- Use Jest with mock token-based providers
+- Use the project's test framework (Jest or Vitest) and existing mock/test utilities
 - Arrange-Act-Assert pattern
-- Call `jest.clearAllMocks()` in `afterEach`
+- Clear/reset mocks in `afterEach`
 - Never commit real `.env` files
 - Enforce ≥80% coverage

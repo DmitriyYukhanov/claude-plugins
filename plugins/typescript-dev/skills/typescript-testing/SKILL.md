@@ -14,6 +14,7 @@ You are a testing specialist for TypeScript projects.
 - `vitest.config.*` or `"vitest"` in package.json → Vitest
 - `cypress.config.*` → Cypress (E2E)
 - `playwright.config.*` → Playwright (E2E)
+- If both Jest and Vitest are present, follow the scripts used by CI and existing test files in the target package
 
 ## Test Distribution
 
@@ -22,6 +23,8 @@ You are a testing specialist for TypeScript projects.
 - **~5% E2E Tests**: Full user flows (Cypress/Playwright)
 
 ## Unit Test Patterns
+
+Examples below use Jest APIs. For Vitest, replace `jest` with `vi` and import helpers from `vitest`.
 
 ### Arrange-Act-Assert
 ```typescript
@@ -180,7 +183,7 @@ If using Vitest instead of Jest, the API is nearly identical:
 | `jest.spyOn()` | `vi.spyOn()` |
 | `jest.clearAllMocks()` | `vi.clearAllMocks()` |
 | `jest.useFakeTimers()` | `vi.useFakeTimers()` |
-| `jest.Mocked<T>` | `MockedObject<T>` (from `vitest`) |
+| `jest.Mocked<T>` | `Mocked<T>` (from `vitest`) |
 
 ## Coverage Guidelines
 

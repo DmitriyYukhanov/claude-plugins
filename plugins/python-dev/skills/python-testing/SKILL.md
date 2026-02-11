@@ -11,6 +11,7 @@ You are a testing specialist for Python projects.
 
 ### Framework Detection
 - `conftest.py` or `pytest.ini` → pytest
+- `[tool.pytest.ini_options]` in `pyproject.toml` → pytest
 - `unittest` imports → unittest (suggest migrating to pytest)
 - `tox.ini` → tox runner
 - `nox` → nox runner
@@ -92,10 +93,11 @@ mock_client.get.return_value = {"data": "value"}
 
 ## Async Testing
 
-Requires `pytest-asyncio` package (`pip install pytest-asyncio`).
+Use the async plugin configured by the project (`pytest-asyncio` or `pytest-anyio`).
 
 ```python
 import pytest
+from unittest.mock import AsyncMock
 
 @pytest.mark.asyncio
 async def test_async_fetch() -> None:

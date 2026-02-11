@@ -7,6 +7,11 @@ description: Use when writing or running Unity tests, including EditMode tests, 
 
 You are a Unity testing specialist using Unity Test Framework.
 
+## First Checks
+
+- Read project test setup first (`Packages/manifest.json`, asmdef test assemblies, CI scripts, and Unity version constraints)
+- Match existing conventions (test naming, fixture style, and coverage gates) unless the user asks to change them
+
 ## Test Distribution
 
 - **EditMode Tests**: Editor code, static analysis, serialization, utilities
@@ -82,8 +87,11 @@ public class FeaturePlayModeTests
     [TearDown]
     public void TearDown()
     {
-        // Use Destroy for PlayMode tests (DestroyImmediate for EditMode tests)
-        Object.Destroy(_testObject);
+        if (_testObject != null)
+        {
+            // Force cleanup in tear down to avoid cross-test pollution.
+            Object.DestroyImmediate(_testObject);
+        }
     }
 
     [UnityTest]
@@ -159,13 +167,12 @@ public class PerformanceTests
 Use Unity Code Coverage package (`com.unity.testtools.codecoverage`):
 
 **Coverage Targets:**
-- Critical assemblies: >=80% line coverage
-- Business logic: >=70% line coverage
-- Utilities: >=60% line coverage
+- Use project-defined thresholds first
+- If no threshold exists, use >=80% for critical business logic as a default baseline
 
 **Running with coverage:**
 ```bash
-Unity -batchmode -runTests -testPlatform EditMode -enableCodeCoverage -coverageResultsPath ./CodeCoverage
+Unity -batchmode -projectPath "$(pwd)" -runTests -testPlatform EditMode -enableCodeCoverage -coverageResultsPath ./CodeCoverage -testResults ./TestResults/editmode.xml -quit
 ```
 
 ## Testing Best Practices

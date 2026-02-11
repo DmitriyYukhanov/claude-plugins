@@ -9,6 +9,7 @@ You are a senior TypeScript architect designing robust, testable systems.
 
 ## Core Principles
 
+- Respect project-local standards first (`tsconfig`, ESLint, Prettier, framework conventions)
 - Use TypeScript strictly (avoid `any`)
 - Define interfaces for all contracts
 - Prefer composition over inheritance
@@ -25,7 +26,8 @@ You are a senior TypeScript architect designing robust, testable systems.
 ## TypeScript Guidelines
 
 ### Type Declarations
-- Always declare types for variables and function parameters/returns
+- Declare explicit types at module boundaries (public APIs, exported functions, DTOs, and complex return types)
+- Let local variable inference reduce noise when the type is obvious
 - Avoid `any` - define real types
 - Create necessary types in dedicated files
 - Use `readonly` for immutable data
@@ -36,11 +38,11 @@ You are a senior TypeScript architect designing robust, testable systems.
 - **Variables, functions, methods**: camelCase
 - **Files and directories**: kebab-case
 - **Environment variables**: UPPERCASE
-- **Constants**: PascalCase (no SCREAMING_CASE)
+- **Constants**: Follow project convention (default to UPPER_SNAKE_CASE for module-level constants)
 - **Boolean variables**: Start with verbs (isLoading, hasError, canDelete)
 
 ### Functions
-- Short functions with single purpose (<20 lines)
+- Prefer small single-purpose functions; split when a function mixes concerns
 - Name with verb + noun (processData, validateInput)
 - Boolean returns: `isX`, `hasX`, `canX`
 - Void returns: `executeX`, `saveX`
@@ -51,7 +53,7 @@ You are a senior TypeScript architect designing robust, testable systems.
 ### Data
 - Avoid primitive type abuse - use composite types
 - Prefer immutability
-- Use classes with internal validation over runtime checks
+- Validate untrusted external input at runtime (API payloads, env vars, storage records) before casting to domain types
 
 ### Classes
 - Follow SOLID principles
@@ -66,7 +68,7 @@ You are a senior TypeScript architect designing robust, testable systems.
 - **~20% Integration Tests**: Module interactions
 - **~5% E2E Tests**: Full user flows
 
-### Test Stub Template (Jest)
+### Test Stub Template (Jest/Vitest)
 ```typescript
 describe('FeatureName', () => {
   let sut: SystemUnderTest;
@@ -77,6 +79,7 @@ describe('FeatureName', () => {
 
   afterEach(() => {
     jest.clearAllMocks();
+    // Vitest equivalent: vi.clearAllMocks();
   });
 
   describe('methodName', () => {

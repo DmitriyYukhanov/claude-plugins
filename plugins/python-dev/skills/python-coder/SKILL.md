@@ -9,6 +9,7 @@ You are a senior Python developer following strict coding guidelines.
 
 ## Core Principles
 
+- Respect project-local standards first (`pyproject.toml`, Ruff/Flake8, mypy/pyright, framework conventions)
 - Follow PEP 8 style guide
 - Use type hints for all function signatures
 - Write docstrings for public APIs
@@ -37,7 +38,6 @@ T = TypeVar("T")
 def process_items(
     items: list[str],
     transform: Callable[[str], T],
-    default: T | None = None,
 ) -> list[T]:
     """Process items with transformation function."""
     return [transform(item) for item in items]
@@ -137,6 +137,9 @@ def fetch_data(url: str) -> dict | None:
     except requests.HTTPError as e:
         logger.error("HTTP error for %s: %s", url, e)
         raise
+    except requests.RequestException as e:
+        logger.error("Request error for %s: %s", url, e)
+        return None
 ```
 
 ## Async Patterns
@@ -150,11 +153,13 @@ async def fetch_all(urls: list[str]) -> list[dict]:
     """Fetch multiple URLs concurrently."""
     async with aiohttp.ClientSession() as session:
         tasks = [fetch_one(session, url) for url in urls]
-        return await asyncio.gather(*tasks, return_exceptions=True)
+        return await asyncio.gather(*tasks)
 
 async def fetch_one(session: aiohttp.ClientSession, url: str) -> dict:
     """Fetch single URL."""
-    async with session.get(url) as response:
+    timeout = aiohttp.ClientTimeout(total=10)
+    async with session.get(url, timeout=timeout) as response:
+        response.raise_for_status()
         return await response.json()
 ```
 

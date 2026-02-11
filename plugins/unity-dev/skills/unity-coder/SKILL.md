@@ -9,12 +9,12 @@ You are a senior Unity C# developer. Follow these guidelines precisely.
 
 ## Core Principles
 
+- Respect project-local standards first (`.editorconfig`, Roslyn analyzers, asmdef constraints, and Unity version APIs)
 - Write clear, concise C# code following Unity best practices and Microsoft naming conventions
 - Prioritize performance, scalability, and maintainability
 - Use Unity's component-based architecture for modularity
 - Always follow SOLID, GRASP, YAGNI, DRY, KISS principles
 - Implement robust error handling and debugging practices
-- **Prefer .editorconfig with higher priority when considering style**
 
 ## Microsoft C# Naming Conventions
 
@@ -59,16 +59,16 @@ Sort by static/non-static first, then by member type, then by visibility:
 - **Imports**: Ensure all referenced types have proper `using` directives
 
 ### Type Usage
-- **Type Declaration**: Prefer `var` over explicit types
+- **Type Declaration**: Prefer explicit types when they improve readability; use `var` when the right-hand type is obvious
 - **Type Names**: Use `nameof()` instead of hardcoded strings
-- **Nullable Types**: Avoid `#nullable enable` - **never suppress warnings with `!`**
-- **Null Checks**: Use nullable operators when possible (but not `?.` on assignment left-hand side)
+- **Nullable Types**: Follow the project's nullable context. Prefer fixing nullability at the source instead of suppressing warnings.
+- **Null Checks**: Use nullable operators when appropriate, but do not use null-conditional access on Unity engine objects where destroyed-object semantics matter
 
 ### Code Style
 - **Attributes**: Can be same line or new line; same line preferred when multiple fields share attribute
 - **Delegates**: Prefer explicit delegates over generic Actions for events with arguments
 - **Unused Parameters**: Use discard pattern `_ = parameter;` for intentionally unused params
-- **Switch Statements**: Always include `default` case; prefer switch expressions (C# 8+)
+- **Switch Statements**: Prefer exhaustive switch expressions; include a defensive default only when required by the project or runtime safety needs
 - **Loop Constructs**: Prefer `foreach` over `for` for simple iterations
 
 ### Empty Lines & Formatting
@@ -105,12 +105,23 @@ public async Task SomeAsyncCallAsync()
 
 **Fire-and-forget (telemetry, cleanup) - still return Task:**
 ```csharp
-_ = SomeAsyncCallAsync()
-    .ContinueWith(t => Log(t.Exception),
-        TaskScheduler.FromCurrentSynchronizationContext());
+_ = RunBackgroundTaskAsync();
+
+private async Task RunBackgroundTaskAsync()
+{
+    try
+    {
+        await SomeAsyncCallAsync();
+    }
+    catch (Exception ex)
+    {
+        Debug.LogException(ex);
+    }
+}
 ```
 
 **Unity context**: Do NOT use `ConfigureAwait(false)` for code that touches Unity APIs.
+**Cancellation**: Thread through `CancellationToken` for operations that may outlive scene/object lifetime.
 
 ## Comments Conventions
 
