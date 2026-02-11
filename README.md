@@ -1,6 +1,6 @@
 # Custom Claude Code plugins and skills
 
-Personal collection of Claude Code plugins and skills for structured, high-quality development workflows. Augments official claude plugins marketplace.
+Personal collection of Claude Code plugins and skills for structured, high-quality development workflows. Augments the official Claude plugins marketplace.
 
 ## Installation
 
