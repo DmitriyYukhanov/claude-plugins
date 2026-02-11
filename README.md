@@ -1,6 +1,6 @@
-# Dmitriy's Claude Code plugins and skills
+# Custom Claude Code plugins and skills
 
-Personal collection of Claude plugins and skills.
+Personal collection of Claude Code plugins and skills for structured, high-quality development workflows. Augments official claude plugins marketplace.
 
 ## Installation
 
@@ -10,10 +10,20 @@ Add this marketplace to Claude Code:
 /plugin marketplace add DmitriyYukhanov/claude-plugins
 ```
 
-Then install plugins:
+Then install the plugins you want to use:
 
 ```bash
 /plugin install unity-dev
+/plugin install python-dev
+/plugin install typescript-dev
+/plugin install agent-teams
+```
+
+You can also install individual plugins directly, for example:
+
+```bash
+/plugin install python-dev@DmitriyYukhanov/claude-plugins
+/plugin install typescript-dev@DmitriyYukhanov/claude-plugins
 ```
 
 ## Available Plugins
@@ -29,6 +39,28 @@ Unity C# development workflow with:
 - Code simplification agent
 
 [View documentation](./plugins/unity-dev/README.md)
+
+### python-dev
+
+Python development workflow with:
+- `/python-dev` command for end-to-end workflows (discovery → architecture → implementation → review → testing)
+- Architecture patterns, protocols, and Mermaid diagrams
+- PEP 8-aligned coding guidelines and type-hint best practices
+- pytest-based testing patterns, fixtures, mocking, and coverage guidance
+- Python-specific review agent that can delegate to general feature review
+
+[View documentation](./plugins/python-dev/README.md)
+
+### typescript-dev
+
+TypeScript development workflow with:
+- `/typescript-dev` command for full-stack TypeScript workflows
+- Architecture design for modules, interfaces, and test stubs with Mermaid diagrams
+- TypeScript coding guidelines, async patterns, and framework-aware checks
+- Testing patterns for unit, integration, and E2E tests (Jest/Vitest style)
+- TypeScript-specific review agent that can delegate to general feature review
+
+[View documentation](./plugins/typescript-dev/README.md)
 
 ### agent-teams
 
