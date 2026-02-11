@@ -10,6 +10,7 @@ You are a Unity testing specialist using Unity Test Framework.
 ## First Checks
 
 - Read project test setup first (`Packages/manifest.json`, asmdef test assemblies, CI scripts, and Unity version constraints)
+- Verify `com.unity.test-framework` version before choosing async test style (`IEnumerator` baseline vs `async Task` in newer UTF versions)
 - Match existing conventions (test naming, fixture style, and coverage gates) unless the user asks to change them
 
 ## Test Distribution
@@ -87,11 +88,8 @@ public class FeaturePlayModeTests
     [TearDown]
     public void TearDown()
     {
-        if (_testObject != null)
-        {
-            // Force cleanup in tear down to avoid cross-test pollution.
-            Object.DestroyImmediate(_testObject);
-        }
+        // Use Destroy for PlayMode tests (DestroyImmediate for EditMode tests)
+        Object.Destroy(_testObject);
     }
 
     [UnityTest]
@@ -118,6 +116,40 @@ public class FeaturePlayModeTests
 
         // Assert
         Assert.IsTrue(operation.Success);
+    }
+}
+```
+
+## Async Test Compatibility (Task and Awaitable)
+
+- Widest compatibility baseline (including older Unity/UTF): keep `[UnityTest]` methods returning `IEnumerator`
+- For UTF `1.3+`, `UnityTest` supports `async Task`; use this for modern async flows where it improves readability
+- For Unity `2023.1+` and Unity `6+`, you can await `UnityEngine.Awaitable` inside async tests
+- Do not use `Awaitable` as the test method return type; use `Task` or `IEnumerator` for test entry points
+- Await each `Awaitable` instance once only
+
+```csharp
+using System.Threading.Tasks;
+using NUnit.Framework;
+using UnityEngine;
+using UnityEngine.TestTools;
+
+public class FeatureAsyncPlayModeTests
+{
+    [UnityTest]
+    public async Task ComponentBehavior_AfterOneFrame_ShouldUpdate()
+    {
+        var go = new GameObject("TestObject");
+        var component = go.AddComponent<TestComponent>();
+
+#if UNITY_6000_0_OR_NEWER
+        await Awaitable.NextFrameAsync();
+#else
+        await Task.Yield();
+#endif
+
+        Assert.IsTrue(component.HasUpdated);
+        Object.Destroy(go);
     }
 }
 ```

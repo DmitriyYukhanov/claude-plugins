@@ -91,19 +91,35 @@ Sort by static/non-static first, then by member type, then by visibility:
 
 ### Async/Await Patterns
 
-**Naming**: All async methods must end with `Async` suffix.
+**Naming**: Methods that return `Task`, `ValueTask`, `Awaitable`, or `Awaitable<T>` and are awaited must end with `Async` suffix.
 
-**Best default - return Task and await it:**
+**Version-aware default:**
+- For cross-version snippets/packages that may run on pre-2023 Unity, default to `Task`
+- For Unity `2023.1+` and Unity `6+`, prefer `UnityEngine.Awaitable` for engine frame/thread operations (`NextFrameAsync`, `MainThreadAsync`, `BackgroundThreadAsync`)
+- In shared code, gate `Awaitable` usage with compile symbols and keep a `Task` fallback
+
 ```csharp
-await SomeAsyncCallAsync();
+using System.Threading.Tasks;
+using UnityEngine;
 
-public async Task SomeAsyncCallAsync()
+public static class FrameDelay
 {
-    // do work
+    // When supporting code for both Unity 6 and older Unity versions, use conditional flag
+#if UNITY_6000_0_OR_NEWER
+    public static async Awaitable DelayOneFrameAsync()
+    {
+        await Awaitable.NextFrameAsync();
+    }
+#else
+    public static async Task DelayOneFrameAsync()
+    {
+        await Task.Yield();
+    }
+#endif
 }
 ```
 
-**Fire-and-forget (telemetry, cleanup) - still return Task:**
+**Fire-and-forget (telemetry, cleanup):**
 ```csharp
 _ = RunBackgroundTaskAsync();
 
@@ -119,6 +135,11 @@ private async Task RunBackgroundTaskAsync()
     }
 }
 ```
+
+**Awaitable safety rules (Unity `2023.1+` / `6+`):**
+- Await each `Awaitable` instance at most once (instances are pooled)
+- `Awaitable` continuations run synchronously when completion is triggered; avoid heavy work in completion paths
+- After `await Awaitable.BackgroundThreadAsync()`, switch back with `await Awaitable.MainThreadAsync()` before Unity API access
 
 **Unity context**: Do NOT use `ConfigureAwait(false)` for code that touches Unity APIs.
 **Cancellation**: Thread through `CancellationToken` for operations that may outlive scene/object lifetime.

@@ -32,6 +32,7 @@ You are a Unity-specific code reviewer. Focus on Unity patterns that general cod
 - Missing object pooling for frequently spawned objects
 - Heavy physics queries every frame
 - Reflection usage in runtime code
+- `Awaitable` continuations doing heavy synchronous work on completion paths
 
 ### 4. Memory & Resources
 - Unsubscribed events (memory leaks)
@@ -43,6 +44,7 @@ You are a Unity-specific code reviewer. Focus on Unity patterns that general cod
 - Platform-specific code properly wrapped in `#if` directives
 - IL2CPP compatibility (no problematic reflection)
 - API compatibility with target Unity version
+- Async primitive compatibility with target Unity/UTF versions (`Awaitable` requires Unity `2023.1+` or `6+`)
 
 ### 6. Editor vs Runtime
 - Editor code properly wrapped in `#if UNITY_EDITOR`
@@ -89,6 +91,9 @@ Flag these with high confidence:
 - Static event without cleanup (memory leak)
 - `async void` without try-catch (unhandled exceptions)
 - `?.` operator on destroyed Unity objects (use explicit null check with == or implicit bool conversion)
+- Awaiting the same `Awaitable` instance more than once
+- Calling Unity APIs after `await Awaitable.BackgroundThreadAsync()` without switching back to main thread
+- Using `Awaitable` in code that targets pre-2023 Unity without version guards/fallbacks
 
 ## Your Task
 
