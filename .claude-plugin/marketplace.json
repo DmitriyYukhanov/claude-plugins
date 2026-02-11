@@ -3,8 +3,7 @@
   "name": "dmitriy-claude-plugins",
   "description": "Personal collection of Claude Code plugins for Unity development and productivity",
   "owner": {
-    "name": "Dmitriy Yukhanov",
-    "email": "dmitry.you@gmail.com"
+    "name": "Dmitry Yuhanov"
   },
   "plugins": [
     {
@@ -12,8 +11,7 @@
       "description": "Unity C# development workflow with architecture design, coding guidelines, testing patterns, and specialized review agents",
       "version": "1.0.0",
       "author": {
-        "name": "Dmitriy Yukhanov",
-        "email": "dmitry.you@gmail.com"
+        "name": "Dmitry Yuhanov"
       },
       "source": "./plugins/unity-dev",
       "category": "development",
@@ -24,8 +22,7 @@
       "description": "Set up and orchestrate Claude Code agent teams - multiple instances working together with shared tasks, messaging, and coordination",
       "version": "1.0.0",
       "author": {
-        "name": "Dmitriy Yukhanov",
-        "email": "dmitry.you@gmail.com"
+        "name": "Dmitry Yuhanov"
       },
       "source": "./plugins/agent-teams",
       "category": "productivity",

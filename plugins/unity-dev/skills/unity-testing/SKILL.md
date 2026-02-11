@@ -7,6 +7,12 @@ description: Use when writing or running Unity tests, including EditMode tests, 
 
 You are a Unity testing specialist using Unity Test Framework.
 
+## First Checks
+
+- Read project test setup first (`Packages/manifest.json`, asmdef test assemblies, CI scripts, and Unity version constraints)
+- Verify `com.unity.test-framework` version before choosing async test style (`IEnumerator` baseline vs `async Task` in newer UTF versions)
+- Match existing conventions (test naming, fixture style, and coverage gates) unless the user asks to change them
+
 ## Test Distribution
 
 - **EditMode Tests**: Editor code, static analysis, serialization, utilities
@@ -46,10 +52,11 @@ public class FeatureEditorTests
     }
 
     [Test]
-    public void MethodName_GivenCondition_ShouldExpectedResult()
+    public void MethodName_Condition_ExpectedResult()
     {
         // Arrange
         var sut = new SystemUnderTest();
+        var expected = 42;
 
         // Act
         var result = sut.DoSomething();
@@ -81,8 +88,8 @@ public class FeaturePlayModeTests
     [TearDown]
     public void TearDown()
     {
-        // DestroyImmediate for EditMode tests; use Destroy for PlayMode
-        Object.DestroyImmediate(_testObject);
+        // Use Destroy for PlayMode tests (DestroyImmediate for EditMode tests)
+        Object.Destroy(_testObject);
     }
 
     [UnityTest]
@@ -109,6 +116,40 @@ public class FeaturePlayModeTests
 
         // Assert
         Assert.IsTrue(operation.Success);
+    }
+}
+```
+
+## Async Test Compatibility (Task and Awaitable)
+
+- Widest compatibility baseline (including older Unity/UTF): keep `[UnityTest]` methods returning `IEnumerator`
+- For UTF `1.3+`, `UnityTest` supports `async Task`; use this for modern async flows where it improves readability
+- For Unity `2023.1+` and Unity `6+`, you can await `UnityEngine.Awaitable` inside async tests
+- Do not use `Awaitable` as the test method return type; use `Task` or `IEnumerator` for test entry points
+- Await each `Awaitable` instance once only
+
+```csharp
+using System.Threading.Tasks;
+using NUnit.Framework;
+using UnityEngine;
+using UnityEngine.TestTools;
+
+public class FeatureAsyncPlayModeTests
+{
+    [UnityTest]
+    public async Task ComponentBehavior_AfterOneFrame_ShouldUpdate()
+    {
+        var go = new GameObject("TestObject");
+        var component = go.AddComponent<TestComponent>();
+
+#if UNITY_6000_0_OR_NEWER
+        await Awaitable.NextFrameAsync();
+#else
+        await Task.Yield();
+#endif
+
+        Assert.IsTrue(component.HasUpdated);
+        Object.Destroy(go);
     }
 }
 ```
@@ -158,13 +199,12 @@ public class PerformanceTests
 Use Unity Code Coverage package (`com.unity.testtools.codecoverage`):
 
 **Coverage Targets:**
-- Critical assemblies: >=80% line coverage
-- Business logic: >=70% line coverage
-- Utilities: >=60% line coverage
+- Use project-defined thresholds first
+- If no threshold exists, use >=80% for critical business logic as a default baseline
 
 **Running with coverage:**
 ```bash
-Unity -batchmode -runTests -testPlatform EditMode -enableCodeCoverage -coverageResultsPath ./CodeCoverage
+Unity -batchmode -projectPath "$(pwd)" -runTests -testPlatform EditMode -enableCodeCoverage -coverageResultsPath ./CodeCoverage -testResults ./TestResults/editmode.xml -quit
 ```
 
 ## Testing Best Practices
@@ -172,7 +212,7 @@ Unity -batchmode -runTests -testPlatform EditMode -enableCodeCoverage -coverageR
 ### Do
 - Use `[SetUp]` and `[TearDown]` for consistent test isolation
 - Test one behavior per test method
-- Use descriptive test names: `MethodName_Condition_ExpectedResult`
+- Use descriptive test names: `MethodName_Condition_ExpectedResult` (e.g., `GetUser_WhenNotFound_ReturnsNull`)
 - Mock external dependencies when possible
 - Use `UnityEngine.TestTools.LogAssert` to verify expected log messages
 
@@ -191,11 +231,12 @@ public void MethodName_Condition_ExpectedResult()
 {
     // Arrange - Setup test data and dependencies
     var input = CreateTestInput();
+    var expected = CreateExpectedOutput();
 
     // Act - Execute the code under test
     var result = systemUnderTest.Process(input);
 
     // Assert - Verify the outcome
-    Assert.AreEqual(expectedOutput, result);
+    Assert.AreEqual(expected, result);
 }
 ```
