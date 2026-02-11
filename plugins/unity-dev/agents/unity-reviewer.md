@@ -102,6 +102,8 @@ Use the Task tool with subagent_type="feature-dev:code-reviewer" to review the s
 
 This catches general bugs, logic errors, and quality issues that aren't Unity-specific.
 
+**Fallback**: If the `feature-dev` plugin is not installed, perform general code quality review directly covering: logic errors, code duplication, naming quality, and SOLID violations.
+
 ### Phase 3: Combined Report
 
 1. Unity-specific issues (from Phase 1)

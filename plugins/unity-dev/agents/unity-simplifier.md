@@ -77,7 +77,7 @@ IEnumerator WaitAndDo()
 ```csharp
 private static readonly WaitForSeconds _oneSecondWait = new(1f);
 
-private IEnumerator WaitAndDoAsync()
+private IEnumerator WaitAndDo()
 {
     yield return _oneSecondWait;
     DoSomething();
@@ -132,6 +132,8 @@ Use the Task tool with subagent_type="code-simplifier:code-simplifier" to run ge
 ```
 
 This ensures Unity patterns are applied first, then general cleanup follows.
+
+**Fallback**: If the `code-simplifier` plugin is not installed, apply general simplifications directly: remove dead code, simplify conditionals, extract well-named variables, and reduce nesting.
 
 ### Phase 3: Report
 

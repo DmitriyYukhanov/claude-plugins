@@ -46,10 +46,11 @@ public class FeatureEditorTests
     }
 
     [Test]
-    public void MethodName_GivenCondition_ShouldExpectedResult()
+    public void MethodName_Condition_ExpectedResult()
     {
         // Arrange
         var sut = new SystemUnderTest();
+        var expected = 42;
 
         // Act
         var result = sut.DoSomething();
@@ -81,8 +82,8 @@ public class FeaturePlayModeTests
     [TearDown]
     public void TearDown()
     {
-        // DestroyImmediate for EditMode tests; use Destroy for PlayMode
-        Object.DestroyImmediate(_testObject);
+        // Use Destroy for PlayMode tests (DestroyImmediate for EditMode tests)
+        Object.Destroy(_testObject);
     }
 
     [UnityTest]
@@ -172,7 +173,7 @@ Unity -batchmode -runTests -testPlatform EditMode -enableCodeCoverage -coverageR
 ### Do
 - Use `[SetUp]` and `[TearDown]` for consistent test isolation
 - Test one behavior per test method
-- Use descriptive test names: `MethodName_Condition_ExpectedResult`
+- Use descriptive test names: `MethodName_Condition_ExpectedResult` (e.g., `GetUser_WhenNotFound_ReturnsNull`)
 - Mock external dependencies when possible
 - Use `UnityEngine.TestTools.LogAssert` to verify expected log messages
 
@@ -191,11 +192,12 @@ public void MethodName_Condition_ExpectedResult()
 {
     // Arrange - Setup test data and dependencies
     var input = CreateTestInput();
+    var expected = CreateExpectedOutput();
 
     // Act - Execute the code under test
     var result = systemUnderTest.Process(input);
 
     // Assert - Verify the outcome
-    Assert.AreEqual(expectedOutput, result);
+    Assert.AreEqual(expected, result);
 }
 ```

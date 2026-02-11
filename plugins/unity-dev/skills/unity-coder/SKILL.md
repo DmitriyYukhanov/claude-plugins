@@ -53,7 +53,7 @@ Sort by static/non-static first, then by member type, then by visibility:
 - **TryGetComponent**: Use to avoid null reference exceptions
 
 ### Code Organization
-- **Namespaces**: Avoid nested namespaces
+- **Namespaces**: Prefer flat namespaces; use nesting only when a clear sub-domain exists
 - **Regions**: Use only when necessary (interface implementations, auto-generated code)
 - **File Structure**: One type per file (except generic interface base classes)
 - **Imports**: Ensure all referenced types have proper `using` directives
@@ -78,7 +78,7 @@ Sort by static/non-static first, then by member type, then by visibility:
 - **Never change line endings** (CRLF vs LF) when editing existing files
 
 ### Critical Rules
-- **Reflection**: **Never use in runtime code** (performance + IL2CPP issues). Only in Editor, Tests, or when no alternative exists.
+- **Reflection**: Avoid in runtime code (performance overhead + IL2CPP code stripping). If unavoidable, preserve types via `link.xml`. Acceptable in Editor and Tests.
 - **Meta Files**: Do **not** create .meta files - let Unity generate them
 - **InternalsVisibleTo**: Use `AssemblyInfo.cs` instead of asmdef's `internalVisibleTo` property
 
@@ -116,8 +116,17 @@ _ = SomeAsyncCallAsync()
 
 - **XML Documentation**: Use `///` only for public APIs. Never for private/internal members.
 - **Empty Line After XML**: Always add empty line after a member if next member has XML comment
-- **Don't comment decisions**: Avoid explaining why code exists
+- **Comment why, not what**: Explain non-obvious decisions, trade-offs, and constraints; avoid restating what code does
 - **Don't leave commented code**: Unless explicitly specified
+
+## Documentation Formatting
+
+### Menu Item Formatting
+When referencing Unity menu items in documentation (both markdown and XML comments):
+- **Standard format**: `Menu > Item > SubItem`
+- Use `>` (greater than) as the separator, not `▸` or other Unicode characters
+- Use backticks around menu paths in markdown
+- In XML comments, wrap menu paths in quotes
 
 ## Performance Optimization
 
@@ -135,21 +144,22 @@ namespace Foo
 {
     public class ExampleClass : MonoBehaviour
     {
-        private const int MaxItems = 100;
-        private static bool _isInitialized;
-
         public static event Action OnGameStarted;
 
         public static int InstanceCount { get; private set; }
 
-        public static void ResetGame() { }
-        private static void InitializeStatic() { }
+        private const int MaxItems = 100;
+        private static bool _isInitialized;
+
+        public delegate void HealthChangedHandler(int newHealth);
+        public event HealthChangedHandler OnHealthChanged;
 
         [SerializeField] private int _health;
 
-        public event Action<int> OnHealthChanged;
-
         public bool IsAlive => _health > 0;
+
+        public static void ResetGame() { }
+        private static void InitializeStatic() { }
 
         private void Awake() { }
         private void Start() { }
