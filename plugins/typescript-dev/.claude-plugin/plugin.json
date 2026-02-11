@@ -1,0 +1,8 @@
+{
+  "name": "typescript-dev",
+  "version": "1.0.0",
+  "description": "TypeScript development workflow with architecture design, coding guidelines, testing patterns, and specialized review agents",
+  "author": {
+    "name": "Dmitry Yuhanov"
+  }
+}
