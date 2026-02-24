@@ -17,6 +17,7 @@ Then install the plugins you want to use:
 /plugin install python-dev
 /plugin install typescript-dev
 /plugin install agent-teams
+/plugin install cross-review
 ```
 
 You can also install individual plugins directly, for example:
@@ -72,6 +73,16 @@ Set up and orchestrate Claude Code agent teams with:
 - Configuration reference with architecture, permissions, and limitations
 
 [View documentation](./plugins/agent-teams/README.md)
+
+### cross-review
+
+Cross-review workflow between Claude and Codex CLI for:
+- Dual review of plans, architecture, design docs, and code
+- Review/triage/fix loops with explicit disagreement handling
+- Dynamic skill discovery for applying agreed fixes
+- Multi-round review process with cleanup of intermediate artifacts
+
+[View skill documentation](./plugins/cross-review/skills/cross-review/SKILL.md)
 
 ## License
 

@@ -18,6 +18,28 @@
       "homepage": "https://github.com/DmitriyYukhanov/claude-plugins"
     },
     {
+      "name": "python-dev",
+      "description": "Python development workflow with architecture design, coding guidelines, testing patterns, and specialized review agents",
+      "version": "1.0.0",
+      "author": {
+        "name": "Dmitry Yuhanov"
+      },
+      "source": "./plugins/python-dev",
+      "category": "development",
+      "homepage": "https://github.com/DmitriyYukhanov/claude-plugins"
+    },
+    {
+      "name": "typescript-dev",
+      "description": "TypeScript development workflow with architecture design, coding guidelines, testing patterns, and specialized review agents",
+      "version": "1.0.0",
+      "author": {
+        "name": "Dmitry Yuhanov"
+      },
+      "source": "./plugins/typescript-dev",
+      "category": "development",
+      "homepage": "https://github.com/DmitriyYukhanov/claude-plugins"
+    },
+    {
       "name": "agent-teams",
       "description": "Set up and orchestrate Claude Code agent teams - multiple instances working together with shared tasks, messaging, and coordination",
       "version": "1.0.0",
@@ -26,6 +48,17 @@
       },
       "source": "./plugins/agent-teams",
       "category": "productivity",
+      "homepage": "https://github.com/DmitriyYukhanov/claude-plugins"
+    },
+    {
+      "name": "cross-review",
+      "description": "Cross-review workflow between Claude and Codex CLI for plans, code, and architecture",
+      "version": "1.0.0",
+      "author": {
+        "name": "Dmitry Yuhanov"
+      },
+      "source": "./plugins/cross-review",
+      "category": "development",
       "homepage": "https://github.com/DmitriyYukhanov/claude-plugins"
     }
   ]
