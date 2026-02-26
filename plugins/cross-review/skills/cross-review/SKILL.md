@@ -30,6 +30,7 @@ Execute each of these steps sequentially, completing one before moving to the ne
 3. **Apply fixes** — discover best skill, invoke it to fix auto-fixable issues
 4. **Check exit conditions** — disagreements? all clean? max rounds? decide whether to loop or stop
 5. **Present results** — show user final state, remaining issues, or decisions needed
+6. **Clean up intermediate files** — ALWAYS delete all review round files (mandatory, regardless of exit reason)
 
 ## Core Workflow
 
@@ -340,17 +341,19 @@ When fixing inline (no skill available):
 
 After each round, evaluate in order:
 
-1. **Disagreements found in triage?** → **STOP**. Present the `needs-decision` items to the user with both perspectives. Wait for user input before continuing.
+1. **Disagreements found in triage?** → **EXIT LOOP**. Proceed to Step 6 to present the `needs-decision` items with both perspectives, then Step 7 to clean up.
 
-2. **All issues resolved?** (no auto-fixable or needs-decision items remain) → **DONE**. Present summary of all rounds and final state.
+2. **All issues resolved?** (no auto-fixable or needs-decision items remain) → **EXIT LOOP**. Proceed to Step 6 to present summary of all rounds and final state, then Step 7 to clean up.
 
-3. **Max rounds reached?** (default: 3) → **STOP**. Present remaining issues to the user. If not converging, there may be a fundamental disagreement that needs human judgment.
+3. **Max rounds reached?** (default: 3) → **EXIT LOOP**. Proceed to Step 6 to present remaining issues, then Step 7 to clean up.
 
-4. **No skill available for non-trivial fixes?** → **STOP**. Ask the user which skill to use or whether to fix inline.
+4. **No skill available for non-trivial fixes?** → **EXIT LOOP**. Proceed to Step 6 to ask the user which skill to use, then Step 7 to clean up.
 
 If none of the above → **increment N and loop back to Step 2**.
 
-## Step 6: Present Results and Clean Up
+**CRITICAL: Every exit path leads to Step 6 (present results) then Step 7 (cleanup). Never skip cleanup.**
+
+## Step 6: Present Results
 
 When the loop exits, present a clear summary:
 
@@ -370,17 +373,12 @@ When the loop exits, present a clear summary:
 <specific questions for the user, with context from both reviewers>
 ```
 
-### Clean Up Intermediate Files
+## Step 7: Clean Up Intermediate Files (MANDATORY)
 
-After presenting the final summary, **delete all intermediate review files** produced during the review loop. These are working artifacts, not deliverables:
+**This step is MANDATORY and runs regardless of why the loop exited.** Intermediate review files are working artifacts, not deliverables. Always delete them unless the user explicitly asked to keep them.
 
-```
-docs/plans/review-claude-round-*.md
-docs/plans/review-codex-round-*.md
-docs/plans/combined-review-round-*.md
-```
+Delete all review round files:
 
-Remove them using the Bash tool:
 ```bash
 rm -f docs/plans/review-claude-round-*.md \
       docs/plans/review-codex-round-*.md \
@@ -392,14 +390,20 @@ Also clean up any temp files used for Codex prompts:
 rm -f /tmp/codex-review-prompt.txt
 ```
 
+If the `docs/plans/` directory is empty after cleanup, remove it too:
+```bash
+rmdir docs/plans/ 2>/dev/null; rmdir docs/ 2>/dev/null
+```
+
 **Do NOT delete** the target artifact files that were reviewed — only the review round files.
+**Do NOT skip this step** — leaving intermediate files is a known failure mode.
 
 ## Iteration Rules
 
 - **Max 3 rounds** default — override by user instruction only
 - **Round N+1 only reviews delta** — changes from Round N fixes, not full re-review
 - **Each round produces 3 files:** `review-claude-round-N.md`, `review-codex-round-N.md`, `combined-review-round-N.md`
-- **All intermediate files are deleted** after the review loop completes (Step 6)
+- **All intermediate files are deleted** after the review loop completes (Step 7 — mandatory regardless of exit reason)
 - **Never silently resolve disagreements** — any reviewer conflict stops the loop
 - **Skill invocation is per-round** — re-discover skills each round (available skills may change)
 - **Agent teams are per-round** — create a new agent team for each Claude review round, shut it down after collecting results
@@ -435,6 +439,6 @@ Focus: requirements coverage, technical feasibility, scope creep, missing decisi
 - Using heredoc syntax directly in `codex exec` on Windows/MINGW — use a temp file instead
 - Forgetting to enable `multi_agent = true` in Codex config before expecting multi-agent behavior
 - Not shutting down the Claude agent team after collecting results — leaks resources across rounds
-- Leaving intermediate review round files in `docs/plans/` after the review completes — always clean up
+- Leaving intermediate review round files in `docs/plans/` after the review completes — Step 7 cleanup is MANDATORY on every exit path, including early exits from disagreements or max rounds
 - Spawning too few Claude reviewers (always spawn at least 3: security, performance, test coverage)
 - Spawning too many reviewers for trivial changes — 3 is the baseline, only add more when complexity warrants it
