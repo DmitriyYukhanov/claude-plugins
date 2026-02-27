@@ -1,0 +1,79 @@
+#!/bin/bash
+# Pre-commit hook: enforce plugin version bumps
+#
+# When files inside plugins/<name>/ change, the corresponding
+# plugins/<name>/plugin.json must also be staged with a version bump.
+# Follows Keep a Changelog / Semantic Versioning conventions.
+#
+# To bypass (emergency only): git commit --no-verify
+
+set -euo pipefail
+
+# Get list of staged files (added, modified, deleted)
+staged_files=$(git diff --cached --name-only --diff-filter=ACDMR 2>/dev/null || true)
+
+if [ -z "$staged_files" ]; then
+  exit 0
+fi
+
+# Collect unique plugin names that have changed files (excluding plugin.json itself)
+changed_plugins=()
+while IFS= read -r file; do
+  if [[ "$file" =~ ^plugins/([^/]+)/ ]] && [[ "$file" != plugins/*/plugin.json ]]; then
+    plugin_name="${BASH_REMATCH[1]}"
+    # Deduplicate
+    if [[ ! " ${changed_plugins[*]:-} " =~ " ${plugin_name} " ]]; then
+      changed_plugins+=("$plugin_name")
+    fi
+  fi
+done <<< "$staged_files"
+
+if [ ${#changed_plugins[@]} -eq 0 ]; then
+  exit 0
+fi
+
+# For each changed plugin, check if plugin.json version was also bumped
+errors=()
+for plugin in "${changed_plugins[@]}"; do
+  plugin_json="plugins/${plugin}/plugin.json"
+
+  # Check if plugin.json is in the staged files
+  if ! echo "$staged_files" | grep -qx "$plugin_json"; then
+    errors+=("$plugin")
+    continue
+  fi
+
+  # Check if the version field actually changed
+  old_version=$(git show "HEAD:${plugin_json}" 2>/dev/null | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | grep -o '[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*' || echo "0.0.0")
+  new_version=$(git show ":${plugin_json}" 2>/dev/null | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | grep -o '[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*' || echo "0.0.0")
+
+  if [ "$old_version" = "$new_version" ]; then
+    errors+=("$plugin")
+  fi
+done
+
+if [ ${#errors[@]} -gt 0 ]; then
+  echo ""
+  echo "ERROR: Plugin version bump required"
+  echo "========================================"
+  echo ""
+  echo "The following plugins have changed files but no version bump in plugin.json:"
+  echo ""
+  for plugin in "${errors[@]}"; do
+    plugin_json="plugins/${plugin}/plugin.json"
+    current=$(cat "$plugin_json" 2>/dev/null | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | grep -o '[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*' || echo "unknown")
+    echo "  - plugins/${plugin}/  (current version: ${current})"
+  done
+  echo ""
+  echo "Versioning guide (Semantic Versioning / Keep a Changelog):"
+  echo "  PATCH (x.y.Z) — bug fixes, typo corrections, minor tweaks"
+  echo "  MINOR (x.Y.0) — new features, skill improvements, non-breaking changes"
+  echo "  MAJOR (X.0.0) — breaking changes, major restructuring"
+  echo ""
+  echo "Fix: update \"version\" in the plugin's plugin.json, then re-stage and commit."
+  echo "Bypass (emergency only): git commit --no-verify"
+  echo ""
+  exit 1
+fi
+
+exit 0

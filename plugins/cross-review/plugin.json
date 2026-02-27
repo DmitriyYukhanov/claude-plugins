@@ -1,5 +1,5 @@
 {
   "name": "cross-review",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Cross-review workflow between Claude and Codex CLI for plans, code, and architecture"
 }
