@@ -53,7 +53,7 @@
     {
       "name": "cross-review",
       "description": "Cross-review workflow between Claude and Codex CLI for plans, code, and architecture",
-      "version": "1.2.0",
+      "version": "1.2.1",
       "author": {
         "name": "Dmitry Yuhanov"
       },

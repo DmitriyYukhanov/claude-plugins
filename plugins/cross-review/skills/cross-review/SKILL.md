@@ -1,5 +1,6 @@
 ---
 name: cross-review
+model: opus
 description: This skill should be used when performing cross-review, dual review, or multi-model review of plans, implementations, architecture, or code. Applies when the user wants to "review with codex", "get a second opinion", "validate with another model", "dual review", or wants multiple AI perspectives on quality. Orchestrates review-triage-fix cycles between Claude and Codex CLI using the best available skill, repeating until clean or a decision is needed.
 ---
 
@@ -8,10 +9,6 @@ description: This skill should be used when performing cross-review, dual review
 ## Overview
 
 Autonomous review-fix loop between Claude and Codex CLI. Each round: both review → triage findings → fix using the best available skill → repeat. Stops when clean, when reviewers disagree, or after max rounds.
-
-## Model Requirement
-
-This skill requires **Opus** for both the orchestrating session and all spawned reviewer agents. Cross-review involves nuanced triage, disagreement analysis, and multi-round reasoning — Opus produces significantly better results here than smaller models. If the current session is not using Opus, switch before proceeding: `/model opus`
 
 ## Prerequisites
 
