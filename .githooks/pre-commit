@@ -68,11 +68,13 @@ for plugin_json in $(echo "$staged_files" | grep -E '^plugins/[^/]+/plugin\.json
     continue
   fi
 
-  # Get the marketplace version (from staged if staged, else from working tree)
+  # Get the marketplace version that will be in the commit:
+  # - If marketplace.json is staged, use the staged version
+  # - If not staged, use HEAD (what the commit will contain)
   if echo "$staged_files" | grep -qx "$MARKETPLACE"; then
-    marketplace_content=$(git show ":${MARKETPLACE}" 2>/dev/null || cat "$MARKETPLACE" 2>/dev/null || echo "")
+    marketplace_content=$(git show ":${MARKETPLACE}" 2>/dev/null || echo "")
   else
-    marketplace_content=$(cat "$MARKETPLACE" 2>/dev/null || echo "")
+    marketplace_content=$(git show "HEAD:${MARKETPLACE}" 2>/dev/null || echo "")
   fi
 
   if [ -z "$marketplace_content" ]; then

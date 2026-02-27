@@ -9,6 +9,10 @@ description: This skill should be used when performing cross-review, dual review
 
 Autonomous review-fix loop between Claude and Codex CLI. Each round: both review → triage findings → fix using the best available skill → repeat. Stops when clean, when reviewers disagree, or after max rounds.
 
+## Model Requirement
+
+This skill requires **Opus** for both the orchestrating session and all spawned reviewer agents. Cross-review involves nuanced triage, disagreement analysis, and multi-round reasoning — Opus produces significantly better results here than smaller models. If the current session is not using Opus, switch before proceeding: `/model opus`
+
 ## Prerequisites
 
 - Codex CLI installed: `npm install -g @openai/codex`
@@ -98,7 +102,7 @@ Create an agent team to review the target artifact(s). Spawn specialized reviewe
 | `architect-reviewer` | Complex multi-component changes, new systems | Patterns, separation of concerns, scalability, deployment |
 | `requirements-reviewer` | Plan or spec artifacts, feature implementations | Requirements coverage, completeness, missing acceptance criteria |
 
-Use the Task tool to spawn each reviewer as a background agent in an agent team. Each reviewer agent prompt should:
+Use the Task tool to spawn each reviewer as a background agent in an agent team. Always use `model: "opus"` — cross-review requires the strongest reasoning to catch subtle issues and produce high-quality disagreement analysis. Each reviewer agent prompt should:
 1. Receive the target file path(s) to review
 2. Know this is Round N (and if N > 1, only review the delta from Round N-1 fixes)
 3. Output findings in the severity format below
@@ -111,6 +115,7 @@ TeamCreate: team_name = "cross-review-round-N"
 
 For each reviewer, use Task tool with:
   - subagent_type: "general-purpose"
+  - model: "opus"
   - team_name: "cross-review-round-N"
   - name: "<agent-name>"
   - run_in_background: true
