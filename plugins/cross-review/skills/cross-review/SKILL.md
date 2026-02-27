@@ -43,8 +43,8 @@ digraph cross_review_loop {
     "Spawn Claude agent team (3-5 reviewers)" -> "Collect agent findings";
     "Collect agent findings" -> "Shutdown agent team";
     "Shutdown agent team" -> "Save review-claude-round-N.md";
-    "Save review-claude-round-N.md" -> "Codex exec multi-agent review";
-    "Codex exec multi-agent review" -> "Save review-codex-round-N.md";
+    "Save review-claude-round-N.md" -> "Codex review (review --base for code, exec for others)";
+    "Codex review (review --base for code, exec for others)" -> "Save review-codex-round-N.md";
     "Save review-codex-round-N.md" -> "Triage: classify findings";
 
     "Triage: classify findings" -> "Any disagreements?" [shape=diamond];
@@ -163,6 +163,8 @@ Use this structure:
 
 After saving the review file, shut down the agent team for this round.
 
+**Note on output format:** Claude's review groups findings by reviewer area (Security → severity, Performance → severity, etc.) because each agent reports independently. Codex's review uses global severity-first grouping. The triage step (Step 3) reconciles both formats by extracting individual findings and classifying them regardless of how they were grouped in the source reviews.
+
 ### Codex Review (Multi-Agent)
 
 Run Codex CLI using its multi-agent feature to spawn parallel specialized reviewers — mirroring the Claude agent team approach for a true cross-validation.
@@ -199,42 +201,112 @@ model_reasoning_effort = "high"
 developer_instructions = "Focus on high priority issues. Be specific: reference file paths, line numbers, and concrete examples."
 ```
 
-Write the review prompt to a temp file, then pass it to Codex. This avoids heredoc issues across shell environments (bash, PowerShell, MINGW):
+Assemble the review prompt in three steps — a constant base prompt, an artifact-type fragment, and round-specific context — then pass it to Codex. This avoids heredoc issues across shell environments (bash, PowerShell, MINGW) and separates concerns so each part can be iterated independently.
+
+**Step A — Write the base prompt** (constant across all artifact types and rounds):
 
 ```bash
-# Write prompt to temp file (adapt paths and file references per round)
-cat > /tmp/codex-review-prompt.txt <<'PROMPT'
-I would like to cross-review the following artifact against Claude's findings.
+cat > /tmp/codex-review-base.txt <<'BASE'
+You are a senior engineer performing an independent technical review.
+Deliver concrete findings, not plans to produce findings.
+Do not ask for clarification — make reasonable assumptions and proceed.
 
-Read these files:
-1. <target artifact file(s)>
-2. docs/plans/review-claude-round-N.md (Claude's agent team review - cross-validate)
+Before any tool call, identify ALL files you need to read.
+Batch-read them in a single parallel request — never read sequentially
+when parallelization is feasible.
+
+Skip preamble, acknowledgments, and status updates.
+Be terse and direct — optimize for information density.
+Lead with the most severe findings first.
 
 Spawn one agent per review focus area, wait for all of them, and
-summarize the result for each area:
-1. Security implications — auth, injection, validation, secrets, data exposure
-2. Performance impact — bottlenecks, N+1 queries, memory, scalability
+produce a single consolidated review.
+
+Review focus areas:
+1. Security — auth, injection, validation, secrets, data exposure
+2. Performance — bottlenecks, N+1 queries, memory, scalability
 3. Test coverage — missing tests, edge cases, flaky test risks
-4. Code quality and correctness — bugs, logic errors, error handling
+4. Correctness — bugs, logic errors, off-by-one, race conditions
 5. Maintainability — patterns, readability, coupling
 
-For each area, structure findings as:
-### Critical Issues (blocks progress)
-### High Issues (causes bugs)
-### Medium Issues (quality)
-### Minor Issues (nice to have)
+Quality criteria to check (applies to all artifact types):
+- Internal consistency: no contradictions between sections or components
+- Conventions: flag deviations from patterns established in surrounding work
+- Risky shortcuts: speculative changes, untested assumptions, missing rationale
+- Completeness: identify gaps where expected content or handling is absent
 
-Then add a final consolidated section:
+Structure findings GLOBALLY by severity, not grouped by area:
+
+### Critical Issues (blocks progress)
+- [category] File:line — description (for code; use section/heading for docs)
+
+### High Issues (causes bugs or architectural problems)
+- [category] File:line — description
+
+### Medium Issues (quality, consistency)
+- [category] File:line — description
+
+### Minor Issues (nice to have)
+- [category] File:line — description
+
+Then add:
 ### Agreements with Claude's Review
 ### Disagreements with Claude's Review
 
-For each disagreement, explain specifically why you disagree and what
-evidence supports your position.
+For each disagreement with Claude's review, you MUST cite:
+1. The specific code or line that supports your position
+2. The concrete behavioral consequence (what breaks, what is missed)
+3. Why Claude's assessment is incorrect or incomplete
+Do not disagree on opinion or style — only on verifiable technical grounds.
+BASE
+```
 
+**Step B — Write artifact-type prompt fragment** (one per type — use the full variants from the "Adapting for Different Artifacts" section below, not this abbreviated example):
+
+```bash
+# Write the artifact-type fragment matching ARTIFACT_TYPE
+# Full fragments for each type are defined in "Adapting for Different Artifacts"
+# Example: for code artifacts, write /tmp/codex-review-code.txt
+# Example: for plan artifacts, write /tmp/codex-review-plan.txt
+```
+
+**Step C — Assemble the round-specific prompt and run Codex:**
+
+For **code artifacts**, use `codex review --base` as the primary command:
+
+```bash
+# Assemble full prompt
+cat /tmp/codex-review-base.txt > /tmp/codex-review-prompt.txt
+cat /tmp/codex-review-code.txt >> /tmp/codex-review-prompt.txt
+cat >> /tmp/codex-review-prompt.txt <<ROUND
+Files to review: <target file(s)>
+Claude's review: docs/plans/review-claude-round-N.md
+Round: N
+<If N > 1: Only review changes since Round N-1. Do not re-report fixed issues.>
 Write the full review to: docs/plans/review-codex-round-N.md
-PROMPT
+ROUND
 
-# Run Codex with the prompt file
+# Run Codex review (primary path for code artifacts)
+# codex review outputs to stdout; --full-auto and -o are codex exec flags only
+cat /tmp/codex-review-prompt.txt | codex review --base main - \
+  > docs/plans/review-codex-round-N.md
+```
+
+For **non-code artifacts** (plans, architecture, design docs), use `codex exec`:
+
+```bash
+# Assemble full prompt (same pattern, different artifact-type file)
+cat /tmp/codex-review-base.txt > /tmp/codex-review-prompt.txt
+cat /tmp/codex-review-${ARTIFACT_TYPE}.txt >> /tmp/codex-review-prompt.txt
+cat >> /tmp/codex-review-prompt.txt <<ROUND
+Files to review: <target file(s)>
+Claude's review: docs/plans/review-claude-round-N.md
+Round: N
+<If N > 1: Only review changes since Round N-1. Do not re-report fixed issues.>
+Write the full review to: docs/plans/review-codex-round-N.md
+ROUND
+
+# Run Codex exec (fallback for non-code artifacts)
 codex exec \
   -C /path/to/project \
   --full-auto \
@@ -245,12 +317,11 @@ codex exec \
 **Note:** The `-m` flag is optional if your `~/.codex/config.toml` already specifies the model.
 
 **Important:**
-- Always use `--full-auto` to prevent Codex from hanging on approval prompts
+- `codex review` is already non-interactive — no `--full-auto` needed. Use `--full-auto` only with `codex exec` (non-code artifacts)
 - Always pass Claude's review to Codex for cross-validation
 - The multi-agent prompt tells Codex to spawn one agent per focus area automatically
 - Use `/agent` in Codex CLI to inspect individual agent threads if needed
 - Codex consolidates all agent results before writing the final review file
-- Adapt the review prompt to match the artifact type (plan/code/architecture/design)
 
 ## Step 3: Triage Findings
 
@@ -387,7 +458,12 @@ rm -f docs/plans/review-claude-round-*.md \
 
 Also clean up any temp files used for Codex prompts:
 ```bash
-rm -f /tmp/codex-review-prompt.txt
+rm -f /tmp/codex-review-base.txt \
+      /tmp/codex-review-code.txt \
+      /tmp/codex-review-plan.txt \
+      /tmp/codex-review-architecture.txt \
+      /tmp/codex-review-design.txt \
+      /tmp/codex-review-prompt.txt
 ```
 
 If the `docs/plans/` directory is empty after cleanup, remove it too:
@@ -407,29 +483,72 @@ rmdir docs/plans/ 2>/dev/null; rmdir docs/ 2>/dev/null
 - **Never silently resolve disagreements** — any reviewer conflict stops the loop
 - **Skill invocation is per-round** — re-discover skills each round (available skills may change)
 - **Agent teams are per-round** — create a new agent team for each Claude review round, shut it down after collecting results
-- **Codex multi-agent is per-round** — each Codex exec spawns its own sub-agents for that round
+- **Codex multi-agent is per-round** — each Codex invocation (`codex review` or `codex exec`) spawns its own sub-agents for that round
 
 ## Adapting for Different Artifacts
 
-### Plan Review
-Focus: completeness, task ordering, dependency correctness, missing tasks, requirement coverage
+Each artifact type has a dedicated prompt fragment written to a temp file during Step B of prompt assembly. Write the appropriate file based on `ARTIFACT_TYPE` before assembling the round-specific prompt.
 
 ### Code Review
-For code, Codex can also use its built-in review command:
+
+**Primary command:** `codex review --base main` (purpose-built for code review, produces better results than `codex exec`).
+
 ```bash
-codex review --base main "Focus on security, correctness, and performance"
+cat > /tmp/codex-review-code.txt <<'ARTIFACT'
+Additional review focus for code:
+- Type safety: unnecessary casts, missing type guards, `any` usage, incorrect generics, missing null checks
+- Error handling: broad try/catch, swallowed errors, missing propagation, unhandled promise rejections
+- Codebase conventions: naming, patterns, helpers — flag deviations from surrounding code
+- Risky shortcuts: speculative changes, messy hacks, untested assumptions, TODO/FIXME debt
+- Edge cases: boundary conditions, off-by-one errors, empty collections, negative values
+- Dependencies: flag new imports that seem unnecessary or duplicative
+ARTIFACT
 ```
-Focus: bugs, security, performance, patterns, edge cases
+
+### Plan Review
+
+```bash
+cat > /tmp/codex-review-plan.txt <<'ARTIFACT'
+Additional review focus for plans:
+- Completeness: every requirement maps to at least one task
+- Task ordering: dependencies form a valid DAG with no cycles
+- Dependency correctness: no missing or circular dependencies
+- Missing tasks: gaps between requirements and planned work
+- Requirement coverage: all acceptance criteria are addressed
+- Feasibility: estimates are realistic given scope and constraints
+ARTIFACT
+```
 
 ### Architecture Review
-Focus: patterns, scalability, separation of concerns, deployment constraints, consistency
+
+```bash
+cat > /tmp/codex-review-architecture.txt <<'ARTIFACT'
+Additional review focus for architecture:
+- Patterns: consistency across components, appropriate pattern usage
+- Separation of concerns: clear boundaries, no leaking abstractions
+- Scalability: bottlenecks, single points of failure, growth constraints
+- Deployment constraints: environment compatibility, configuration management
+- Tight coupling: identify components that should be decoupled
+- Missing abstractions: places where an interface or abstraction layer is needed
+ARTIFACT
+```
 
 ### Design Doc Review
-Focus: requirements coverage, technical feasibility, scope creep, missing decisions
+
+```bash
+cat > /tmp/codex-review-design.txt <<'ARTIFACT'
+Additional review focus for design documents:
+- Requirements coverage: every requirement is addressed in the design
+- Technical feasibility: proposed approach is implementable with stated constraints
+- Scope creep: features or complexity beyond stated requirements
+- Missing decisions: unresolved trade-offs, unstated assumptions
+- Decision rationale: every decision has stated rationale and alternatives considered
+ARTIFACT
+```
 
 ## Common Mistakes
 
-- Running Codex without `--full-auto` causes it to hang waiting for approval
+- Running `codex exec` without `--full-auto` causes it to hang waiting for approval (`codex review` is already non-interactive)
 - Not passing Claude's review to Codex means no cross-validation
 - Skipping triage and just applying both reviews leads to contradictory fixes
 - Reviewing the same issues each round instead of only deltas
@@ -442,3 +561,8 @@ Focus: requirements coverage, technical feasibility, scope creep, missing decisi
 - Leaving intermediate review round files in `docs/plans/` after the review completes — Step 7 cleanup is MANDATORY on every exit path, including early exits from disagreements or max rounds
 - Spawning too few Claude reviewers (always spawn at least 3: security, performance, test coverage)
 - Spawning too many reviewers for trivial changes — 3 is the baseline, only add more when complexity warrants it
+- Letting Codex open with preamble or acknowledgment — wastes output tokens and dilutes findings
+- Grouping Codex findings by review area instead of by severity — buries critical issues under area headings; Codex output should always use global severity-first grouping (Claude's review intentionally groups by area since each agent reports independently)
+- Vague disagreements without code citations — "I disagree because..." without file:line evidence is noise; require concrete behavioral consequences
+- Not telling Codex to batch-read files in parallel — causes sequential reads that waste time and tokens
+- Using `codex exec` for code artifacts when `codex review --base` is available — the review command is purpose-built and produces better results
