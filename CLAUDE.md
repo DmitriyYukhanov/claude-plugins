@@ -4,7 +4,7 @@ Collection of Claude Code plugins: skills, agents, hooks, and commands.
 
 ## Plugin Version Bumping (MANDATORY)
 
-When you modify ANY file inside `plugins/<name>/`, you MUST also bump the `"version"` in that plugin's `plugin.json` before committing. A pre-commit hook enforces this — commits without a version bump will be rejected.
+When you modify ANY file inside `plugins/<name>/`, you MUST also bump the `"version"` in that plugin's `plugin.json` **and** update the matching version in `.claude-plugin/marketplace.json` before committing. A pre-commit hook enforces both — commits without a version bump or with mismatched marketplace versions will be rejected.
 
 **Semantic Versioning (follow Keep a Changelog):**
 - **PATCH** (x.y.Z) — bug fixes, typo corrections, minor documentation tweaks
@@ -33,6 +33,8 @@ plugins/
     hooks/               # Plugin hooks
     agents/              # Agent definitions
     commands/            # Slash commands
+.claude-plugin/
+  marketplace.json       # Plugin marketplace listing (versions must match plugin.json)
 docs/                    # Documentation and plans
 .githooks/               # Git hooks (pre-commit version enforcement)
 ```

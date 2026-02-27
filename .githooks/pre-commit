@@ -1,13 +1,16 @@
 #!/bin/bash
-# Pre-commit hook: enforce plugin version bumps
+# Pre-commit hook: enforce plugin version bumps and marketplace sync
 #
-# When files inside plugins/<name>/ change, the corresponding
-# plugins/<name>/plugin.json must also be staged with a version bump.
+# Checks:
+# 1. When files inside plugins/<name>/ change, plugin.json version must be bumped
+# 2. When plugin.json version changes, marketplace.json must match
+#
 # Follows Keep a Changelog / Semantic Versioning conventions.
-#
 # To bypass (emergency only): git commit --no-verify
 
 set -euo pipefail
+
+MARKETPLACE=".claude-plugin/marketplace.json"
 
 # Get list of staged files (added, modified, deleted)
 staged_files=$(git diff --cached --name-only --diff-filter=ACDMR 2>/dev/null || true)
@@ -28,38 +31,79 @@ while IFS= read -r file; do
   fi
 done <<< "$staged_files"
 
-if [ ${#changed_plugins[@]} -eq 0 ]; then
-  exit 0
+# ── Check 1: plugin.json version bump ──────────────────────────────────
+
+version_errors=()
+if [ ${#changed_plugins[@]} -gt 0 ]; then
+  for plugin in "${changed_plugins[@]}"; do
+    plugin_json="plugins/${plugin}/plugin.json"
+
+    # Check if plugin.json is in the staged files
+    if ! echo "$staged_files" | grep -qx "$plugin_json"; then
+      version_errors+=("$plugin")
+      continue
+    fi
+
+    # Check if the version field actually changed
+    old_version=$(git show "HEAD:${plugin_json}" 2>/dev/null | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | grep -o '[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*' || echo "0.0.0")
+    new_version=$(git show ":${plugin_json}" 2>/dev/null | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | grep -o '[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*' || echo "0.0.0")
+
+    if [ "$old_version" = "$new_version" ]; then
+      version_errors+=("$plugin")
+    fi
+  done
 fi
 
-# For each changed plugin, check if plugin.json version was also bumped
-errors=()
-for plugin in "${changed_plugins[@]}"; do
-  plugin_json="plugins/${plugin}/plugin.json"
+# ── Check 2: marketplace.json version sync ─────────────────────────────
 
-  # Check if plugin.json is in the staged files
-  if ! echo "$staged_files" | grep -qx "$plugin_json"; then
-    errors+=("$plugin")
+# Collect all plugins whose plugin.json version changed (staged)
+sync_errors=()
+for plugin_json in $(echo "$staged_files" | grep -E '^plugins/[^/]+/plugin\.json$' || true); do
+  plugin_name=$(echo "$plugin_json" | sed 's|plugins/\([^/]*\)/plugin\.json|\1|')
+
+  # Get the new version from staged plugin.json
+  plugin_version=$(git show ":${plugin_json}" 2>/dev/null | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | grep -o '[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*' || echo "")
+
+  if [ -z "$plugin_version" ]; then
     continue
   fi
 
-  # Check if the version field actually changed
-  old_version=$(git show "HEAD:${plugin_json}" 2>/dev/null | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | grep -o '[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*' || echo "0.0.0")
-  new_version=$(git show ":${plugin_json}" 2>/dev/null | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | grep -o '[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*' || echo "0.0.0")
+  # Get the marketplace version (from staged if staged, else from working tree)
+  if echo "$staged_files" | grep -qx "$MARKETPLACE"; then
+    marketplace_content=$(git show ":${MARKETPLACE}" 2>/dev/null || cat "$MARKETPLACE" 2>/dev/null || echo "")
+  else
+    marketplace_content=$(cat "$MARKETPLACE" 2>/dev/null || echo "")
+  fi
 
-  if [ "$old_version" = "$new_version" ]; then
-    errors+=("$plugin")
+  if [ -z "$marketplace_content" ]; then
+    continue
+  fi
+
+  # Extract version for this plugin from marketplace.json
+  # Use awk to find the plugin block by name and extract its version
+  marketplace_version=$(echo "$marketplace_content" | awk -v name="$plugin_name" '
+    /"name"/ { found = ($0 ~ "\"" name "\"") }
+    found && /"version"/ { match($0, /[0-9]+\.[0-9]+\.[0-9]+/); print substr($0, RSTART, RLENGTH); found=0 }
+  ')
+
+  if [ -n "$marketplace_version" ] && [ "$plugin_version" != "$marketplace_version" ]; then
+    sync_errors+=("${plugin_name}: plugin.json=${plugin_version}, marketplace.json=${marketplace_version}")
   fi
 done
 
-if [ ${#errors[@]} -gt 0 ]; then
+# ── Report errors ──────────────────────────────────────────────────────
+
+has_errors=false
+
+if [ ${#version_errors[@]} -gt 0 ]; then
+  has_errors=true
   echo ""
   echo "ERROR: Plugin version bump required"
   echo "========================================"
   echo ""
   echo "The following plugins have changed files but no version bump in plugin.json:"
   echo ""
-  for plugin in "${errors[@]}"; do
+  for plugin in "${version_errors[@]}"; do
     plugin_json="plugins/${plugin}/plugin.json"
     current=$(cat "$plugin_json" 2>/dev/null | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | grep -o '[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*' || echo "unknown")
     echo "  - plugins/${plugin}/  (current version: ${current})"
@@ -71,6 +115,25 @@ if [ ${#errors[@]} -gt 0 ]; then
   echo "  MAJOR (X.0.0) — breaking changes, major restructuring"
   echo ""
   echo "Fix: update \"version\" in the plugin's plugin.json, then re-stage and commit."
+fi
+
+if [ ${#sync_errors[@]} -gt 0 ]; then
+  has_errors=true
+  echo ""
+  echo "ERROR: marketplace.json version mismatch"
+  echo "========================================"
+  echo ""
+  echo "The following plugins have mismatched versions between plugin.json and marketplace.json:"
+  echo ""
+  for err in "${sync_errors[@]}"; do
+    echo "  - ${err}"
+  done
+  echo ""
+  echo "Fix: update the version in ${MARKETPLACE} to match, then re-stage and commit."
+fi
+
+if [ "$has_errors" = true ]; then
+  echo ""
   echo "Bypass (emergency only): git commit --no-verify"
   echo ""
   exit 1
