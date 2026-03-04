@@ -84,6 +84,16 @@ Cross-review workflow between Claude and Codex CLI for:
 
 [View skill documentation](./plugins/cross-review/skills/cross-review/SKILL.md)
 
+## Claude.ai Skills
+
+Skills for the Claude.ai web interface (not Claude Code). Install via the Skills section in Claude.ai settings.
+
+### humanizer
+
+Rewrites AI-generated text to sound more natural and human. Converted from [blader/humanizer](https://github.com/blader/humanizer) for Claude.ai usage.
+
+**File:** `skills/claude.ai/humanizer.skill`
+
 ## License
 
 MIT

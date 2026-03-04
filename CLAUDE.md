@@ -33,6 +33,9 @@ plugins/
     hooks/               # Plugin hooks
     agents/              # Agent definitions
     commands/            # Slash commands
+skills/
+  claude.ai/             # Skills for the Claude.ai web interface (not Claude Code)
+    *.skill              # Binary skill files installable via Claude.ai settings
 .claude-plugin/
   marketplace.json       # Plugin marketplace listing (versions must match plugin.json)
 docs/                    # Documentation and plans
