@@ -58,7 +58,7 @@ Execute each of these steps sequentially, completing one before moving to the ne
 3. **Apply fixes** — discover best skill, invoke it to fix auto-fixable issues
 4. **Check exit conditions** — disagreements? all clean? max rounds? decide whether to loop or stop
 5. **Present results** — show user final state, remaining issues, or decisions needed
-6. **Clean up intermediate files** — run `${CLAUDE_PLUGIN_ROOT}/scripts/cleanup-reviews.sh` (mandatory, regardless of exit reason)
+6. **Clean up intermediate files** — run `bash "${CLAUDE_PLUGIN_ROOT}/scripts/cleanup-reviews.sh"` (mandatory, regardless of exit reason)
 
 ## Core Workflow
 
@@ -116,14 +116,14 @@ Run Codex via the plugin script as a **background bash process** (`run_in_backgr
 
 **For code artifacts:**
 ```bash
-"${CLAUDE_PLUGIN_ROOT}/scripts/run-codex-review.sh" code <ROUND> docs/plans /path/to/project main
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/run-codex-review.sh" code <ROUND> docs/plans /path/to/project main
 ```
 
 The script runs `codex review --base main` — purpose-built for code review with multi-agent support. No custom prompt is passed (`--base` and `[PROMPT]` are mutually exclusive in Codex CLI).
 
 **For non-code artifacts:**
 ```bash
-"${CLAUDE_PLUGIN_ROOT}/scripts/run-codex-review.sh" <plan|architecture|design> <ROUND> docs/plans /path/to/project target-file1.md target-file2.md
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/run-codex-review.sh" <plan|architecture|design> <ROUND> docs/plans /path/to/project target-file1.md target-file2.md
 ```
 
 The script assembles a prompt from `prompts/codex-base.txt` + artifact-specific fragment, then runs `codex exec --full-auto`. The base prompt instructs Codex to spawn one agent per review focus area (requires `multi_agent = true` in config).
@@ -325,7 +325,7 @@ When the loop exits, present a clear summary:
 Run the cleanup script — this is MANDATORY regardless of exit reason:
 
 ```bash
-"${CLAUDE_PLUGIN_ROOT}/scripts/cleanup-reviews.sh" docs/plans
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/cleanup-reviews.sh" docs/plans
 ```
 
 **Do NOT delete** the target artifact files that were reviewed — only the review round files.
