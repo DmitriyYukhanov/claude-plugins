@@ -1,0 +1,7 @@
+Additional review focus for architecture:
+- Patterns: consistency across components, appropriate pattern usage
+- Separation of concerns: clear boundaries, no leaking abstractions
+- Scalability: bottlenecks, single points of failure, growth constraints
+- Deployment constraints: environment compatibility, configuration management
+- Tight coupling: identify components that should be decoupled
+- Missing abstractions: places where an interface or abstraction layer is needed
