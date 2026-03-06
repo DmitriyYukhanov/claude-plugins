@@ -48,6 +48,11 @@ if [[ -z "$PROJECT_PATH" ]]; then
   exit 1
 fi
 
+case "$PLATFORM" in
+  EditMode|PlayMode) ;;
+  *) echo "ERROR: --platform must be EditMode or PlayMode, got: $PLATFORM" >&2; exit 1 ;;
+esac
+
 # Resolve to absolute path
 PROJECT_PATH="$(cd "$PROJECT_PATH" && pwd)"
 
@@ -63,9 +68,6 @@ fi
 echo "Using Unity: $UNITY_PATH" >&2
 
 # --- Set defaults for results and log paths ---
-PROJECT_TEMP_DIR="$PROJECT_PATH/Temp"
-mkdir -p "$PROJECT_TEMP_DIR"
-
 SYS_TEMP="${TMPDIR:-${TEMP:-/tmp}}"
 
 if [[ -z "$RESULTS_FILE" ]]; then
@@ -73,6 +75,8 @@ if [[ -z "$RESULTS_FILE" ]]; then
 fi
 
 if [[ -z "$LOG_FILE" ]]; then
+  PROJECT_TEMP_DIR="$PROJECT_PATH/Temp"
+  mkdir -p "$PROJECT_TEMP_DIR"
   LOG_FILE="$PROJECT_TEMP_DIR/unity-test-$(date +%Y%m%d-%H%M%S).log"
 fi
 
@@ -130,13 +134,21 @@ if [[ ! -f "$RESULTS_FILE" ]]; then
   exit 3
 fi
 
-# Extract summary attributes from <test-run> element
+# Extract summary attributes from <test-run> element in a single pass
 # Format: <test-run ... total="N" passed="N" failed="N" skipped="N" ...>
-TOTAL=$(grep -oP 'total="\K[0-9]+' "$RESULTS_FILE" | head -1 || echo "0")
-PASSED=$(grep -oP 'passed="\K[0-9]+' "$RESULTS_FILE" | head -1 || echo "0")
-FAILED=$(grep -oP 'failed="\K[0-9]+' "$RESULTS_FILE" | head -1 || echo "0")
-SKIPPED=$(grep -oP '(?:skipped|inconclusive)="\K[0-9]+' "$RESULTS_FILE" | head -1 || echo "0")
-DURATION=$(grep -oP 'duration="\K[0-9.]+' "$RESULTS_FILE" | head -1 || echo "?")
+read -r TOTAL PASSED FAILED SKIPPED DURATION < <(
+  awk -F'"' '/<test-run/{
+    for(i=1;i<NF;i++){
+      if($i~/total=/)t=$(i+1)
+      if($i~/passed=/)p=$(i+1)
+      if($i~/failed=/)f=$(i+1)
+      if($i~/skipped=/ || $i~/inconclusive=/)s=$(i+1)
+      if($i~/duration=/)d=$(i+1)
+    }
+    print t,p,f,s,d; exit
+  }' "$RESULTS_FILE"
+) || true
+TOTAL="${TOTAL:-0}"; PASSED="${PASSED:-0}"; FAILED="${FAILED:-0}"; SKIPPED="${SKIPPED:-0}"; DURATION="${DURATION:-?}"
 
 echo ""
 echo "=============================="
@@ -153,18 +165,22 @@ echo "=============================="
 if [[ "$FAILED" -gt 0 ]]; then
   echo ""
   echo "--- Failed Tests ---"
-  # Extract test-case elements with result="Failed"
-  # Use grep + sed to pull out name and message
-  grep -oP '<test-case[^>]*result="Failed"[^>]*>' "$RESULTS_FILE" | while read -r line; do
-    TEST_NAME=$(echo "$line" | grep -oP 'fullname="\K[^"]+')
-    echo "  FAIL: $TEST_NAME"
-  done
-
-  # Extract failure messages
-  # Pattern: <message><![CDATA[...]]></message> inside <failure> blocks
-  grep -A2 '<failure>' "$RESULTS_FILE" | grep -oP '<message><!\[CDATA\[\K[^\]]+' | while read -r msg; do
-    echo "    -> $msg"
-  done
+  # Extract failed test names paired with their failure messages in a single pass
+  awk '
+    /<test-case[^>]*result="Failed"/ {
+      s = $0
+      sub(/.*fullname="/, "", s)
+      sub(/".*/, "", s)
+      name = s
+    }
+    name && /<message>/ {
+      msg = $0
+      sub(/.*<message><!\[CDATA\[/, "", msg)
+      sub(/\]\]><\/message>.*/, "", msg)
+      printf "  FAIL: %s\n    -> %s\n", name, msg
+      name = ""
+    }
+  ' "$RESULTS_FILE"
   echo "---"
 fi
 

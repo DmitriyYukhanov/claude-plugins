@@ -9,7 +9,7 @@
     {
       "name": "unity-dev",
       "description": "Unity C# development workflow with architecture design, coding guidelines, testing patterns, and specialized review agents",
-      "version": "1.5.1",
+      "version": "1.5.2",
       "author": {
         "name": "Dmitry Yuhanov"
       },

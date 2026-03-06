@@ -19,7 +19,7 @@ if [[ ! -f "$VERSION_FILE" ]]; then
   exit 1
 fi
 
-UNITY_VERSION=$(grep -oP '(?<=m_EditorVersion: )\S+' "$VERSION_FILE")
+UNITY_VERSION=$(awk '/m_EditorVersion:/ { print $2 }' "$VERSION_FILE")
 if [[ -z "$UNITY_VERSION" ]]; then
   echo "ERROR: Could not parse Unity version from $VERSION_FILE" >&2
   exit 1
@@ -140,7 +140,7 @@ if HUB_BIN="$(get_hub_binary)"; then
   echo "Querying Unity Hub CLI..." >&2
   HUB_OUTPUT=$("$HUB_BIN" -- --headless editors -i 2>/dev/null || true)
   if [[ -n "$HUB_OUTPUT" ]]; then
-    EDITOR_PATH=$(echo "$HUB_OUTPUT" | grep -i "$UNITY_VERSION" | grep -oP '(?<=installed at )\S+.*' | sed 's/[[:space:]]*$//' | head -1)
+    EDITOR_PATH=$(echo "$HUB_OUTPUT" | grep -i "$UNITY_VERSION" | sed -n 's/.*installed at //p' | sed 's/[[:space:]]*$//' | head -1)
     if [[ -n "$EDITOR_PATH" ]]; then
       EDITOR_PATH="${EDITOR_PATH//\\//}"
       if [[ -f "$EDITOR_PATH" ]]; then
