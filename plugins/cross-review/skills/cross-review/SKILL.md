@@ -18,7 +18,7 @@ Autonomous review-fix loop between Claude and Codex CLI. Each round: both review
 
 ```toml
 # ~/.codex/config.toml (example — adjust model to your available version)
-model = "gpt-5.3-codex"
+model = "gpt-5.4"
 model_reasoning_effort = "xhigh"
 
 [features]
@@ -44,7 +44,7 @@ config_file = "agents/reviewer.toml"
 Where `agents/reviewer.toml` contains:
 
 ```toml
-model = "gpt-5.3-codex"
+model = "gpt-5.4"
 model_reasoning_effort = "high"
 developer_instructions = "Focus on high priority issues. Be specific: reference file paths, line numbers, and concrete examples."
 ```
