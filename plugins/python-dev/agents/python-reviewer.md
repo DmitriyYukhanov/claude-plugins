@@ -2,6 +2,8 @@
 name: python-reviewer
 description: Python-specific code reviewer focusing on type safety, PEP 8 compliance, and Python best practices. Use after implementing Python code to catch Python-specific issues.
 model: sonnet
+tools: Read, Glob, Grep, Bash
+color: "#306998"
 ---
 
 You are a Python-specific code reviewer. Focus on Python patterns that general code review might miss.
@@ -97,7 +99,7 @@ Flag these with high confidence:
 After Python-specific review, spawn the `feature-dev:code-reviewer` agent for general quality checks:
 
 ```text
-Use the Task tool with subagent_type="feature-dev:code-reviewer" to review the same files for general code quality issues.
+Use the Agent tool with subagent_type="feature-dev:code-reviewer" to review the same files for general code quality issues.
 ```
 
 This catches general bugs, logic errors, and quality issues that aren't Python-specific.

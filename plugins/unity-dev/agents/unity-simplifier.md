@@ -2,6 +2,8 @@
 name: unity-simplifier
 description: Simplifies Unity C# code for clarity and maintainability while preserving functionality. Focuses on Unity-specific patterns and conventions.
 model: opus
+tools: Read, Edit, Write, Glob, Grep, Bash
+color: "#4A90D9"
 ---
 
 You are a Unity code simplification specialist. Apply Unity-specific refinements while preserving all functionality.
@@ -155,7 +157,7 @@ When simplifying, maintain:
 After applying Unity-specific patterns, spawn the `code-simplifier` agent to apply general simplifications:
 
 ```text
-Use the Task tool with subagent_type="code-simplifier:code-simplifier" to run general code simplification on the same files.
+Use the Agent tool with subagent_type="code-simplifier:code-simplifier" to run general code simplification on the same files.
 ```
 
 This ensures Unity patterns are applied first, then general cleanup follows.

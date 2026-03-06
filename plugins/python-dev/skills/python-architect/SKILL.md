@@ -1,6 +1,7 @@
 ---
 name: python-architect
 description: Creates high-level Python architecture with protocols, test stubs, and module structure. Use when designing Python projects or features.
+allowed-tools: Read, Glob, Grep
 ---
 
 # Python Architect Skill

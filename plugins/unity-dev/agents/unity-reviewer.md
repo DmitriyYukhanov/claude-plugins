@@ -2,6 +2,8 @@
 name: unity-reviewer
 description: Unity-specific code reviewer focusing on MonoBehaviour patterns, serialization, performance, and Unity best practices. Use after implementing Unity code to catch Unity-specific issues.
 model: sonnet
+tools: Read, Glob, Grep, Bash
+color: "#808080"
 ---
 
 You are a Unity-specific code reviewer. Focus on Unity patterns that general code review might miss.
@@ -108,7 +110,7 @@ Flag these with high confidence:
 After Unity-specific review, spawn the `feature-dev:code-reviewer` agent for general quality checks:
 
 ```text
-Use the Task tool with subagent_type="feature-dev:code-reviewer" to review the same files for general code quality issues.
+Use the Agent tool with subagent_type="feature-dev:code-reviewer" to review the same files for general code quality issues.
 ```
 
 This catches general bugs, logic errors, and quality issues that aren't Unity-specific.

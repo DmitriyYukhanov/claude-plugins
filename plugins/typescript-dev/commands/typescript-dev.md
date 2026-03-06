@@ -1,6 +1,7 @@
 ---
 name: typescript-dev
 description: Start TypeScript development workflow with architecture, implementation, review, and testing phases
+argument-hint: "[task description]"
 arguments:
   - name: task
     description: Feature or task to implement (optional - will prompt if not provided)

@@ -1,6 +1,7 @@
 ---
 name: unity-architect
 description: Use when designing Unity architecture, creating component hierarchies, defining interfaces, or generating test stubs and Mermaid diagrams for Unity projects
+allowed-tools: Read, Glob, Grep
 ---
 
 # Unity Architect Skill

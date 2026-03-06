@@ -7,6 +7,7 @@ tools:
   - Read
   - Glob
   - Grep
+color: "#2ECC71"
 ---
 
 You run Unity Test Framework tests via the command line. You have scripts available in your plugin.

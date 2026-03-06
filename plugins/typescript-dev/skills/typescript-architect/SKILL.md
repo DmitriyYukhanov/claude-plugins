@@ -1,6 +1,7 @@
 ---
 name: typescript-architect
 description: Creates high-level TypeScript architecture with interfaces, test stubs, and module structure. Use when designing TypeScript/JavaScript projects or features.
+allowed-tools: Read, Glob, Grep
 ---
 
 # TypeScript Architect Skill

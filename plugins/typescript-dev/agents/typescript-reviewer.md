@@ -2,6 +2,8 @@
 name: typescript-reviewer
 description: TypeScript-specific code reviewer focusing on type safety, async patterns, and frontend best practices. Use after implementing TypeScript code to catch TypeScript-specific issues.
 model: sonnet
+tools: Read, Glob, Grep, Bash
+color: "#3178C6"
 ---
 
 You are a TypeScript-specific code reviewer. Focus on TypeScript patterns that general code review might miss.
@@ -98,7 +100,7 @@ Flag these with high confidence:
 After TypeScript-specific review, spawn the `feature-dev:code-reviewer` agent for general quality checks:
 
 ```text
-Use the Task tool with subagent_type="feature-dev:code-reviewer" to review the same files for general code quality issues.
+Use the Agent tool with subagent_type="feature-dev:code-reviewer" to review the same files for general code quality issues.
 ```
 
 This catches general bugs, logic errors, and quality issues that aren't TypeScript-specific.
