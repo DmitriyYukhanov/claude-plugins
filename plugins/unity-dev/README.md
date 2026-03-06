@@ -38,6 +38,17 @@ Orchestrates a complete Unity development workflow:
 4. **Review** - Unity-specific code review for performance, lifecycle, serialization issues
 5. **Testing** - EditMode and PlayMode test patterns
 
+### Command: `/run-tests`
+
+Runs Unity Test Framework tests via CLI batchmode with auto-detection of Unity installation.
+
+```bash
+/run-tests                              # Run all EditMode tests
+/run-tests PlayMode                     # Run all PlayMode tests
+/run-tests EditMode E2E                 # Run EditMode tests in E2E category
+/run-tests EditMode "" MonoBuild        # Run tests matching "MonoBuild" filter
+```
+
 ### Skills (Reference Knowledge)
 
 - **unity-architect** - Architecture patterns, Mermaid diagrams, test stub templates
@@ -48,6 +59,7 @@ Orchestrates a complete Unity development workflow:
 
 - **unity-reviewer** - Unity-specific review, then chains to `feature-dev:code-reviewer`
 - **unity-simplifier** - Unity patterns, then chains to `code-simplifier:code-simplifier`
+- **unity-test-runner** - Runs Unity tests via CLI batchmode (used by `/run-tests`)
 
 ## Usage
 

@@ -60,11 +60,12 @@ Spawn the `unity-reviewer` agent to perform Unity-specific code review:
 
 ## Phase 5: Testing
 
-Use the `unity-testing` skill knowledge to:
+Use the `run-tests` skill to execute tests:
 
-1. Ensure EditMode tests pass (Editor code, static analysis)
-2. Ensure PlayMode tests pass (runtime behavior, lifecycle)
-3. Generate coverage report for critical paths if requested
+1. Run EditMode tests (Editor code, static analysis)
+2. Run PlayMode tests (runtime behavior, lifecycle)
+3. Fix any failures before proceeding
+4. Generate coverage report for critical paths if requested
 
 ## Workflow Commands
 
