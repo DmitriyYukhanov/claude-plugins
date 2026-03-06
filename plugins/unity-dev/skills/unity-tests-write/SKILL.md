@@ -1,6 +1,6 @@
 ---
-name: unity-testing
-description: Use when writing or running Unity tests, including EditMode tests, PlayMode tests, performance testing, and code coverage
+name: unity-tests-write
+description: Use when writing Unity tests, including EditMode tests, PlayMode tests, performance testing, and code coverage
 ---
 
 # Unity Testing Skill

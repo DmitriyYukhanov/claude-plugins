@@ -45,7 +45,7 @@ Use the `unity-coder` skill knowledge to implement:
 
 1. Follow Unity C# coding guidelines precisely
 2. Implement against the test stubs created in Phase 2
-3. Run tests continuously as you implement
+3. Use the `unity-tests-run` skill to run tests continuously as you implement
 4. Use proper serialization attributes (`[SerializeField]`, `[field:SerializeField]`)
 
 ## Phase 4: Review
@@ -60,12 +60,13 @@ Spawn the `unity-reviewer` agent to perform Unity-specific code review:
 
 ## Phase 5: Testing
 
-Use the `run-tests` skill to execute tests:
+Use the `unity-tests-write` skill knowledge to write missing tests, then use the `unity-tests-run` skill to execute them:
 
-1. Run EditMode tests (Editor code, static analysis)
-2. Run PlayMode tests (runtime behavior, lifecycle)
-3. Fix any failures before proceeding
-4. Generate coverage report for critical paths if requested
+1. Write tests following `unity-tests-write` patterns (EditMode for editor/utilities, PlayMode for runtime behavior)
+2. Run EditMode tests
+3. Run PlayMode tests
+4. Fix any failures before proceeding
+5. Generate coverage report for critical paths if requested
 
 ## Workflow Commands
 

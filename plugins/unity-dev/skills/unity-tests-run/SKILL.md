@@ -1,5 +1,5 @@
 ---
-name: run-tests
+name: unity-tests-run
 description: Run Unity Test Framework tests via CLI batchmode with auto-detection of Unity installation
 arguments:
   - name: platform
@@ -32,8 +32,8 @@ The agent will:
 ## Usage Examples
 
 ```
-/run-tests                              # Run all EditMode tests
-/run-tests PlayMode                     # Run all PlayMode tests
-/run-tests EditMode E2E                 # Run EditMode tests in E2E category
-/run-tests EditMode "" MonoBuild        # Run tests matching "MonoBuild" filter
+/unity-tests-run                              # Run all EditMode tests
+/unity-tests-run PlayMode                     # Run all PlayMode tests
+/unity-tests-run EditMode E2E                 # Run EditMode tests in E2E category
+/unity-tests-run EditMode "" MonoBuild        # Run tests matching "MonoBuild" filter
 ```
