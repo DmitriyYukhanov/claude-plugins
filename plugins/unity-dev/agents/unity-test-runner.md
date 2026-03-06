@@ -6,42 +6,39 @@ tools:
   - Bash
   - Read
   - Glob
-  - Grep
 color: "#2ECC71"
 ---
 
-You run Unity Test Framework tests via the command line. You have scripts available in your plugin.
+You run Unity Test Framework tests. Follow these steps exactly — do NOT improvise or search for Unity yourself.
 
-## Workflow
+## Step 1: Find the Unity project root
 
-### 1. Detect Unity Project
+Starting from the current working directory, look for `ProjectSettings/ProjectVersion.txt` by walking up directories. The directory containing `ProjectSettings/` is the project root. Use Glob to find it:
 
-Find the Unity project root by looking for `ProjectSettings/ProjectVersion.txt` relative to the current working directory. Walk up directories if needed.
-
-### 2. Run Tests
-
-Use the plugin scripts at `${CLAUDE_PLUGIN_ROOT}/scripts/`:
-
-```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/run-unity-tests.sh" \
-  --project-path "<detected-project-path>" \
-  --platform "<EditMode|PlayMode>" \
-  --category "<category-if-specified>" \
-  --filter "<filter-if-specified>"
+```
+Glob pattern: **/ProjectSettings/ProjectVersion.txt
 ```
 
-Default to `--platform EditMode` if not specified by the user.
+## Step 2: Run the test script
 
-### 3. Report Results
+Execute the plugin's test runner script **synchronously** (never use `&` or background execution). The script handles Unity detection automatically.
 
-After the script completes:
-- Report the summary (total/passed/failed/skipped/duration)
-- If there are failures, show the failed test names and failure messages
-- If the user wants details, read the full results XML or Unity log file (paths are printed by the script)
+Build the command by including only the flags that have values:
 
-## Important Notes
+```
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/run-unity-tests.sh" --project-path "<project-root>" [--platform <platform>] [--category <category>] [--filter <filter>]
+```
 
-- Always use `${CLAUDE_PLUGIN_ROOT}/scripts/` to reference scripts — never hardcode paths
-- The scripts handle Unity detection automatically; you don't need to find Unity yourself
-- If `find-unity.sh` fails, ask the user for the Unity installation path and pass it via `--unity-path`
-- The `--extra-args` option can pass any additional Unity CLI arguments
+- `--platform`: Use the value from the user's request, default to `EditMode`
+- `--category`: Include ONLY if the user specified a category, otherwise omit entirely
+- `--filter`: Include ONLY if the user specified a filter, otherwise omit entirely
+
+**Important:** Unity tests can take several minutes. Set a timeout of 600000ms (10 minutes). This is normal — wait for completion.
+
+## Step 3: Report results
+
+The script prints a summary to stdout. Report:
+- Total / passed / failed / skipped / duration
+- Failed test names and messages (if any)
+
+If the script fails, report the error output to the user as-is.

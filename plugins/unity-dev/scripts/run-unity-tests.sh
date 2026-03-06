@@ -8,7 +8,7 @@
 #   --platform <platform>   EditMode | PlayMode (default: EditMode)
 #   --category <cats>        Semicolon-separated test categories
 #   --filter <filter>        Semicolon-separated test name filter / regex
-#   --results-file <path>    Path for NUnit XML results (default: auto-generated in project Temp/)
+#   --results-file <path>    Path for NUnit XML results (default: $TEMP/MaintainerTestResults.xml)
 #   --unity-path <path>      Path to Unity.exe (default: auto-detect via find-unity.sh)
 #   --log-file <path>        Path for Unity log file (default: auto-generated in project Temp/)
 #   --extra-args <args>      Additional arguments to pass to Unity CLI
@@ -63,16 +63,21 @@ fi
 echo "Using Unity: $UNITY_PATH" >&2
 
 # --- Set defaults for results and log paths ---
-TEMP_DIR="$PROJECT_PATH/Temp"
-mkdir -p "$TEMP_DIR"
+PROJECT_TEMP_DIR="$PROJECT_PATH/Temp"
+mkdir -p "$PROJECT_TEMP_DIR"
+
+SYS_TEMP="${TMPDIR:-${TEMP:-/tmp}}"
 
 if [[ -z "$RESULTS_FILE" ]]; then
-  RESULTS_FILE="$TEMP_DIR/TestResults-$(date +%Y%m%d-%H%M%S).xml"
+  RESULTS_FILE="$SYS_TEMP/MaintainerTestResults.xml"
 fi
 
 if [[ -z "$LOG_FILE" ]]; then
-  LOG_FILE="$TEMP_DIR/unity-test-$(date +%Y%m%d-%H%M%S).log"
+  LOG_FILE="$PROJECT_TEMP_DIR/unity-test-$(date +%Y%m%d-%H%M%S).log"
 fi
+
+# Remove stale results to avoid parsing outdated data
+rm -f "$RESULTS_FILE"
 
 # --- Build Unity CLI command ---
 CMD=("$UNITY_PATH"
@@ -164,8 +169,10 @@ if [[ "$FAILED" -gt 0 ]]; then
 fi
 
 echo ""
-echo "Full results: $RESULTS_FILE"
-echo "Unity log:    $LOG_FILE"
+echo "Unity log: $LOG_FILE"
+
+# --- Clean up results file ---
+rm -f "$RESULTS_FILE"
 
 # --- Exit with appropriate code ---
 if [[ "$FAILED" -gt 0 ]]; then
