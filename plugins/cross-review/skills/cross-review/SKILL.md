@@ -49,16 +49,21 @@ model_reasoning_effort = "high"
 developer_instructions = "Focus on high priority issues. Be specific: reference file paths, line numbers, and concrete examples."
 ```
 
+- Claude Code agent teams enabled (experimental feature):
+  - Set `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` in environment or in `settings.json` under `"env"`
+  - See the `agent-teams` plugin for full setup details
+
 ## Checklist
 
 Execute each of these steps sequentially, completing one before moving to the next:
 
 1. **Detect artifact type** — determine what is being reviewed (plan, code, architecture, design)
-2. **Run review round** — launch Claude agents AND Codex simultaneously in parallel, then collect both results and triage
-3. **Apply fixes** — discover best skill, invoke it to fix auto-fixable issues
-4. **Check exit conditions** — disagreements? all clean? max rounds? decide whether to loop or stop
-5. **Present results** — show user final state, remaining issues, or decisions needed
-6. **Clean up intermediate files** — run `bash "${CLAUDE_PLUGIN_ROOT}/scripts/cleanup-reviews.sh"` (mandatory, regardless of exit reason)
+2. **Run review round** — launch Claude agents AND Codex simultaneously in parallel, then collect both results
+3. **Triage findings** — classify and cross-validate findings from both reviewers
+4. **Apply fixes** — discover best skill, invoke it to fix auto-fixable issues
+5. **Check exit conditions** — disagreements? all clean? max rounds? decide whether to loop or stop
+6. **Present results** — show user final state, remaining issues, or decisions needed
+7. **Clean up intermediate files** — run `bash "${CLAUDE_PLUGIN_ROOT}/scripts/cleanup-reviews.sh" <output_dir>` (mandatory, regardless of exit reason)
 
 ## Core Workflow
 
@@ -76,20 +81,20 @@ digraph cross_review_loop {
     "Shutdown agent team" -> "Save both review files";
     "Save both review files" -> "Triage: classify findings + cross-validate";
 
-    "Triage: classify findings + cross-validate" -> "Any disagreements?" [shape=diamond];
-    "Any disagreements?" -> "STOP: present to user" [label="yes"];
+    "Triage: classify findings + cross-validate" -> "Any disagreements?";
+    "Any disagreements?" -> "Present results" [label="yes"];
     "Any disagreements?" -> "Any auto-fixable issues?" [label="no"];
 
     "Any auto-fixable issues?" -> "Discover best skill for fixes" [label="yes"];
-    "Any auto-fixable issues?" -> "cleanup-reviews.sh" [label="no"];
+    "Any auto-fixable issues?" -> "Present results" [label="no, all clean"];
 
     "Discover best skill for fixes" -> "Invoke skill / fix inline";
     "Invoke skill / fix inline" -> "Save combined-review-round-N.md";
-    "Save combined-review-round-N.md" -> "Max rounds?" [shape=diamond];
-    "Max rounds?" -> "cleanup-reviews.sh" [label="yes"];
+    "Save combined-review-round-N.md" -> "Max rounds?";
+    "Max rounds?" -> "Present results" [label="yes"];
     "Max rounds?" -> "Launch PARALLEL reviewers" [label="no, N++"];
 
-    "cleanup-reviews.sh" -> "Present results";
+    "Present results" -> "cleanup-reviews.sh";
 }
 ```
 
@@ -119,14 +124,14 @@ Run Codex via the plugin script as a **background bash process** (`run_in_backgr
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/run-codex-review.sh" code <ROUND> docs/plans /path/to/project main
 ```
 
-The script runs `codex review --base main` — purpose-built for code review with multi-agent support. No custom prompt is passed (`--base` and `[PROMPT]` are mutually exclusive in Codex CLI).
+The script runs `codex review --base main` — purpose-built for code review with multi-agent support. No custom prompt is passed (`--base` and `[PROMPT]` are mutually exclusive in Codex CLI). **Note:** This always reviews the full branch diff, not just changes from the previous fix round. Previously-fixed issues should not reappear, but Codex may surface new findings in unchanged code.
 
 **For non-code artifacts:**
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/run-codex-review.sh" <plan|architecture|design> <ROUND> docs/plans /path/to/project target-file1.md target-file2.md
 ```
 
-The script assembles a prompt from `prompts/codex-base.txt` + artifact-specific fragment, then runs `codex exec --full-auto`. The base prompt instructs Codex to spawn one agent per review focus area (requires `multi_agent = true` in config).
+The script assembles a prompt from `prompts/codex-base.txt` + artifact-specific fragment, then runs `codex exec --full-auto` with stdout redirected to the output file. The base prompt instructs Codex to spawn one agent per review focus area (requires `multi_agent = true` in config).
 
 ### 2b. Launch Claude Agent Team (Parallel with Codex)
 
@@ -149,7 +154,7 @@ Spawn the Claude agent team **in the same turn** as launching Codex. Do not wait
 
 Use the Agent tool to spawn each reviewer as a background agent in an agent team. Always use `model: "opus"`. Each reviewer prompt should:
 1. Receive the target file path(s) to review
-2. Know this is Round N (and if N > 1, only review the delta from Round N-1 fixes)
+2. Know this is Round N (and if N > 1, focus on changes from Round N-1 fixes — use `git diff` to identify the delta for code artifacts)
 3. Output findings in severity format (Critical / High / Medium / Minor)
 4. Return a summary message with its findings
 
@@ -181,7 +186,10 @@ For each reviewer, use Agent tool with:
 
 After launching both in parallel:
 1. Wait for all Claude agent messages to arrive, synthesize into `docs/plans/review-claude-round-N.md`
-2. Wait for the Codex background bash job to complete (check that `docs/plans/review-codex-round-N.md` exists and is non-empty)
+2. Wait for the Codex background bash job to complete using TaskOutput (do NOT just read the file — you must consume the background task so the completion notification doesn't arrive later), then **verify** the output file:
+   - Read `docs/plans/review-codex-round-N.md` and confirm it contains the expected severity headers (`### Critical Issues`, `### High Issues`, etc.)
+   - If the file is missing, empty, or contains only a brief summary (e.g., "Review written to..." or a one-paragraph synopsis without severity headers), **reconstruct from TaskOutput**: the script uses `tee` to send output to both the file and stdout, so the full review is available in TaskOutput even if the file is truncated
+   - This fallback is necessary because Codex multi-agent mode may produce truncated output in some configurations
 3. Shut down the Claude agent team for this round
 
 **Claude review file structure:**
@@ -334,7 +342,7 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/cleanup-reviews.sh" docs/plans
 ## Iteration Rules
 
 - **Max 3 rounds** default — override by user instruction only
-- **Round N+1 only reviews delta** — changes from Round N fixes, not full re-review
+- **Round N+1 focuses on delta** — Claude agents use `git diff` to review only Round N changes; Codex code reviews cover the full branch diff but previously-fixed issues should not reappear; non-code Codex reviews receive a text instruction to focus on changes
 - **Each round produces 3 files:** `review-claude-round-N.md`, `review-codex-round-N.md`, `combined-review-round-N.md`
 - **All intermediate files are deleted** after the review loop completes (Step 7 — mandatory)
 - **Never silently resolve disagreements** — any reviewer conflict stops the loop
@@ -358,3 +366,5 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/cleanup-reviews.sh" docs/plans
 - Leaving intermediate review round files after the review completes — always run `cleanup-reviews.sh`
 - Spawning too few Claude reviewers (always spawn at least 3: security, performance, test coverage)
 - Spawning too many reviewers for trivial changes — 3 is the baseline, only add more when complexity warrants it
+- **Responding to late background task notifications** — if a Codex background task completion notification arrives after the workflow has already finished (results presented, cleanup done), do NOT generate a user-facing response; the output was already consumed via the file. Silently acknowledge it
+- **Codex output file contains only a summary instead of the full review** — when Codex spawns multiple agents, the `-o` flag captures the final consolidation response (often a brief summary like "Review written to [file]") rather than the full multi-agent output; the script uses `tee` to send output to both file and stdout, so the full review is available in TaskOutput as a fallback if the file appears truncated

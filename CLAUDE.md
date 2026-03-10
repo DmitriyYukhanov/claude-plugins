@@ -39,5 +39,6 @@ skills/
 .claude-plugin/
   marketplace.json       # Plugin marketplace listing (versions must match plugin.json)
 docs/                    # Documentation and plans
+  skill-creation.md      # Skill authoring best practices
 .githooks/               # Git hooks (pre-commit version enforcement)
 ```
