@@ -7,6 +7,9 @@
 # Detection order:
 #   1. UNITY_EDITOR_PATH environment variable (direct override)
 #   2. Unity Hub install path (from config or CLI) + project version
+#
+# Supports Windows (MINGW/MSYS/Cygwin), macOS, Linux, and WSL.
+# WSL is detected via /proc/version and routes to Windows-side Unity installs.
 
 set -euo pipefail
 
@@ -43,8 +46,15 @@ detect_os() {
   case "$(uname -s)" in
     MINGW*|MSYS*|CYGWIN*|*_NT*) echo "windows" ;;
     Darwin*)                     echo "macos" ;;
-    Linux*)                      echo "linux" ;;
-    *)                           echo "unknown" ;;
+    Linux*)
+      # WSL reports uname -s as "Linux" but Unity lives on the Windows side
+      if grep -qi microsoft /proc/version 2>/dev/null; then
+        echo "wsl"
+      else
+        echo "linux"
+      fi
+      ;;
+    *) echo "unknown" ;;
   esac
 }
 
@@ -56,6 +66,15 @@ get_hub_appdata() {
     windows) echo "${APPDATA:-$HOME/AppData/Roaming}/UnityHub" ;;
     macos)   echo "$HOME/Library/Application Support/UnityHub" ;;
     linux)   echo "${XDG_CONFIG_HOME:-$HOME/.config}/UnityHub" ;;
+    wsl)
+      local win_appdata
+      if [[ -n "${USERPROFILE:-}" ]] && command -v wslpath >/dev/null 2>&1; then
+        win_appdata="$(wslpath "$USERPROFILE")/AppData/Roaming"
+      else
+        win_appdata="/mnt/c/Users/${USER}/AppData/Roaming"
+      fi
+      echo "$win_appdata/UnityHub"
+      ;;
   esac
 }
 
@@ -65,6 +84,7 @@ get_default_install_path() {
     windows) echo "C:/Program Files/Unity/Hub/Editor" ;;
     macos)   echo "/Applications/Unity/Hub/Editor" ;;
     linux)   echo "$HOME/Unity/Hub/Editor" ;;
+    wsl)     echo "/mnt/c/Program Files/Unity/Hub/Editor" ;;
   esac
 }
 
@@ -73,9 +93,9 @@ get_editor_binary() {
   local install_root="$1"
   install_root="${install_root//\\//}"
   case "$OS" in
-    windows) echo "$install_root/$UNITY_VERSION/Editor/Unity.exe" ;;
-    macos)   echo "$install_root/$UNITY_VERSION/Unity.app/Contents/MacOS/Unity" ;;
-    linux)   echo "$install_root/$UNITY_VERSION/Editor/Unity" ;;
+    windows|wsl) echo "$install_root/$UNITY_VERSION/Editor/Unity.exe" ;;
+    macos)       echo "$install_root/$UNITY_VERSION/Unity.app/Contents/MacOS/Unity" ;;
+    linux)       echo "$install_root/$UNITY_VERSION/Editor/Unity" ;;
   esac
 }
 
@@ -98,6 +118,12 @@ get_hub_binary() {
         "/usr/bin/unity-hub"
         "/opt/unityhub/unityhub"
         "$HOME/Applications/Unity Hub.AppImage"
+      )
+      ;;
+    wsl)
+      local candidates=(
+        "/mnt/c/Program Files/Unity Hub/Unity Hub.exe"
+        "/mnt/c/Users/${USER}/AppData/Local/Programs/Unity Hub/Unity Hub.exe"
       )
       ;;
   esac

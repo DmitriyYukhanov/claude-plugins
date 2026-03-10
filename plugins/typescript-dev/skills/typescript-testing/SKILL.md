@@ -1,6 +1,6 @@
 ---
 name: typescript-testing
-description: TypeScript testing patterns with Jest/Vitest including unit tests, integration tests, mocking strategies, and coverage. Use when writing or running TypeScript tests.
+description: TypeScript testing patterns with Jest/Vitest including unit tests, integration tests, mocking strategies, and coverage. Use when writing TypeScript tests.
 ---
 
 # TypeScript Testing Skill

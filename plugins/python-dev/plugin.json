@@ -1,6 +1,6 @@
 {
   "name": "python-dev",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Python development workflow with architecture design, coding guidelines, testing patterns, and specialized review agents",
   "author": {
     "name": "Dmitry Yuhanov"

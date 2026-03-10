@@ -9,7 +9,7 @@
     {
       "name": "unity-dev",
       "description": "Unity C# development workflow with architecture design, coding guidelines, testing patterns, and specialized review agents",
-      "version": "1.5.2",
+      "version": "1.6.0",
       "author": {
         "name": "Dmitry Yuhanov"
       },
@@ -20,7 +20,7 @@
     {
       "name": "python-dev",
       "description": "Python development workflow with architecture design, coding guidelines, testing patterns, and specialized review agents",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "author": {
         "name": "Dmitry Yuhanov"
       },
@@ -31,7 +31,7 @@
     {
       "name": "typescript-dev",
       "description": "TypeScript development workflow with architecture design, coding guidelines, testing patterns, and specialized review agents",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "author": {
         "name": "Dmitry Yuhanov"
       },

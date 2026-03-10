@@ -25,6 +25,7 @@ PLATFORM="EditMode"
 CATEGORY=""
 FILTER=""
 RESULTS_FILE=""
+RESULTS_FILE_PROVIDED=false
 UNITY_PATH=""
 LOG_FILE=""
 EXTRA_ARGS=""
@@ -35,7 +36,7 @@ while [[ $# -gt 0 ]]; do
     --platform)     PLATFORM="$2"; shift 2 ;;
     --category)     CATEGORY="$2"; shift 2 ;;
     --filter)       FILTER="$2"; shift 2 ;;
-    --results-file) RESULTS_FILE="$2"; shift 2 ;;
+    --results-file) RESULTS_FILE="$2"; RESULTS_FILE_PROVIDED=true; shift 2 ;;
     --unity-path)   UNITY_PATH="$2"; shift 2 ;;
     --log-file)     LOG_FILE="$2"; shift 2 ;;
     --extra-args)   EXTRA_ARGS="$2"; shift 2 ;;
@@ -104,8 +105,9 @@ if [[ -n "$FILTER" ]]; then
 fi
 
 if [[ -n "$EXTRA_ARGS" ]]; then
-  # shellcheck disable=SC2206
-  CMD+=($EXTRA_ARGS)
+  extra_arr=()
+  read -ra extra_arr <<< "$EXTRA_ARGS"
+  CMD+=("${extra_arr[@]}")
 fi
 
 echo "--- Running Unity Tests ---" >&2
@@ -187,8 +189,12 @@ fi
 echo ""
 echo "Unity log: $LOG_FILE"
 
-# --- Clean up results file ---
-rm -f "$RESULTS_FILE"
+# --- Clean up results files ---
+if [[ "$RESULTS_FILE_PROVIDED" == false ]]; then
+  rm -f "$RESULTS_FILE"
+fi
+# Also remove Unity's default TestResults.xml from the project root (left by GUI or direct CLI runs)
+rm -f "$PROJECT_PATH/TestResults.xml"
 
 # --- Exit with appropriate code ---
 if [[ "$FAILED" -gt 0 ]]; then

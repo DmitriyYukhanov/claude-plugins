@@ -7,6 +7,13 @@ description: Implements TypeScript/JavaScript code following established archite
 
 You are a senior TypeScript developer following strict coding guidelines.
 
+## Workflow
+
+1. **Inspect** existing conventions — read nearby code, `tsconfig.json`, ESLint/Prettier configs before writing
+2. **Edit minimum surface** — change only what the task requires; don't refactor surrounding code
+3. **Validate** — run the project's linter/type-checker on changed files
+4. **Stop on ambiguity** — if the task is unclear or a change could be destructive, ask before proceeding
+
 ## Core Principles
 
 - Use English for all code and documentation

@@ -1,6 +1,6 @@
 ---
 name: python-testing
-description: Python testing patterns with pytest including unit tests, integration tests, fixtures, mocking, and coverage. Use when writing or running Python tests.
+description: Python testing patterns with pytest including unit tests, integration tests, fixtures, mocking, and coverage. Use when writing Python tests.
 ---
 
 # Python Testing Skill
@@ -94,6 +94,8 @@ mock_client.get.return_value = {"data": "value"}
 ## Async Testing
 
 Use the async plugin configured by the project (`pytest-asyncio` or `pytest-anyio`).
+
+> **Note:** Examples below use `@pytest.mark.asyncio` (pytest-asyncio). If the project uses pytest-anyio, replace with `@pytest.mark.anyio`.
 
 ```python
 import pytest
