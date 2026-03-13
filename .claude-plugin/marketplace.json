@@ -71,6 +71,17 @@
       "source": "./plugins/implementation-prd",
       "category": "productivity",
       "homepage": "https://github.com/DmitriyYukhanov/claude-plugins"
+    },
+    {
+      "name": "collaborative-loop",
+      "description": "Sequential AI-to-AI collaboration loop where one model drives (writes/fixes) and the other reviews, iterating until consensus",
+      "version": "1.0.0",
+      "author": {
+        "name": "Dmitry Yuhanov"
+      },
+      "source": "./plugins/collaborative-loop",
+      "category": "development",
+      "homepage": "https://github.com/DmitriyYukhanov/claude-plugins"
     }
   ]
 }

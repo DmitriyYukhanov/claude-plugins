@@ -1,0 +1,6 @@
+Additional driving focus for architecture artifacts:
+- Document trade-offs and alternatives for each decision
+- Ensure separation of concerns with clear component boundaries
+- Address scalability, deployment, and operational constraints
+- Provide concrete interface definitions where applicable
+- Maintain consistency with existing architectural patterns

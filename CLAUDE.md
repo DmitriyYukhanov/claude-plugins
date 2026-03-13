@@ -16,6 +16,17 @@ When you modify ANY file inside `plugins/<name>/`, you MUST also bump the `"vers
 - Rewrote a prompt template, added new sections → MINOR (1.1.0 → 1.2.0)
 - Removed a skill, changed plugin interface → MAJOR (1.2.0 → 2.0.0)
 
+## New Plugin Checklist (MANDATORY)
+
+When creating a NEW plugin (new `plugins/<name>/` directory), you MUST complete ALL of these:
+
+1. `plugins/<name>/plugin.json` — manifest with name, version, description
+2. `plugins/<name>/.claude-plugin/plugin.json` — identical copy of the manifest
+3. `.claude-plugin/marketplace.json` — add entry with matching version, description, author, source, category, homepage
+4. `README.md` — add install command AND plugin description section (in alphabetical position among plugins)
+
+A pre-commit hook enforces items 1-3. Item 4 (README) is also enforced — commits introducing a new plugin directory without a corresponding README.md entry will be rejected.
+
 ## Git Hooks
 
 This repo uses `.githooks/` for tracked git hooks. After cloning, run:

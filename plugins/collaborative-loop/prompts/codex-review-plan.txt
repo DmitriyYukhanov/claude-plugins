@@ -1,0 +1,8 @@
+Additional review focus for plan artifacts:
+- Completeness: every requirement maps to at least one task
+- Task ordering: dependencies form a valid DAG with no cycles
+- Dependency correctness: no missing or circular dependencies
+- Missing tasks: gaps between requirements and planned work
+- Requirement coverage: all acceptance criteria are addressed
+- Feasibility: estimates are realistic given scope and constraints
+- Clarity: tasks are specific enough to be actionable without ambiguity

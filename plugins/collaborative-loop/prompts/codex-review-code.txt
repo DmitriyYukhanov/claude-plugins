@@ -1,0 +1,8 @@
+Additional review focus for code artifacts:
+- Verify all changed code paths are correct and handle edge cases
+- Check for introduced regressions in unchanged code
+- Validate error handling covers realistic failure modes
+- Ensure test coverage for new/changed behavior
+- Flag any changes that contradict the stated task or feedback
+- Check imports, dependencies, and type signatures are consistent
+- Verify no debug code, TODOs, or incomplete implementations remain

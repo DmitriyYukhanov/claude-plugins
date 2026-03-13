@@ -1,0 +1,7 @@
+Additional review focus for design documents:
+- Requirements coverage: every requirement is addressed in the design
+- Technical feasibility: proposed approach is implementable with stated constraints
+- Scope creep: features or complexity beyond stated requirements
+- Missing decisions: unresolved trade-offs, unstated assumptions
+- Decision rationale: every decision has stated rationale and alternatives considered
+- User impact: design addresses user-facing concerns (UX, performance, accessibility)

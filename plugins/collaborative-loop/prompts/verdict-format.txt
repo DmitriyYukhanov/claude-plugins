@@ -1,0 +1,31 @@
+Structure your review output EXACTLY in this format:
+
+## Verdict
+
+STATUS: <one of: APPROVED | MINOR_ISSUES | CHANGES_REQUESTED>
+
+### Findings (if any)
+
+List each finding as:
+- [severity: critical|high|medium|minor] [category] File:line — description
+  - Suggested fix: <concrete, specific fix>
+
+Severity guide:
+- critical: blocks progress, security vulnerability, data loss risk
+- high: causes bugs, architectural problems, incorrect behavior
+- medium: quality issues, inconsistency, maintainability concerns
+- minor: style nits, nice-to-have improvements
+
+Categories: security, performance, correctness, testing, maintainability, completeness, consistency, feasibility
+
+### Summary
+
+<1-2 sentence overall assessment explaining the verdict>
+
+Rules:
+- APPROVED: no findings, or only minor praise/acknowledgment
+- MINOR_ISSUES: only minor findings that don't block progress
+- CHANGES_REQUESTED: any finding at medium severity or above
+- Be specific: reference exact file paths, line numbers, sections
+- Every finding MUST have a suggested fix
+- Do not re-report issues that were already fixed in previous rounds

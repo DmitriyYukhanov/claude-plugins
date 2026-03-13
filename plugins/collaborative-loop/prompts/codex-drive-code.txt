@@ -1,0 +1,7 @@
+Additional driving focus for code artifacts:
+- Write production-quality code — no shortcuts, proper error handling
+- Follow existing code style and patterns in the surrounding codebase
+- Ensure all imports and dependencies are correct
+- Add or update tests for any changed behavior
+- Verify type signatures and interfaces remain consistent
+- Run linting/formatting if configured in the project

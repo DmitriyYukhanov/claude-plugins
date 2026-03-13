@@ -18,6 +18,7 @@ Then install the plugins you want to use:
 /plugin install typescript-dev
 /plugin install agent-teams
 /plugin install cross-review
+/plugin install collaborative-loop
 /plugin install implementation-prd
 ```
 
@@ -84,6 +85,17 @@ Cross-review workflow between Claude and Codex CLI for:
 - Multi-round review process with cleanup of intermediate artifacts
 
 [View skill documentation](./plugins/cross-review/skills/cross-review/SKILL.md)
+
+### collaborative-loop
+
+Sequential AI-to-AI collaboration loop with:
+- One model drives (writes/fixes), the other reviews with structured verdicts
+- Iterates until APPROVED, MINOR_ISSUES, or max rounds reached
+- Stall detection with mediator escalation for persistent disagreements
+- Supports Claude or Codex as driver via `--driver` flag
+- Artifact-type-aware prompts for code, plans, architecture, and design docs
+
+[View skill documentation](./plugins/collaborative-loop/skills/collaborative-loop/SKILL.md)
 
 ### implementation-prd
 

@@ -1,0 +1,6 @@
+Additional driving focus for design documents:
+- Address every requirement with a concrete design element
+- State rationale and alternatives for each decision
+- Identify and document assumptions explicitly
+- Ensure technical feasibility of proposed approaches
+- Keep scope aligned with stated requirements — no feature creep

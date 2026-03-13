@@ -1,0 +1,6 @@
+Additional driving focus for plan artifacts:
+- Ensure every task is specific, actionable, and has clear completion criteria
+- Maintain valid dependency ordering (DAG with no cycles)
+- Map every requirement to at least one task
+- Include realistic scope estimates where applicable
+- Clearly mark any assumptions or open questions

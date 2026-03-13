@@ -1,9 +1,10 @@
 #!/bin/bash
-# Pre-commit hook: enforce plugin version bumps and marketplace sync
+# Pre-commit hook: enforce plugin version bumps, marketplace sync, and new plugin registration
 #
 # Checks:
 # 1. When files inside plugins/<name>/ change, plugin.json version must be bumped
 # 2. When plugin.json version changes, marketplace.json must match
+# 3. When a new plugin directory appears, it must be registered in marketplace.json and README.md
 #
 # Follows Keep a Changelog / Semantic Versioning conventions.
 # To bypass (emergency only): git commit --no-verify
@@ -93,6 +94,53 @@ for plugin_json in $(echo "$staged_files" | grep -E '^plugins/[^/]+/plugin\.json
   fi
 done
 
+# ── Check 3: new plugin registration (README + marketplace) ───────────
+
+readme_errors=()
+marketplace_missing=()
+
+# Collect ALL plugin names with any staged file (including plugin.json)
+all_staged_plugins=()
+while IFS= read -r file; do
+  if [[ "$file" =~ ^plugins/([^/]+)/ ]]; then
+    pname="${BASH_REMATCH[1]}"
+    if [[ ! " ${all_staged_plugins[*]:-} " =~ " ${pname} " ]]; then
+      all_staged_plugins+=("$pname")
+    fi
+  fi
+done <<< "$staged_files"
+
+for plugin in "${all_staged_plugins[@]}"; do
+  plugin_json="plugins/${plugin}/plugin.json"
+
+  # Detect NEW plugins: plugin.json is staged AND didn't exist in HEAD
+  if echo "$staged_files" | grep -qx "$plugin_json"; then
+    if ! git show "HEAD:${plugin_json}" &>/dev/null; then
+      # This is a brand-new plugin
+
+      # Check marketplace.json has an entry for this plugin
+      if echo "$staged_files" | grep -qx "$MARKETPLACE"; then
+        marketplace_content=$(git show ":${MARKETPLACE}" 2>/dev/null || echo "")
+      else
+        marketplace_content=$(cat "$MARKETPLACE" 2>/dev/null || echo "")
+      fi
+      if ! echo "$marketplace_content" | grep -q "\"$plugin\""; then
+        marketplace_missing+=("$plugin")
+      fi
+
+      # Check README.md mentions this plugin
+      if echo "$staged_files" | grep -qx "README.md"; then
+        readme_content=$(git show ":README.md" 2>/dev/null || echo "")
+      else
+        readme_content=$(cat "README.md" 2>/dev/null || echo "")
+      fi
+      if ! echo "$readme_content" | grep -q "### $plugin"; then
+        readme_errors+=("$plugin")
+      fi
+    fi
+  fi
+done
+
 # ── Report errors ──────────────────────────────────────────────────────
 
 has_errors=false
@@ -132,6 +180,36 @@ if [ ${#sync_errors[@]} -gt 0 ]; then
   done
   echo ""
   echo "Fix: update the version in ${MARKETPLACE} to match, then re-stage and commit."
+fi
+
+if [ ${#marketplace_missing[@]} -gt 0 ]; then
+  has_errors=true
+  echo ""
+  echo "ERROR: New plugin missing from marketplace.json"
+  echo "========================================"
+  echo ""
+  echo "The following new plugins are not listed in ${MARKETPLACE}:"
+  echo ""
+  for plugin in "${marketplace_missing[@]}"; do
+    echo "  - ${plugin}"
+  done
+  echo ""
+  echo "Fix: add an entry for the plugin in ${MARKETPLACE}, then re-stage and commit."
+fi
+
+if [ ${#readme_errors[@]} -gt 0 ]; then
+  has_errors=true
+  echo ""
+  echo "ERROR: New plugin missing from README.md"
+  echo "========================================"
+  echo ""
+  echo "The following new plugins are not documented in README.md:"
+  echo ""
+  for plugin in "${readme_errors[@]}"; do
+    echo "  - ${plugin}"
+  done
+  echo ""
+  echo "Fix: add an install command and a ### <plugin-name> section to README.md, then re-stage and commit."
 fi
 
 if [ "$has_errors" = true ]; then
