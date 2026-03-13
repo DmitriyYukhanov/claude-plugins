@@ -82,6 +82,17 @@
       "source": "./plugins/collaborative-loop",
       "category": "development",
       "homepage": "https://github.com/DmitriyYukhanov/claude-plugins"
+    },
+    {
+      "name": "lsp-setup",
+      "description": "Set up LSP (Language Server Protocol) for Claude Code projects with auto-detection, plugin installation, and validation",
+      "version": "1.0.0",
+      "author": {
+        "name": "Dmitry Yuhanov"
+      },
+      "source": "./plugins/lsp-setup",
+      "category": "development",
+      "homepage": "https://github.com/DmitriyYukhanov/claude-plugins"
     }
   ]
 }

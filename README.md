@@ -20,6 +20,7 @@ Then install the plugins you want to use:
 /plugin install cross-review
 /plugin install collaborative-loop
 /plugin install implementation-prd
+/plugin install lsp-setup
 ```
 
 You can also install individual plugins directly, for example:
@@ -42,6 +43,18 @@ Unity C# development workflow with:
 - Code simplification agent
 
 [View documentation](./plugins/unity-dev/README.md)
+
+### lsp-setup
+
+Set up LSP (Language Server Protocol) for Claude Code projects with:
+- Auto-detection of project languages from source files and project markers
+- Automatic installation of language server binaries and Claude Code LSP plugins
+- Environment-aware setup (MINGW, WSL, macOS, Linux) with gotcha handling
+- State machine workflow that resumes from any point (install → restart → validate)
+- Post-restart validation confirming LSP operations work per language
+- Supports all 12 official LSP plugins (C#, Python, TypeScript/JS, Go, Rust, Java, Kotlin, Lua, PHP, Ruby, Swift, C/C++)
+
+[View skill documentation](./plugins/lsp-setup/skills/lsp-setup/SKILL.md)
 
 ### python-dev
 
