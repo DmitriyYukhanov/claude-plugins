@@ -17,6 +17,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_DIR="$(dirname "$SCRIPT_DIR")"
 PROMPT_DIR="$PLUGIN_DIR/prompts"
 
+# Detect environment and validate codex (sets CODEX_ENV, codex_run)
+# shellcheck source=check-codex.sh
+source "$SCRIPT_DIR/check-codex.sh"
+
 ARTIFACT_TYPE="${1:?Usage: $0 <artifact_type> <round> <output_dir> <project_dir> [base_branch|target_files...]}"
 ROUND="${2:?Missing round number}"
 OUTPUT_DIR="${3:?Missing output directory}"
@@ -32,7 +36,7 @@ if [[ "$ARTIFACT_TYPE" == "code" ]]; then
     # IMPORTANT: --base and [PROMPT] are mutually exclusive — no prompt argument allowed.
     # Multi-agent behavior depends on ~/.codex/config.toml [features] multi_agent = true.
     BASE_BRANCH="${5:-main}"
-    codex review --base "$BASE_BRANCH" 2>&1 | tee "$OUTPUT_FILE"
+    codex_run review --base "$BASE_BRANCH" 2>&1 | tee "$OUTPUT_FILE"
 else
     # Non-code artifacts use codex exec with an assembled prompt.
     shift 4
@@ -55,7 +59,7 @@ else
     if [[ "$ROUND" -gt 1 ]]; then
         PROMPT+="Only review changes since Round $((ROUND - 1)). Do not re-report fixed issues."$'\n'
     fi
-    codex exec --full-auto "$PROMPT" | tee "$OUTPUT_FILE"
+    codex_run exec --full-auto "$PROMPT" 2>&1 | tee "$OUTPUT_FILE"
 fi
 
 echo "Codex review complete: $OUTPUT_FILE"

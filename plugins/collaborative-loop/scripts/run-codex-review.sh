@@ -17,6 +17,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_DIR="$(dirname "$SCRIPT_DIR")"
 PROMPT_DIR="$PLUGIN_DIR/prompts"
 
+# Detect environment and validate codex (sets CODEX_ENV, codex_run)
+# shellcheck source=check-codex.sh
+source "$SCRIPT_DIR/check-codex.sh"
+
 ARTIFACT_TYPE="${1:?Usage: $0 <artifact_type> <round> <output_dir> <project_dir> [base_branch|target_files...]}"
 ROUND="${2:?Missing round number}"
 OUTPUT_DIR="${3:?Missing output directory}"
@@ -39,10 +43,13 @@ if [[ "$ARTIFACT_TYPE" == "code" ]]; then
     if [[ "$ROUND" -eq 1 ]]; then
         # Round 1: use codex review --base for full branch diff review
         # IMPORTANT: --base and [PROMPT] are mutually exclusive in Codex CLI
-        codex review --base "$BASE_BRANCH" 2>&1 | tee "$OUTPUT_FILE"
+        codex_run review --base "$BASE_BRANCH" 2>&1 | tee "$OUTPUT_FILE"
     else
         # Round N>1: use codex exec with diff context for delta review
-        DIFF="$(git diff HEAD~1 2>/dev/null || git diff "$BASE_BRANCH"...HEAD)"
+        DIFF="$(git diff HEAD~1 2>/dev/null || git diff "$BASE_BRANCH"...HEAD 2>/dev/null)" || true
+        if [[ -z "$DIFF" ]]; then
+            echo "Warning: no diff found for review — no changes between HEAD~1 and HEAD or $BASE_BRANCH...HEAD" >&2
+        fi
 
         PROMPT="$(cat "$PROMPT_DIR/codex-review-base.txt")"
         PROMPT+=$'\n\n'
@@ -59,7 +66,7 @@ if [[ "$ARTIFACT_TYPE" == "code" ]]; then
         PROMPT+="$DIFF"$'\n\n'
         PROMPT+="$VERDICT_FORMAT"
 
-        codex exec --full-auto "$PROMPT" 2>&1 | tee "$OUTPUT_FILE"
+        codex_run exec --full-auto "$PROMPT" 2>&1 | tee "$OUTPUT_FILE"
     fi
 else
     # Non-code artifacts: assemble review prompt
@@ -85,7 +92,7 @@ else
 
     PROMPT+=$'\n'"$VERDICT_FORMAT"
 
-    codex exec --full-auto "$PROMPT" 2>&1 | tee "$OUTPUT_FILE"
+    codex_run exec --full-auto "$PROMPT" 2>&1 | tee "$OUTPUT_FILE"
 fi
 
 echo "Codex review complete: $OUTPUT_FILE"

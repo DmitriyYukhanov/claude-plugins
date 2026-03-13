@@ -53,17 +53,24 @@ developer_instructions = "Focus on high priority issues. Be specific: reference 
   - Set `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` in environment or in `settings.json` under `"env"`
   - See the `agent-teams` plugin for full setup details
 
+### Platform Notes
+
+- **MINGW/MSYS (Git Bash on Windows):** Codex runs via WSL. The preflight check verifies WSL is available and codex is installed inside it. All codex invocations are transparently routed through `wsl --cd <path> -- codex`.
+- **WSL:** Codex runs directly. Just needs `codex` in PATH.
+- **Linux/macOS:** Codex runs directly.
+
 ## Checklist
 
 Execute each of these steps sequentially, completing one before moving to the next:
 
-1. **Detect artifact type** — determine what is being reviewed (plan, code, architecture, design)
-2. **Run review round** — launch Claude agents AND Codex simultaneously in parallel, then collect both results
-3. **Triage findings** — classify and cross-validate findings from both reviewers
-4. **Apply fixes** — discover best skill, invoke it to fix auto-fixable issues
-5. **Check exit conditions** — disagreements? all clean? max rounds? decide whether to loop or stop
-6. **Present results** — show user final state, remaining issues, or decisions needed
-7. **Clean up intermediate files** — run `bash "${CLAUDE_PLUGIN_ROOT}/scripts/cleanup-reviews.sh" <output_dir>` (mandatory, regardless of exit reason)
+1. **Preflight check** — verify codex is reachable before any work begins; ABORT if not
+2. **Detect artifact type** — determine what is being reviewed (plan, code, architecture, design)
+3. **Run review round** — launch Claude agents AND Codex simultaneously in parallel, then collect both results
+4. **Triage findings** — classify and cross-validate findings from both reviewers
+5. **Apply fixes** — discover best skill, invoke it to fix auto-fixable issues
+6. **Check exit conditions** — disagreements? all clean? max rounds? decide whether to loop or stop
+7. **Present results** — show user final state, remaining issues, or decisions needed
+8. **Clean up intermediate files** — run `bash "${CLAUDE_PLUGIN_ROOT}/scripts/cleanup-reviews.sh" <output_dir>` (mandatory, regardless of exit reason)
 
 ## Core Workflow
 
@@ -72,6 +79,8 @@ digraph cross_review_loop {
     rankdir=TB;
     node [shape=box];
 
+    "Preflight: check-codex.sh" -> "Detect artifact type" [label="OK"];
+    "Preflight: check-codex.sh" -> "ABORT: codex not reachable" [label="FAIL"];
     "Detect artifact type" -> "Launch PARALLEL reviewers";
     "Launch PARALLEL reviewers" -> "Spawn Claude agent team (3-5 reviewers)";
     "Launch PARALLEL reviewers" -> "run-codex-review.sh (background)";
@@ -98,7 +107,28 @@ digraph cross_review_loop {
 }
 ```
 
-## Step 1: Detect Artifact Type
+## Step 1: Preflight Check
+
+**Run this BEFORE any other work.** If the check fails, ABORT immediately — do not detect artifact type or start any review work.
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/check-codex.sh"
+```
+
+The script detects the environment and validates codex reachability:
+
+| Environment | Detection | How codex runs |
+|-------------|-----------|----------------|
+| **MINGW/MSYS** | `uname -s` starts with `MINGW` or `MSYS` | Via WSL: `wsl --cd <wsl_path> -- codex` |
+| **WSL** | `WSL_DISTRO_NAME` is set or `/proc/version` contains "Microsoft" | Directly: `codex` |
+| **Native** | Everything else (Linux, macOS) | Directly: `codex` |
+
+**On success:** prints `OK: ...` to stderr and `CODEX_ENV=<env>` to stdout. Proceed to Step 2.
+**On failure:** prints `FAIL: ...` with install instructions. **STOP HERE** — tell the user what's missing and how to fix it. Do not continue.
+
+The shell script (`run-codex-review.sh`) sources this script internally and uses `codex_run` instead of bare `codex`, so WSL path translation is handled transparently.
+
+## Step 2: Detect Artifact Type
 
 Examine the target file(s) to classify:
 
@@ -111,7 +141,7 @@ Examine the target file(s) to classify:
 
 Set `ARTIFACT_TYPE` for use in skill discovery and Codex script invocation.
 
-## Step 2: Run Review Round (PARALLEL)
+## Step 3: Run Review Round (PARALLEL)
 
 **CRITICAL: Launch Claude agents and Codex simultaneously. Do NOT wait for one before starting the other.** Both review independently; cross-validation happens during Triage.
 
@@ -212,7 +242,7 @@ After launching both in parallel:
 
 **Note on output format:** Claude's review groups findings by reviewer area (Security → severity, Performance → severity, etc.) because each agent reports independently. Codex's review uses global severity-first grouping. The triage step reconciles both formats.
 
-## Step 3: Triage Findings
+## Step 4: Triage Findings
 
 After both reviews complete, synthesize and classify EVERY finding. **This is where cross-validation happens** — compare the two independent reviews to find where they agree and disagree.
 
@@ -264,7 +294,7 @@ Save to `docs/plans/combined-review-round-N.md`:
 <list, no action needed>
 ```
 
-## Step 4: Apply Fixes via Skill Discovery
+## Step 5: Apply Fixes via Skill Discovery
 
 ### Dynamic Skill Discovery
 
@@ -295,7 +325,7 @@ When fixing inline (no skill available):
 - Apply each fix directly using Edit tool
 - Keep changes minimal and focused on the specific findings
 
-## Step 5: Check Exit Conditions
+## Step 6: Check Exit Conditions
 
 After each round, evaluate in order:
 
@@ -304,11 +334,11 @@ After each round, evaluate in order:
 3. **Max rounds reached?** (default: 3) → **EXIT LOOP**. Present remaining issues, then clean up.
 4. **No skill available for non-trivial fixes?** → **EXIT LOOP**. Ask user, then clean up.
 
-If none of the above → **increment N and loop back to Step 2**.
+If none of the above → **increment N and loop back to Step 3**.
 
-**CRITICAL: Every exit path leads to Step 6 (present results) then Step 7 (cleanup). Never skip cleanup.**
+**CRITICAL: Every exit path leads to Step 7 (present results) then Step 8 (cleanup). Never skip cleanup.**
 
-## Step 6: Present Results
+## Step 7: Present Results
 
 When the loop exits, present a clear summary:
 
@@ -328,7 +358,7 @@ When the loop exits, present a clear summary:
 <specific questions for the user, with context from both reviewers>
 ```
 
-## Step 7: Clean Up Intermediate Files (MANDATORY)
+## Step 8: Clean Up Intermediate Files (MANDATORY)
 
 Run the cleanup script — this is MANDATORY regardless of exit reason:
 
@@ -344,7 +374,7 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/cleanup-reviews.sh" docs/plans
 - **Max 3 rounds** default — override by user instruction only
 - **Round N+1 focuses on delta** — Claude agents use `git diff` to review only Round N changes; Codex code reviews cover the full branch diff but previously-fixed issues should not reappear; non-code Codex reviews receive a text instruction to focus on changes
 - **Each round produces 3 files:** `review-claude-round-N.md`, `review-codex-round-N.md`, `combined-review-round-N.md`
-- **All intermediate files are deleted** after the review loop completes (Step 7 — mandatory)
+- **All intermediate files are deleted** after the review loop completes (Step 8 — mandatory)
 - **Never silently resolve disagreements** — any reviewer conflict stops the loop
 - **Skill invocation is per-round** — re-discover skills each round (available skills may change)
 - **Agent teams are per-round** — create a new agent team for each Claude review round, shut it down after collecting results

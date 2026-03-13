@@ -34,9 +34,20 @@ This repo uses `.githooks/` for tracked git hooks. After cloning, run:
 git config core.hooksPath .githooks
 ```
 
+## Shared Scripts
+
+Scripts reused across multiple plugins live in `shared/scripts/`. Plugins reference them via **symlinks** (the official mechanism for cross-plugin code sharing — symlinks are followed during plugin cache copying).
+
+When modifying a shared script, bump the version of **every plugin that uses it**.
+
+Current shared scripts:
+- `shared/scripts/check-codex.sh` — Codex CLI environment detection + WSL support (used by: collaborative-loop, cross-review)
+
 ## Repository Structure
 
 ```
+shared/
+  scripts/               # Shared scripts symlinked from plugins
 plugins/
   <plugin-name>/
     plugin.json          # Manifest with name, version, description
@@ -46,7 +57,7 @@ plugins/
     hooks/               # Plugin hooks
     agents/              # Agent definitions (.md files)
     commands/            # Slash commands
-    scripts/             # Utility shell scripts
+    scripts/             # Utility shell scripts (may contain symlinks to shared/)
 skills/
   claude.ai/             # Skills for the Claude.ai web interface (not Claude Code)
     *.skill              # Binary skill files installable via Claude.ai settings

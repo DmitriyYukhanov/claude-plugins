@@ -17,6 +17,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_DIR="$(dirname "$SCRIPT_DIR")"
 PROMPT_DIR="$PLUGIN_DIR/prompts"
 
+# Detect environment and validate codex (sets CODEX_ENV, codex_run)
+# shellcheck source=check-codex.sh
+source "$SCRIPT_DIR/check-codex.sh"
+
 ARTIFACT_TYPE="${1:?Usage: $0 <artifact_type> <round> <output_dir> <project_dir> <feedback_file> [target_files...]}"
 ROUND="${2:?Missing round number}"
 OUTPUT_DIR="${3:?Missing output directory}"
@@ -59,6 +63,6 @@ else
     PROMPT+="This is the first round. Implement the task as described."$'\n'
 fi
 
-codex exec --full-auto "$PROMPT" 2>&1 | tee "$OUTPUT_FILE"
+codex_run exec --full-auto "$PROMPT" 2>&1 | tee "$OUTPUT_FILE"
 
 echo "Codex drive complete: $OUTPUT_FILE"

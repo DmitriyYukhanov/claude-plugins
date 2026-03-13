@@ -22,17 +22,24 @@ model = "gpt-5.4"
 model_reasoning_effort = "xhigh"
 ```
 
+### Platform Notes
+
+- **MINGW/MSYS (Git Bash on Windows):** Codex runs via WSL. The preflight check verifies WSL is available and codex is installed inside it. All codex invocations are transparently routed through `wsl --cd <path> -- codex`.
+- **WSL:** Codex runs directly. Just needs `codex` in PATH.
+- **Linux/macOS:** Codex runs directly.
+
 ## Checklist
 
 Execute each of these steps sequentially, completing one before moving to the next:
 
-1. **Parse arguments and detect context** — set DRIVER/REVIEWER roles, detect artifact type, identify target files
-2. **Driver produces/modifies artifact** — Claude skill discovery (round 1) or direct edits (round N>1), or Codex drive script
-3. **Reviewer evaluates with structured verdict** — Claude subagent or Codex review script
-4. **Parse verdict and check exit conditions** — APPROVED? MINOR_ISSUES? stall? max rounds?
-5. **Mediator escalation (if stalled)** — present stalled items, get user guidance
-6. **Present results summary** — final state, resolved issues, remaining items
-7. **Clean up intermediate files** — run `bash "${CLAUDE_PLUGIN_ROOT}/scripts/cleanup-loop.sh" docs/plans/collaborative-loop` (mandatory)
+1. **Preflight check** — verify codex is reachable before any work begins; ABORT if not
+2. **Parse arguments and detect context** — set DRIVER/REVIEWER roles, detect artifact type, identify target files
+3. **Driver produces/modifies artifact** — Claude skill discovery (round 1) or direct edits (round N>1), or Codex drive script
+4. **Reviewer evaluates with structured verdict** — Claude subagent or Codex review script
+5. **Parse verdict and check exit conditions** — APPROVED? MINOR_ISSUES? stall? max rounds?
+6. **Mediator escalation (if stalled)** — present stalled items, get user guidance
+7. **Present results summary** — final state, resolved issues, remaining items
+8. **Clean up intermediate files** — run `bash "${CLAUDE_PLUGIN_ROOT}/scripts/cleanup-loop.sh" docs/plans/collaborative-loop` (mandatory)
 
 ## Core Workflow
 
@@ -41,6 +48,8 @@ digraph collaborative_loop {
     rankdir=TB;
     node [shape=box];
 
+    "Preflight: check-codex.sh" -> "Parse args + detect context" [label="OK"];
+    "Preflight: check-codex.sh" -> "ABORT: codex not reachable" [label="FAIL"];
     "Parse args + detect context" -> "DRIVER: produce/modify artifact";
     "DRIVER: produce/modify artifact" -> "Save loop-drive-round-N.md";
     "Save loop-drive-round-N.md" -> "REVIEWER: evaluate + verdict";
@@ -66,7 +75,28 @@ digraph collaborative_loop {
 }
 ```
 
-## Step 1: Parse Arguments and Detect Context
+## Step 1: Preflight Check
+
+**Run this BEFORE any other work.** If the check fails, ABORT immediately — do not parse arguments, detect context, or start any loop work.
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/check-codex.sh"
+```
+
+The script detects the environment and validates codex reachability:
+
+| Environment | Detection | How codex runs |
+|-------------|-----------|----------------|
+| **MINGW/MSYS** | `uname -s` starts with `MINGW` or `MSYS` | Via WSL: `wsl --cd <wsl_path> -- codex` |
+| **WSL** | `WSL_DISTRO_NAME` is set or `/proc/version` contains "Microsoft" | Directly: `codex` |
+| **Native** | Everything else (Linux, macOS) | Directly: `codex` |
+
+**On success:** prints `OK: ...` to stderr and `CODEX_ENV=<env>` to stdout. Proceed to Step 2.
+**On failure:** prints `FAIL: ...` with install instructions. **STOP HERE** — tell the user what's missing and how to fix it. Do not continue.
+
+The shell scripts (`run-codex-drive.sh`, `run-codex-review.sh`) source this script internally and use `codex_run` instead of bare `codex`, so WSL path translation is handled transparently.
+
+## Step 2: Parse Arguments and Detect Context
 
 ### Argument Parsing
 
@@ -116,7 +146,7 @@ Create output directory:
 mkdir -p docs/plans/collaborative-loop
 ```
 
-## Step 2: Driver Produces/Modifies Artifact
+## Step 3: Driver Produces/Modifies Artifact
 
 ### When Claude is Driver
 
@@ -172,7 +202,7 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/run-codex-drive.sh" <ARTIFACT_TYPE> <ROUND> 
 
 Wait for the background task to complete using TaskOutput. Then verify the output file exists and has content. If the file is empty or missing, reconstruct from TaskOutput (the script uses `tee`).
 
-## Step 3: Reviewer Evaluates with Structured Verdict
+## Step 4: Reviewer Evaluates with Structured Verdict
 
 ### When Claude is Reviewer
 
@@ -235,7 +265,7 @@ Wait for the background task to complete using TaskOutput. Verify the output fil
 
 Rewrite the review file with proper verdict format if needed.
 
-## Step 4: Parse Verdict and Check Exit Conditions
+## Step 5: Parse Verdict and Check Exit Conditions
 
 ### Verdict Parsing
 
@@ -246,8 +276,8 @@ grep -i "^STATUS:" docs/plans/collaborative-loop/loop-review-round-N.md
 ```
 
 Extract the verdict:
-- `APPROVED` → Step 6 (present results)
-- `MINOR_ISSUES` → log the minor items, then Step 6 (present results)
+- `APPROVED` → Step 7 (present results)
+- `MINOR_ISSUES` → log the minor items, then Step 7 (present results)
 - `CHANGES_REQUESTED` → continue to exit condition checks
 - Missing or malformed → treat as `CHANGES_REQUESTED`
 
@@ -256,17 +286,17 @@ Extract the verdict:
 Extract current round's findings (file:line + description tuples). Compare with `PREV_FINDINGS`:
 - Count findings that persist (same file, same issue — fuzzy match on description)
 - If > 50% of findings persist from the previous round, increment `STALL_COUNT`
-- If `STALL_COUNT >= 2` → mediator escalation (Step 5)
+- If `STALL_COUNT >= 2` → mediator escalation (Step 6)
 
 Update `PREV_FINDINGS` with current round's findings.
 
 ### Exit Condition Checks (in order)
 
-1. **Stall detected** (`STALL_COUNT >= 2`) → Step 5 (mediator)
-2. **Max rounds reached** (`ROUND >= MAX_ROUNDS`) → Step 6 with remaining issues
-3. **Otherwise** → increment `ROUND`, feed review to driver, back to Step 2
+1. **Stall detected** (`STALL_COUNT >= 2`) → Step 6 (mediator)
+2. **Max rounds reached** (`ROUND >= MAX_ROUNDS`) → Step 7 with remaining issues
+3. **Otherwise** → increment `ROUND`, feed review to driver, back to Step 3
 
-## Step 5: Mediator Escalation
+## Step 6: Mediator Escalation
 
 When stall is detected (same findings persist across 2+ rounds despite fixes):
 
@@ -302,9 +332,9 @@ The following issues have persisted across multiple drive-review cycles:
 - Reset `STALL_COUNT` to 0
 - Continue the loop
 
-If user chooses abort → Step 6 (present results).
+If user chooses abort → Step 7 (present results).
 
-## Step 6: Present Results Summary
+## Step 7: Present Results Summary
 
 ```markdown
 ## Collaborative Loop Complete
@@ -328,7 +358,7 @@ If user chooses abort → Step 6 (present results).
 <mediator outcomes>
 ```
 
-## Step 7: Clean Up Intermediate Files (MANDATORY)
+## Step 8: Clean Up Intermediate Files (MANDATORY)
 
 Run the cleanup script — this is MANDATORY regardless of exit reason:
 
@@ -344,7 +374,7 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/cleanup-loop.sh" docs/plans/collaborative-lo
 - **Max 5 rounds** default — override with `--max-rounds`
 - **Sequential, not parallel** — driver completes before reviewer starts, reviewer completes before next driver round
 - **Each round produces 2 files:** `loop-drive-round-N.md`, `loop-review-round-N.md`
-- **All intermediate files are deleted** after the loop completes (Step 7 — mandatory)
+- **All intermediate files are deleted** after the loop completes (Step 8 — mandatory)
 - **Context is minimal** — each agent receives only the latest review, not full history
 - **Stall detection compares adjacent rounds** — findings that persist across 2+ rounds trigger mediator
 - **User guidance is authoritative** — once the user decides on a stalled item, it's settled
@@ -352,6 +382,7 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/cleanup-loop.sh" docs/plans/collaborative-lo
 
 ## Common Mistakes
 
+- **Skipping the preflight check** — always run `check-codex.sh` before any loop work. If codex is not reachable, the loop will fail mid-flight with cryptic errors. Fail fast, not mid-round
 - **Running driver and reviewer in parallel** — this is a SEQUENTIAL loop; driver must finish before reviewer starts. The whole point is that the reviewer evaluates the driver's actual output
 - **Passing full round history to agents** — each agent gets ONLY the most recent review file. The orchestrator tracks state internally
 - **Forgetting to synthesize verdict for `codex review --base` output** — round 1 code review with Codex uses `codex review` which has its own format; you must parse it and produce a verdict
