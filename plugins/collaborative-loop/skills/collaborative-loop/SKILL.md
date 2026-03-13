@@ -79,6 +79,10 @@ Parse the user's invocation. Defaults in parentheses:
 | `--task` | (from user message) | Task description for the driver |
 | target files | (current branch diff) | Specific files to work on |
 
+### Default Mode (No Arguments)
+
+When invoked with NO arguments and NO task description (e.g., bare `/collaborative-loop`), **proceed immediately with all defaults** — do NOT ask clarifying questions. Use `claude` as driver, `5` max rounds, auto-detect target files from the branch diff, and infer the task as "Review and improve the changed files." Only ask the user if git diff returns zero changed files AND there is no other context to work with.
+
 If no target files specified:
 1. Detect base branch: check for `main`, then `master`
 2. Run `git diff <base>...HEAD --name-only` to find changed files

@@ -75,7 +75,7 @@
     {
       "name": "collaborative-loop",
       "description": "Sequential AI-to-AI collaboration loop where one model drives (writes/fixes) and the other reviews, iterating until consensus",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "author": {
         "name": "Dmitry Yuhanov"
       },
