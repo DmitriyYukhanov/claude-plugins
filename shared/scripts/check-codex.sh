@@ -68,7 +68,17 @@ _validate_codex() {
                 return 1
             fi
             # Check codex is installed inside WSL
-            if ! wsl -- bash -lc "command -v codex" &>/dev/null; then
+            local wsl_timeout="${CODEX_WSL_TIMEOUT:-30}"
+            local wsl_probe_exit=0
+            if command -v timeout &>/dev/null; then
+                timeout "$wsl_timeout" wsl -- bash -lc "command -v codex" &>/dev/null || wsl_probe_exit=$?
+            else
+                wsl -- bash -lc "command -v codex" &>/dev/null || wsl_probe_exit=$?
+            fi
+            if [[ "$wsl_probe_exit" -eq 124 ]]; then
+                echo "FAIL: WSL timed out after ${wsl_timeout}s (cold start?). Retry or set CODEX_WSL_TIMEOUT higher." >&2
+                return 1
+            elif [[ "$wsl_probe_exit" -ne 0 ]]; then
                 echo "FAIL: codex CLI not found in WSL." >&2
                 echo "  Install inside WSL: npm install -g @openai/codex" >&2
                 return 1

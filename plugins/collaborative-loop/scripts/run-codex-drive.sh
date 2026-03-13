@@ -35,7 +35,12 @@ OUTPUT_FILE="$OUTPUT_DIR/loop-drive-round-${ROUND}.md"
 cd "$PROJECT_DIR"
 
 # Assemble prompt: base + artifact-specific focus
-PROMPT="$(cat "$PROMPT_DIR/codex-drive-base.txt")"
+BASE_PROMPT="$PROMPT_DIR/codex-drive-base.txt"
+if [[ ! -f "$BASE_PROMPT" ]]; then
+    echo "FAIL: base prompt not found at $BASE_PROMPT" >&2
+    exit 1
+fi
+PROMPT="$(cat "$BASE_PROMPT")"
 PROMPT+=$'\n\n'
 
 ARTIFACT_FILE="$PROMPT_DIR/codex-drive-${ARTIFACT_TYPE}.txt"
@@ -54,15 +59,24 @@ fi
 PROMPT+="Round: ${ROUND}"$'\n'
 
 # Add feedback from previous review round
-if [[ "$FEEDBACK_FILE" != "none" && -f "$FEEDBACK_FILE" ]]; then
+if [[ "$FEEDBACK_FILE" == "none" ]]; then
+    PROMPT+="This is the first round. Implement the task as described."$'\n'
+elif [[ -f "$FEEDBACK_FILE" ]]; then
     PROMPT+=$'\n'"## Reviewer Feedback (apply these changes):"$'\n\n'
     PROMPT+="$(cat "$FEEDBACK_FILE")"
     PROMPT+=$'\n\n'
     PROMPT+="Apply ALL findings above unless they contradict the task. Address in severity order."$'\n'
 else
-    PROMPT+="This is the first round. Implement the task as described."$'\n'
+    echo "FAIL: feedback file not found at $FEEDBACK_FILE" >&2
+    exit 1
 fi
 
-codex_run exec --full-auto "$PROMPT" 2>&1 | tee "$OUTPUT_FILE"
+CODEX_EXIT=0
+codex_run exec --full-auto "$PROMPT" 2>&1 | tee "$OUTPUT_FILE" || CODEX_EXIT=$?
+
+if [[ "$CODEX_EXIT" -ne 0 ]]; then
+    echo "WARNING: codex exited with code $CODEX_EXIT" >&2
+    exit "$CODEX_EXIT"
+fi
 
 echo "Codex drive complete: $OUTPUT_FILE"

@@ -1,5 +1,5 @@
 {
   "name": "collaborative-loop",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Sequential AI-to-AI collaboration loop where one model drives (writes/fixes) and the other reviews, iterating until consensus"
 }

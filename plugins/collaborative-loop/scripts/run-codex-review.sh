@@ -31,10 +31,11 @@ OUTPUT_FILE="$OUTPUT_DIR/loop-review-round-${ROUND}.md"
 
 cd "$PROJECT_DIR"
 
-# Load verdict format template
+# Load verdict format template (required for codex exec review paths)
 VERDICT_FORMAT=""
-if [[ -f "$PROMPT_DIR/verdict-format.txt" ]]; then
-    VERDICT_FORMAT="$(cat "$PROMPT_DIR/verdict-format.txt")"
+VERDICT_FORMAT_FILE="$PROMPT_DIR/verdict-format.txt"
+if [[ -f "$VERDICT_FORMAT_FILE" ]]; then
+    VERDICT_FORMAT="$(cat "$VERDICT_FORMAT_FILE")"
 fi
 
 if [[ "$ARTIFACT_TYPE" == "code" ]]; then
@@ -43,15 +44,30 @@ if [[ "$ARTIFACT_TYPE" == "code" ]]; then
     if [[ "$ROUND" -eq 1 ]]; then
         # Round 1: use codex review --base for full branch diff review
         # IMPORTANT: --base and [PROMPT] are mutually exclusive in Codex CLI
-        codex_run review --base "$BASE_BRANCH" 2>&1 | tee "$OUTPUT_FILE"
+        CODEX_EXIT=0
+        codex_run review --base "$BASE_BRANCH" 2>&1 | tee "$OUTPUT_FILE" || CODEX_EXIT=$?
+        if [[ "$CODEX_EXIT" -ne 0 ]]; then
+            echo "WARNING: codex review exited with code $CODEX_EXIT" >&2
+            exit "$CODEX_EXIT"
+        fi
     else
-        # Round N>1: use codex exec with diff context for delta review
-        DIFF="$(git diff HEAD~1 2>/dev/null || git diff "$BASE_BRANCH"...HEAD 2>/dev/null)" || true
+        # Round N>1: review working-tree changes (may be cumulative across rounds;
+        # the reviewer prompt handles filtering to only new changes)
+        DIFF="$(git diff 2>/dev/null)" || true
         if [[ -z "$DIFF" ]]; then
-            echo "Warning: no diff found for review — no changes between HEAD~1 and HEAD or $BASE_BRANCH...HEAD" >&2
+            # Fallback: try committed changes against base branch
+            DIFF="$(git diff "$BASE_BRANCH"...HEAD 2>/dev/null)" || true
+        fi
+        if [[ -z "$DIFF" ]]; then
+            echo "Warning: no diff found for review" >&2
         fi
 
-        PROMPT="$(cat "$PROMPT_DIR/codex-review-base.txt")"
+        BASE_PROMPT_FILE="$PROMPT_DIR/codex-review-base.txt"
+        if [[ ! -f "$BASE_PROMPT_FILE" ]]; then
+            echo "FAIL: base review prompt not found at $BASE_PROMPT_FILE" >&2
+            exit 1
+        fi
+        PROMPT="$(cat "$BASE_PROMPT_FILE")"
         PROMPT+=$'\n\n'
 
         ARTIFACT_FILE="$PROMPT_DIR/codex-review-code.txt"
@@ -64,16 +80,31 @@ if [[ "$ARTIFACT_TYPE" == "code" ]]; then
         PROMPT+="Only review changes since the last round. Do not re-report fixed issues."$'\n\n'
         PROMPT+="## Recent changes (git diff):"$'\n'
         PROMPT+="$DIFF"$'\n\n'
+
+        if [[ -z "$VERDICT_FORMAT" ]]; then
+            echo "FAIL: verdict-format.txt not found at $VERDICT_FORMAT_FILE — required for structured review" >&2
+            exit 1
+        fi
         PROMPT+="$VERDICT_FORMAT"
 
-        codex_run exec --full-auto "$PROMPT" 2>&1 | tee "$OUTPUT_FILE"
+        CODEX_EXIT=0
+        codex_run exec --full-auto "$PROMPT" 2>&1 | tee "$OUTPUT_FILE" || CODEX_EXIT=$?
+        if [[ "$CODEX_EXIT" -ne 0 ]]; then
+            echo "WARNING: codex exec exited with code $CODEX_EXIT" >&2
+            exit "$CODEX_EXIT"
+        fi
     fi
 else
     # Non-code artifacts: assemble review prompt
     shift 4
     TARGET_FILES="$*"
 
-    PROMPT="$(cat "$PROMPT_DIR/codex-review-base.txt")"
+    BASE_PROMPT_FILE="$PROMPT_DIR/codex-review-base.txt"
+    if [[ ! -f "$BASE_PROMPT_FILE" ]]; then
+        echo "FAIL: base review prompt not found at $BASE_PROMPT_FILE" >&2
+        exit 1
+    fi
+    PROMPT="$(cat "$BASE_PROMPT_FILE")"
     PROMPT+=$'\n\n'
 
     ARTIFACT_FILE="$PROMPT_DIR/codex-review-${ARTIFACT_TYPE}.txt"
@@ -90,9 +121,18 @@ else
         PROMPT+="Only review changes since Round $((ROUND - 1)). Do not re-report fixed issues."$'\n'
     fi
 
+    if [[ -z "$VERDICT_FORMAT" ]]; then
+        echo "FAIL: verdict-format.txt not found at $VERDICT_FORMAT_FILE — required for structured review" >&2
+        exit 1
+    fi
     PROMPT+=$'\n'"$VERDICT_FORMAT"
 
-    codex_run exec --full-auto "$PROMPT" 2>&1 | tee "$OUTPUT_FILE"
+    CODEX_EXIT=0
+    codex_run exec --full-auto "$PROMPT" 2>&1 | tee "$OUTPUT_FILE" || CODEX_EXIT=$?
+    if [[ "$CODEX_EXIT" -ne 0 ]]; then
+        echo "WARNING: codex exec exited with code $CODEX_EXIT" >&2
+        exit "$CODEX_EXIT"
+    fi
 fi
 
 echo "Codex review complete: $OUTPUT_FILE"
