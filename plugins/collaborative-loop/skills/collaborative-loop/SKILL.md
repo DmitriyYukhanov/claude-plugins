@@ -76,27 +76,12 @@ Parse the user's invocation. Defaults in parentheses:
 |----------|---------|-------------|
 | `--driver` | `claude` | Who drives: `claude` or `codex` |
 | `--max-rounds` | `5` | Maximum iteration rounds |
-| `--task` | (from user message) | Task description for the driver |
+| `--task` | (from user message; inferred from branch name + commits if bare) | Task description for the driver |
 | target files | (current branch diff) | Specific files to work on |
 
 ### Default Mode (No Arguments) — MANDATORY
 
-**When the user invokes this skill without arguments or with no explicit task, you MUST proceed immediately. NEVER ask clarifying questions about task, driver, target files, or max rounds.** This is non-negotiable.
-
-Defaults to apply silently:
-- **Driver:** `claude`
-- **Max rounds:** `5`
-- **Target files:** ALL files from the branch diff (even if there are hundreds — do NOT ask the user to scope them down)
-- **Task:** Infer from branch name and commit messages. For example, branch `story/151-parser-progress` with parser commits → task is "Review and improve the parser progress calculation changes." If the branch name is generic (e.g., `main`), use "Review and improve the changed files."
-
-**You are FORBIDDEN from asking the user any of these questions:**
-- "What should the loop work on?"
-- "Who drives?"
-- "Should I use the branch diff or specific files?"
-- "The diff is large, should I scope it down?"
-- "How many rounds?"
-
-Just proceed. The user invoked the skill — that IS the instruction to start.
+**When invoked without arguments, you MUST apply all defaults from the table above and start immediately. NEVER ask clarifying questions — infer and proceed.** Use ALL files from the branch diff regardless of count. Infer the task from branch name and commit messages (e.g., branch `story/151-parser-progress` → "Review and improve the parser progress calculation changes"; generic branch like `main` → "Review and improve the changed files").
 
 If no target files specified:
 1. Detect base branch: check for `main`, then `master`
