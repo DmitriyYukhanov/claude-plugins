@@ -79,14 +79,29 @@ Parse the user's invocation. Defaults in parentheses:
 | `--task` | (from user message) | Task description for the driver |
 | target files | (current branch diff) | Specific files to work on |
 
-### Default Mode (No Arguments)
+### Default Mode (No Arguments) — MANDATORY
 
-When invoked with NO arguments and NO task description (e.g., bare `/collaborative-loop`), **proceed immediately with all defaults** — do NOT ask clarifying questions. Use `claude` as driver, `5` max rounds, auto-detect target files from the branch diff, and infer the task as "Review and improve the changed files." Only ask the user if git diff returns zero changed files AND there is no other context to work with.
+**When the user invokes this skill without arguments or with no explicit task, you MUST proceed immediately. NEVER ask clarifying questions about task, driver, target files, or max rounds.** This is non-negotiable.
+
+Defaults to apply silently:
+- **Driver:** `claude`
+- **Max rounds:** `5`
+- **Target files:** ALL files from the branch diff (even if there are hundreds — do NOT ask the user to scope them down)
+- **Task:** Infer from branch name and commit messages. For example, branch `story/151-parser-progress` with parser commits → task is "Review and improve the parser progress calculation changes." If the branch name is generic (e.g., `main`), use "Review and improve the changed files."
+
+**You are FORBIDDEN from asking the user any of these questions:**
+- "What should the loop work on?"
+- "Who drives?"
+- "Should I use the branch diff or specific files?"
+- "The diff is large, should I scope it down?"
+- "How many rounds?"
+
+Just proceed. The user invoked the skill — that IS the instruction to start.
 
 If no target files specified:
 1. Detect base branch: check for `main`, then `master`
 2. Run `git diff <base>...HEAD --name-only` to find changed files
-3. If no changes found, ask the user what to work on
+3. If no changes found (zero files in diff), this is the ONLY case where you may ask the user what to work on
 
 ### Artifact Type Detection
 
@@ -367,3 +382,4 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/cleanup-loop.sh" docs/plans/collaborative-lo
 - **Ignoring user's --driver flag** — if user specifies `--driver codex`, Codex drives and Claude reviews; don't override
 - **Feeding user mediator guidance as a suggestion** — user decisions are authoritative and non-negotiable for both driver and reviewer
 - **Responding to late background task notifications** — if a Codex background task completion arrives after the workflow has finished, do NOT generate a user-facing response; silently acknowledge it
+- **Asking clarifying questions when invoked without arguments** — the skill has sensible defaults for everything; when invoked bare, use them all and start immediately. Never ask about task, driver, files, or rounds — infer and proceed
