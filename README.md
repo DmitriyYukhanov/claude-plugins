@@ -18,6 +18,7 @@ Then install the plugins you want to use:
 /plugin install typescript-dev
 /plugin install agent-teams
 /plugin install cross-review
+/plugin install implementation-prd
 ```
 
 You can also install individual plugins directly, for example:
@@ -83,6 +84,17 @@ Cross-review workflow between Claude and Codex CLI for:
 - Multi-round review process with cleanup of intermediate artifacts
 
 [View skill documentation](./plugins/cross-review/skills/cross-review/SKILL.md)
+
+### implementation-prd
+
+Implementation-ready spec bundle authoring with:
+- Auto-activating skill for turning requests into build-ready spec bundles
+- Templates for product, system, and feature PRDs, contracts, schemas, data models, and test plans
+- `init-spec-bundle.sh` scaffolding script for standard 4-file bundles
+- Quality gates checklist and cross-file alignment rules
+- Worked example from a real desktop app project
+
+[View documentation](./plugins/implementation-prd/README.md)
 
 ## Claude.ai Skills
 

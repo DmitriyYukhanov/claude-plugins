@@ -1,6 +1,6 @@
 # Claude Plugins Repository
 
-Collection of Claude Code plugins: skills, agents, hooks, and commands.
+Collection of Claude Code plugins: skills, agents, hooks, commands, and scripts.
 
 ## Plugin Version Bumping (MANDATORY)
 
@@ -29,10 +29,13 @@ git config core.hooksPath .githooks
 plugins/
   <plugin-name>/
     plugin.json          # Manifest with name, version, description
+    .claude-plugin/
+      plugin.json        # Copy of manifest (used by plugin loader)
     skills/              # Skill definitions (SKILL.md files)
     hooks/               # Plugin hooks
-    agents/              # Agent definitions
+    agents/              # Agent definitions (.md files)
     commands/            # Slash commands
+    scripts/             # Utility shell scripts
 skills/
   claude.ai/             # Skills for the Claude.ai web interface (not Claude Code)
     *.skill              # Binary skill files installable via Claude.ai settings

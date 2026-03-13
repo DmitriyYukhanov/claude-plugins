@@ -1,0 +1,7 @@
+interface:
+  display_name: "Implementation PRD"
+  short_description: "Writes build-ready app, service, and feature specs"
+  default_prompt: "Use $implementation-prd to draft an implementation-ready spec bundle for an app, service, platform module, or complex feature."
+
+policy:
+  allow_implicit_invocation: true

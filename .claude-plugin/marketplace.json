@@ -1,7 +1,7 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "dmitriy-claude-plugins",
-  "description": "Personal collection of Claude Code plugins for Unity development and productivity",
+  "description": "Personal collection of Claude Code plugins for development workflows and productivity",
   "owner": {
     "name": "Dmitry Yuhanov"
   },
@@ -59,6 +59,17 @@
       },
       "source": "./plugins/cross-review",
       "category": "development",
+      "homepage": "https://github.com/DmitriyYukhanov/claude-plugins"
+    },
+    {
+      "name": "implementation-prd",
+      "description": "Implementation-ready spec bundle authoring for apps, services, platforms, and complex features",
+      "version": "1.1.0",
+      "author": {
+        "name": "Dmitry Yuhanov"
+      },
+      "source": "./plugins/implementation-prd",
+      "category": "productivity",
       "homepage": "https://github.com/DmitriyYukhanov/claude-plugins"
     }
   ]
