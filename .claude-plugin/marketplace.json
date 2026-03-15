@@ -74,8 +74,8 @@
     },
     {
       "name": "collaborative-loop",
-      "description": "Sequential AI-to-AI collaboration loop where one model drives (writes/fixes) and the other reviews, iterating until consensus",
-      "version": "1.1.1",
+      "description": "Sequential AI-to-AI pair programming loop with produce-validate-act cycles — driver analyzes, reviewer validates before any action, preventing false-positive fixes",
+      "version": "1.2.0",
       "author": {
         "name": "Dmitry Yuhanov"
       },

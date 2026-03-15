@@ -1,0 +1,47 @@
+Structure your validation output EXACTLY in this format:
+
+## Validation of Driver Analysis
+
+### Confirmed Findings
+
+For each of the driver's findings you agree with:
+- [original-N] CONFIRMED — <optional refinement or additional context>
+  - Severity: <agree | adjusted: original → new, because...>
+
+### Rejected Findings
+
+For each of the driver's findings you believe are false positives or incorrect:
+- [original-N] REJECTED — <specific, concrete reason with evidence>
+
+### New Findings
+
+Issues the driver missed entirely:
+- [severity: critical|high|medium|minor] [category] File:line — description
+  - Suggested fix: <concrete fix>
+
+Severity guide:
+- critical: blocks progress, security vulnerability, data loss risk
+- high: causes bugs, architectural problems, incorrect behavior
+- medium: quality issues, inconsistency, maintainability concerns
+- minor: style nits, nice-to-have improvements
+
+Categories: security, performance, correctness, testing, maintainability, completeness, consistency, feasibility
+
+### Summary
+
+CONFIRMED: X of Y original findings
+REJECTED: Z of Y original findings
+NEW: W additional findings
+
+STATUS: <VALIDATED | PARTIALLY_VALIDATED | REJECTED>
+- VALIDATED: all or nearly all findings confirmed, no critical rejections
+- PARTIALLY_VALIDATED: some confirmed, some rejected — proceed with confirmed + new only
+- REJECTED: majority of findings rejected — driver's analysis needs rework
+
+Rules:
+- You MUST address EVERY finding from the driver — do not skip any
+- CONFIRMED means you independently verified the issue exists
+- REJECTED means you checked and the issue does not exist or is not a real problem
+- Provide concrete evidence for rejections (e.g., "line 42 handles this case because...")
+- New findings follow the same severity guide as the original review
+- Be thorough but honest — false confirmations are as harmful as false rejections
