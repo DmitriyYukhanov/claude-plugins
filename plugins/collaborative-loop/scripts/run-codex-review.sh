@@ -2,12 +2,13 @@
 # Run Codex CLI as reviewer in the collaborative loop.
 # Evaluates the driver's output and produces a structured verdict.
 #
-# Usage: run-codex-review.sh <artifact_type> <round> <output_dir> <project_dir> [base_branch] [target_files...]
+# Usage: run-codex-review.sh <artifact_type> <round> <output_dir> <project_dir> [--chunk <chunk_id>] [base_branch] [target_files...]
 #
 #   artifact_type  : code | plan | architecture | design
 #   round          : round number (1, 2, 3...)
 #   output_dir     : directory for review output (e.g., docs/plans/collaborative-loop)
 #   project_dir    : project root directory
+#   --chunk N      : optional chunk ID for parallel execution (appends -chunk-N to output filename)
 #   base_branch    : (code only, default: main) git base branch for diff
 #   target_files   : (non-code only) space-separated list of files to review
 
@@ -21,13 +22,25 @@ PROMPT_DIR="$PLUGIN_DIR/prompts"
 # shellcheck source=check-codex.sh
 source "$SCRIPT_DIR/check-codex.sh"
 
-ARTIFACT_TYPE="${1:?Usage: $0 <artifact_type> <round> <output_dir> <project_dir> [base_branch|target_files...]}"
+ARTIFACT_TYPE="${1:?Usage: $0 <artifact_type> <round> <output_dir> <project_dir> [--chunk <chunk_id>] [base_branch|target_files...]}"
 ROUND="${2:?Missing round number}"
 OUTPUT_DIR="${3:?Missing output directory}"
 PROJECT_DIR="${4:?Missing project directory}"
+shift 4
+
+# Parse optional --chunk parameter
+CHUNK_ID=""
+if [[ "${1:-}" == "--chunk" ]]; then
+    CHUNK_ID="${2:?Missing chunk ID after --chunk}"
+    shift 2
+fi
 
 mkdir -p "$OUTPUT_DIR"
-OUTPUT_FILE="$OUTPUT_DIR/loop-review-round-${ROUND}.md"
+if [[ -n "$CHUNK_ID" ]]; then
+    OUTPUT_FILE="$OUTPUT_DIR/loop-review-round-${ROUND}-chunk-${CHUNK_ID}.md"
+else
+    OUTPUT_FILE="$OUTPUT_DIR/loop-review-round-${ROUND}.md"
+fi
 
 cd "$PROJECT_DIR"
 
@@ -39,7 +52,7 @@ if [[ -f "$VERDICT_FORMAT_FILE" ]]; then
 fi
 
 if [[ "$ARTIFACT_TYPE" == "code" ]]; then
-    BASE_BRANCH="${5:-main}"
+    BASE_BRANCH="${1:-main}"
 
     if [[ "$ROUND" -eq 1 ]]; then
         # Round 1: use codex review --base for full branch diff review
@@ -88,7 +101,7 @@ if [[ "$ARTIFACT_TYPE" == "code" ]]; then
         PROMPT+="$VERDICT_FORMAT"
 
         CODEX_EXIT=0
-        codex_run exec --full-auto "$PROMPT" 2>&1 | tee "$OUTPUT_FILE" || CODEX_EXIT=$?
+        codex_run exec --full-auto --ephemeral "$PROMPT" 2>&1 | tee "$OUTPUT_FILE" || CODEX_EXIT=$?
         if [[ "$CODEX_EXIT" -ne 0 ]]; then
             echo "WARNING: codex exec exited with code $CODEX_EXIT" >&2
             exit "$CODEX_EXIT"
@@ -96,7 +109,6 @@ if [[ "$ARTIFACT_TYPE" == "code" ]]; then
     fi
 else
     # Non-code artifacts: assemble review prompt
-    shift 4
     TARGET_FILES="$*"
 
     BASE_PROMPT_FILE="$PROMPT_DIR/codex-review-base.txt"
@@ -128,7 +140,7 @@ else
     PROMPT+=$'\n'"$VERDICT_FORMAT"
 
     CODEX_EXIT=0
-    codex_run exec --full-auto "$PROMPT" 2>&1 | tee "$OUTPUT_FILE" || CODEX_EXIT=$?
+    codex_run exec --full-auto --ephemeral "$PROMPT" 2>&1 | tee "$OUTPUT_FILE" || CODEX_EXIT=$?
     if [[ "$CODEX_EXIT" -ne 0 ]]; then
         echo "WARNING: codex exec exited with code $CODEX_EXIT" >&2
         exit "$CODEX_EXIT"

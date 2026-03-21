@@ -13,7 +13,9 @@ PATTERNS=(
     "$OUTPUT_DIR"/loop-drive-round-*.md
     "$OUTPUT_DIR"/loop-review-round-*.md
     "$OUTPUT_DIR"/loop-analysis.md
+    "$OUTPUT_DIR"/loop-analysis-chunk-*.md
     "$OUTPUT_DIR"/loop-validation.md
+    "$OUTPUT_DIR"/loop-validation-chunk-*.md
 )
 
 # Collect matching files (nullglob-safe)

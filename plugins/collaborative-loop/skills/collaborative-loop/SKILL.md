@@ -1,7 +1,7 @@
 ---
 name: collaborative-loop
 model: opus
-description: This skill should be used when the user wants sequential AI-to-AI collaboration where one model drives and another validates iteratively. Applies when the user wants to "collaborate with codex", "have codex review my changes", "drive and review loop", "iterate with another model", "collaborative loop", "sequential review", "AI pair programming", or wants one model to build on another's feedback in a back-and-forth cycle. Orchestrates produce-validate-act cycles between Claude and Codex CLI until consensus (APPROVED verdict) or escalation.
+description: This skill should be used when the user wants sequential AI-to-AI collaboration where one model drives and another validates iteratively. Applies when the user wants to "collaborate with codex", "have codex review my changes", "drive and review loop", "iterate with another model", "collaborative loop", "sequential review", "AI pair programming", or wants one model to build on another's feedback in a back-and-forth cycle. Orchestrates produce-validate-act cycles between Claude and Codex CLI until consensus (APPROVED verdict) or escalation, with optional parallel subagent decomposition for large file sets.
 ---
 
 # Collaborative Loop: Sequential Claude x Codex CLI
@@ -22,6 +22,14 @@ Pair-programming loop between Claude and Codex CLI. The driver PRODUCES an artif
 # ~/.codex/config.toml (example — adjust model to your available version)
 model = "gpt-5.4"
 model_reasoning_effort = "xhigh"
+
+# Native subagent support (on by default — only needed if explicitly disabled)
+[features]
+multi_agent = true
+
+[agents]
+max_threads = 6   # concurrent subagent cap (default: 6, our heuristic uses ≤ 3)
+max_depth = 1     # no nested subagent spawning (default)
 ```
 
 ### Platform Notes
@@ -35,8 +43,8 @@ model_reasoning_effort = "xhigh"
 Execute each of these steps sequentially, completing one before moving to the next:
 
 1. **Preflight check** — verify codex is reachable before any work begins; ABORT if not
-2. **Parse arguments and detect context** — set DRIVER/REVIEWER roles, detect artifact type, identify target files
-3. **Driver PRODUCES initial artifact** — analysis, review, draft, or code (NO fixes, NO implementation of own findings)
+2. **Parse arguments and detect context** — set DRIVER/REVIEWER roles, detect artifact type, identify target files, decompose for parallel subagents
+3. **Driver PRODUCES initial artifact** — analysis, review, draft, or code (NO fixes, NO implementation of own findings); spawn multiple subagents if decomposed
 4. **Reviewer VALIDATES driver's output** — confirm/reject each finding, add missed findings
 5. **Merge validated findings** — combine confirmed + new findings; check if action is needed
 6. **Driver ACTS on validated findings only** — implement fixes or refinements
@@ -171,11 +179,140 @@ Create output directory:
 mkdir -p docs/plans/collaborative-loop
 ```
 
+## Parallel Subagent Strategy
+
+The orchestrator decides how many subagents to spawn for each phase based on the task's decomposability. This applies to all phases (analysis, validation, fix, review) and both Claude and Codex subagents. The driver role determines the default judgment, but the orchestrator always makes the final call.
+
+### Decomposition Decision (performed once, after Step 2)
+
+1. **Group files by module** — cluster `TARGET_FILES` by their top-level directory (e.g., `src/auth/*`, `src/api/*`, `lib/utils/*`)
+2. **Apply the split heuristic:**
+
+| Files | Directory Groups | Subagents | Rationale |
+|-------|-----------------|-----------|-----------|
+| ≤ 3   | any             | 1         | Overhead exceeds benefit |
+| 4–8   | 2–3             | 2         | Moderate parallelism |
+| 9+    | 3+              | up to 3   | Maximum practical parallelism |
+| any   | 1               | 1         | Single module — no natural split point |
+
+**Hard cap: 3 subagents.** Coordination overhead dominates beyond this.
+
+3. **Assign file groups to subagents** — each subagent gets one or more directory groups. Never split files from the same directory across different subagents.
+
+Store the decomposition alongside other state:
+```
+SUBAGENT_COUNT = <1|2|3>
+CHUNKS = [ [chunk_1_files...], [chunk_2_files...], ... ]
+```
+
+**Refresh after modifying rounds:** After each fix round (Step 6), check if the driver created, renamed, or deleted files. If `TARGET_FILES` changed, re-run decomposition to update `CHUNKS`. New files are assigned to the directory group they belong to; if they form a new group, add it to the nearest chunk. This prevents unreviewed files from falling outside all chunks.
+
+### When to Force Single Subagent
+
+Always use `SUBAGENT_COUNT = 1` regardless of file count when:
+- Fix rounds (Step 6) where findings cross-reference multiple file groups
+- Validation (Step 4) with fewer than 5 total findings
+- Task explicitly requires holistic analysis (e.g., "review the overall architecture")
+- Code reviews with Codex using `codex review --base` (reviews the entire branch diff — cannot be file-scoped; the `--chunk` fallback only changes the output filename, not what gets reviewed, producing duplicate findings across chunks)
+- Codex plan concurrent task limit would be exceeded (Pro: 3 concurrent, Plus: 1, Team: 2) — if already running N Codex tasks and spawning more would exceed the limit, reduce `SUBAGENT_COUNT` accordingly
+
+### Spawning Multiple Subagents
+
+Both Claude Code and Codex have **native subagent systems**. Always use the native mechanism — never spawn multiple raw CLI sessions.
+
+**Claude Code** — use multiple `Agent` tool calls in a **single response**, all with `run_in_background: true`. Name each distinctly (e.g., `"analysis-chunk-1"`, `"review-chunk-2"`). Wait for all to complete via TaskOutput before proceeding. This IS the native Claude Code subagent system.
+
+Example — 2 parallel Claude reviewer subagents:
+```
+Agent tool call 1:
+  - name: "review-chunk-1"
+  - run_in_background: true
+  - prompt: "Review files: src/auth/login.ts, src/auth/session.ts ..."
+
+Agent tool call 2:
+  - name: "review-chunk-2"
+  - run_in_background: true
+  - prompt: "Review files: src/api/routes.ts, src/api/middleware.ts ..."
+```
+
+**Codex** — run a **single** `codex exec` session whose prompt instructs Codex to use its **native subagent system** (`spawn_agent`/`wait_agent`, enabled by default via `features.multi_agent = true`). Codex internally spawns parallel threads (up to `agents.max_threads`, default 6), waits for all results, and returns a **consolidated response**. Do NOT spawn multiple `codex exec` CLI sessions — that causes session-state interference (Issue #11435) and bypasses Codex's built-in result consolidation.
+
+Example — Codex prompt with native subagent instructions:
+```
+Analyze the following code changes for quality and correctness.
+
+Parallelize this work using subagents — spawn one subagent per file group,
+wait for all of them, and consolidate the findings:
+
+Group 1: src/auth/login.ts, src/auth/session.ts
+Group 2: src/api/routes.ts, src/api/middleware.ts
+
+For each group, analyze files and report findings in this format:
+[severity: critical|high|medium|minor] [category] File:line — description
+  Suggested fix: <concrete fix>
+
+After all subagents complete, merge all findings into a single numbered list,
+deduplicate any overlapping findings, and provide a consolidated summary.
+```
+
+The scripts (`run-codex-drive.sh`, `run-codex-review.sh`, `run-codex-validate.sh`) handle **single-session, single-agent execution only**. They build prompts from fixed template files and cannot inject subagent spawning instructions. When `SUBAGENT_COUNT > 1` and using native Codex subagents, the orchestrator **must bypass the scripts** and run `codex_run exec --full-auto --ephemeral` inline with a prompt that includes both the task and subagent instructions. The `--chunk` flag on scripts is a **fallback** for environments where Codex's native subagent system is unavailable — it runs multiple separate CLI sessions (one per chunk) instead of a single session with internal subagents.
+
+### Merging Parallel Results
+
+**Codex native subagents:** Codex consolidates results automatically within the session. The output from `codex exec` already contains merged findings. The orchestrator reads the single output file — no manual chunk merging needed. Verify the output includes all file groups and re-request if a group is missing.
+
+**Claude Code subagents:** The orchestrator must merge results manually after all background Agent subagents complete:
+
+1. Read each subagent's return value
+2. Consolidate into the expected single output file:
+   - Renumber findings sequentially ([1], [2], [3]...)
+   - Preserve severity, category, file:line from each subagent
+   - **Deduplicate:** if two subagents flag the same file:line, keep the higher severity version
+   - Combine summaries into one cohesive summary
+3. Save to the expected file (e.g., `loop-analysis.md`, `loop-validation.md`, `loop-review-round-N.md`)
+4. The rest of the loop operates on the merged output — it is unaware of chunks
+
+For merged verdict files, synthesize the overall STATUS:
+- If ANY subagent says `CHANGES_REQUESTED` → `CHANGES_REQUESTED`
+- If all say `APPROVED` → `APPROVED`
+- Otherwise → `MINOR_ISSUES`
+
+### Handling Partial Failures
+
+**Codex native subagents:** Codex handles internal subagent failures and reports them in the consolidated output. If the output is missing findings for a file group, the orchestrator should re-run the session for the missing group only (single subagent, no parallelism).
+
+**Claude Code subagents:**
+
+1. **Collect all successful outputs** — don't discard work from subagents that completed
+2. **Assess coverage gap** — identify which file group the failed subagent was responsible for
+3. **Retry the failed chunk only** — spawn a single new subagent (foreground, not background) for the failed files
+4. **If retry also fails** — proceed with partial results rather than aborting. The uncovered files will get reviewed in subsequent rounds
+5. **Never silently ignore failures** — always log which subagents failed and why
+
+Output retrieval for Claude background subagents can be unreliable (~40% failure rate reported). Always verify TaskOutput results are non-empty. If a subagent's result is missing, check the output file on disk (the subagent may have written it successfully even if result delivery failed).
+
+### Filesystem Isolation for File-Modifying Phases
+
+**Analysis and review phases (Steps 3, 4, 7)** are read-only — parallel subagents can safely share the filesystem.
+
+**Fix phases (Step 6)** modify files. When Claude is driver with `SUBAGENT_COUNT > 1`:
+- Our directory partitioning ensures subagents edit non-overlapping file sets — this is safe without worktree isolation
+- However, if a subagent might read files from another chunk's directory (e.g., to understand imports), use `isolation: "worktree"` on each Agent call for full safety
+- When in doubt, prefer `isolation: "worktree"` — the overhead is small and prevents subtle race conditions
+
+When Codex is driver with `SUBAGENT_COUNT > 1` (native subagent approach):
+- A single `codex exec` session spawns internal subagents that share the parent session's working directory
+- The directory partitioning in the prompt ensures subagents modify non-overlapping file sets — no filesystem conflicts
+- Codex's native subagents inherit the parent's sandbox policy; no additional isolation configuration needed
+- If using the `--chunk` fallback (multiple CLI sessions), `--ephemeral` prevents session-state interference but does NOT isolate the filesystem
+
 ## Step 3: Driver PRODUCES Initial Artifact (NO Action)
 
 **CRITICAL: The driver produces an analysis, review, or draft — but does NOT implement fixes or act on its own findings.** The output is a deliverable for the reviewer to validate, not a set of changes to the codebase.
 
 ### When Claude is Driver
+
+**Parallel execution:** If `SUBAGENT_COUNT > 1`, spawn one Agent subagent per chunk (all `run_in_background: true`), each analyzing only its chunk's files. Each subagent uses the same skill/approach. After all complete, merge outputs into `loop-analysis.md` per "Merging Parallel Results". If `SUBAGENT_COUNT == 1`, proceed as below without subagents.
 
 **Skill Discovery:**
 Search available skills for the best match based on `ARTIFACT_TYPE`:
@@ -223,6 +360,8 @@ Analysis file format:
 
 **Do NOT use `run-codex-drive.sh` for the initial analysis** — its prompts are designed for the fix phase ("apply reviewer feedback", "make changes"), not analysis. Instead, construct an analysis prompt and run Codex directly.
 
+**Parallel execution:** If `SUBAGENT_COUNT > 1`, add subagent spawning instructions to the prompt (see "Spawning Multiple Subagents" → Codex). Codex internally parallelizes the work and returns consolidated output in a single response. No multiple CLI sessions or chunk files needed.
+
 Run as a **background bash process** (`run_in_background: true`). Source `check-codex.sh` first to get the `codex_run` function (required for WSL/MINGW environments):
 
 ```bash
@@ -233,9 +372,11 @@ source "${CLAUDE_PLUGIN_ROOT}/scripts/check-codex.sh"
 #   ${CLAUDE_PLUGIN_ROOT}/prompts/codex-review-${ARTIFACT_TYPE}.txt
 # Include target files and task description
 # Instruct: "Analyze only. Do NOT make any changes to the codebase."
+# If SUBAGENT_COUNT > 1, add: "Parallelize using subagents — spawn one per group,
+#   wait for all, and consolidate findings." with file group assignments.
 
 cd /path/to/project
-codex_run exec --full-auto "<analysis_prompt>" 2>&1 | tee docs/plans/collaborative-loop/loop-analysis.md
+codex_run exec --full-auto --ephemeral "<analysis_prompt>" 2>&1 | tee docs/plans/collaborative-loop/loop-analysis.md
 ```
 
 The analysis prompt must:
@@ -243,6 +384,7 @@ The analysis prompt must:
 2. Include the task description and target files
 3. Explicitly state: "Do NOT modify any files. Produce a structured analysis with findings only."
 4. Request output in the analysis file format (see above)
+5. If `SUBAGENT_COUNT > 1`: include subagent spawning instructions with file group assignments per "Spawning Multiple Subagents"
 
 Wait for the background task to complete using TaskOutput. Then verify the output file exists and has content. If the file is empty or missing, reconstruct from TaskOutput (the script uses `tee`).
 
@@ -254,14 +396,16 @@ Wait for the background task to complete using TaskOutput. Then verify the outpu
 
 ### When Claude is Reviewer
 
-Launch a subagent. The prompt depends on the task type:
+**Parallel execution:** If `SUBAGENT_COUNT > 1` and there are 5+ findings, split findings by file group into chunks. Spawn one Agent subagent per chunk (all `run_in_background: true`), each validating/reviewing only its chunk's findings and files. After all complete, merge into `loop-validation.md` per "Merging Parallel Results". If fewer than 5 findings or `SUBAGENT_COUNT == 1`, use a single subagent as below.
+
+Launch a subagent (or multiple per above). The prompt depends on the task type:
 
 **For review tasks** (driver produced findings):
 ```
 Agent tool with:
   - subagent_type: "general-purpose"
   - model: "opus"
-  - run_in_background: false
+  - run_in_background: false  (or true if parallel)
   - prompt: |
       You are validating another AI model's analysis of a codebase.
       Your job is to independently verify each finding.
@@ -308,11 +452,15 @@ Save the subagent's output to `docs/plans/collaborative-loop/loop-validation.md`
 
 ### When Codex is Reviewer
 
+**Parallel execution:** If `SUBAGENT_COUNT > 1`, add subagent spawning instructions to the prompt per "Spawning Multiple Subagents" → Codex. Codex uses native subagents internally — no multiple CLI sessions needed. **Exception:** code round 1 uses `codex review --base` which cannot accept custom prompts — always single subagent for that case.
+
 **For review tasks** — run the validation script as a **background bash process** (`run_in_background: true`):
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/run-codex-validate.sh" <ARTIFACT_TYPE> docs/plans/collaborative-loop /path/to/project docs/plans/collaborative-loop/loop-analysis.md [base_branch] [target_files...]
 ```
+
+When `SUBAGENT_COUNT > 1`: bypass the script and run `codex_run exec --full-auto --ephemeral` inline with subagent spawning instructions in the prompt (see "Spawning Multiple Subagents" → Codex). Scripts cannot inject subagent instructions.
 
 **For produce tasks** — run the review script instead (the driver produced an artifact, not findings):
 
@@ -323,6 +471,13 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/run-codex-review.sh" <ARTIFACT_TYPE> 1 docs/
 Wait for the background task to complete using TaskOutput. Then verify the output file exists and has content. If the file is empty or missing, reconstruct from TaskOutput (the script uses `tee`).
 
 Then rename the output to the expected location: `cp docs/plans/collaborative-loop/loop-review-round-1.md docs/plans/collaborative-loop/loop-validation.md`
+
+**For produce tasks with code round 1:** The review script uses `codex review --base` which has its own output format (no `STATUS:` line or verdict template). Parse the output to extract findings and **synthesize a verdict** before saving to `loop-validation.md`:
+- If no critical/high/medium findings → `STATUS: APPROVED`
+- If only minor findings → `STATUS: MINOR_ISSUES`
+- Otherwise → `STATUS: CHANGES_REQUESTED`
+
+Rewrite `loop-validation.md` with the proper verdict format if needed. This mirrors the same synthesis required in Step 7.
 
 ### Parse Validation Result
 
@@ -370,6 +525,8 @@ Set `ROUND = ROUND + 1`.
 
 ### When Claude is Driver
 
+**Parallel execution:** If `SUBAGENT_COUNT > 1` AND findings are independent across file groups (no cross-references), spawn one Agent subagent per chunk (all `run_in_background: true`), each applying only findings for its chunk's files. After all complete, merge drive summaries into `loop-drive-round-{ROUND}.md`. **If findings cross-reference multiple file groups, force single subagent** — parallel fixes to interdependent files risk conflicts. Consider adding `isolation: "worktree"` to each Agent call if subagents might read files from other chunks (see "Filesystem Isolation for File-Modifying Phases").
+
 Read the validation file (`docs/plans/collaborative-loop/loop-validation.md`). Apply ONLY the confirmed and new findings:
 
 - Address findings in severity order (critical → high → medium → minor)
@@ -400,6 +557,8 @@ Drive round summary format:
 
 ### When Codex is Driver
 
+**Parallel execution:** If `SUBAGENT_COUNT > 1` AND findings are independent across file groups, add subagent spawning instructions to the drive prompt per "Spawning Multiple Subagents" → Codex. Codex assigns each file group to an internal subagent. If findings cross-reference files across groups, force single subagent.
+
 Run the drive script as a **background bash process** (`run_in_background: true`):
 
 ```bash
@@ -419,13 +578,15 @@ Now the reviewer evaluates what the driver actually changed — this is a standa
 
 ### When Claude is Reviewer
 
-Launch a subagent to review the driver's changes:
+**Parallel execution:** If `SUBAGENT_COUNT > 1`, spawn one Agent subagent per chunk (all `run_in_background: true`), each reviewing only the driver's changes to its chunk's files. After all complete, merge into `loop-review-round-{ROUND}.md` per "Merging Parallel Results" (synthesize combined verdict). If `SUBAGENT_COUNT == 1`, use a single foreground subagent as below.
+
+Launch a subagent (or multiple per above) to review the driver's changes:
 
 ```
 Agent tool with:
   - subagent_type: "general-purpose"
   - model: "opus"
-  - run_in_background: false  (sequential — we need the result before proceeding)
+  - run_in_background: false  (or true if parallel — we need all results before proceeding)
   - prompt: |
       You are reviewing changes made by the driver in a collaborative loop.
       This is Fix Round N.
@@ -458,6 +619,8 @@ Save the subagent's output to `docs/plans/collaborative-loop/loop-review-round-{
 
 ### When Codex is Reviewer
 
+**Parallel execution:** If `SUBAGENT_COUNT > 1`, add subagent spawning instructions to the review prompt per "Spawning Multiple Subagents" → Codex. Codex parallelizes internally and consolidates findings. **Exception:** code round 1 uses `codex review --base` which cannot accept custom prompts — always single subagent.
+
 Run the review script as a **background bash process** (`run_in_background: true`):
 
 **For code artifacts:**
@@ -469,6 +632,8 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/run-codex-review.sh" code <ROUND> docs/plans
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/run-codex-review.sh" <plan|architecture|design> <ROUND> docs/plans/collaborative-loop /path/to/project [target_files...]
 ```
+
+When `SUBAGENT_COUNT > 1`: bypass the script and run `codex_run exec --full-auto --ephemeral` inline with subagent spawning instructions in the prompt (see "Spawning Multiple Subagents" → Codex). Scripts cannot inject subagent instructions.
 
 Wait for the background task to complete using TaskOutput. Verify the output file:
 - Read `docs/plans/collaborative-loop/loop-review-round-{ROUND}.md`
@@ -595,10 +760,10 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/cleanup-loop.sh" docs/plans/collaborative-lo
 ## Iteration Rules
 
 - **Max 5 rounds** default (fix-review rounds only; initial produce-validate phase is separate) — override with `--max-rounds`
-- **Sequential, not parallel** — driver completes before reviewer starts, reviewer completes before next driver round
-- **Initial phase produces 2 files:** `loop-analysis.md`, `loop-validation.md`
-- **Each fix round produces 2 files:** `loop-drive-round-N.md`, `loop-review-round-N.md`
-- **All intermediate files are deleted** after the loop completes (Step 11 — mandatory)
+- **Phases are sequential, subagents within a phase can be parallel** — driver phase completes before reviewer phase starts. Within each phase, multiple subagents may run in parallel per "Parallel Subagent Strategy". The sequential constraint is between driver↔reviewer, not between subagents within the same role.
+- **Initial phase produces 2 files:** `loop-analysis.md`, `loop-validation.md` (chunk files are merged into these before the next phase)
+- **Each fix round produces 2 files:** `loop-drive-round-N.md`, `loop-review-round-N.md` (chunk files are transient — merged then deleted)
+- **All intermediate files are deleted** after the loop completes (Step 11 — mandatory), including any leftover chunk files
 - **Driver never acts on unvalidated output** — the initial analysis MUST be validated before any fixes begin
 - **Context is minimal** — each agent receives only the latest review or validation, not full history
 - **Stall detection compares adjacent fix rounds** — findings that persist across 2+ rounds trigger mediator
@@ -610,7 +775,7 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/cleanup-loop.sh" docs/plans/collaborative-lo
 - **Driver fixing its own unvalidated findings** — this is the #1 error the redesign prevents. The driver MUST wait for validation before acting. Never skip Step 4
 - **Treating validation as a standard review** — for review tasks, validation (Step 4) examines the driver's FINDINGS (use validation-format.txt), not the code directly. For produce tasks, validation is a standard review of the ARTIFACT (use verdict-format.txt). Standard review (Step 7) always examines the driver's CHANGES
 - **Skipping the preflight check** — always run `check-codex.sh` before any loop work. If codex is not reachable, the loop will fail mid-flight with cryptic errors. Fail fast, not mid-round
-- **Running driver and reviewer in parallel** — this is a SEQUENTIAL loop; driver must finish before reviewer starts. The whole point is that the reviewer evaluates the driver's actual output
+- **Running driver and reviewer phases in parallel** — phases are SEQUENTIAL; driver must finish before reviewer starts. However, multiple subagents WITHIN the same phase can run in parallel per the Parallel Subagent Strategy
 - **Passing full round history to agents** — each agent gets ONLY the most recent review or validation file. The orchestrator tracks state internally
 - **Not detecting stall** — if you don't track findings across rounds, the loop can spin forever on the same issues
 - **Silently resolving stalled items** — stall resolution requires user input; never auto-resolve
@@ -627,3 +792,12 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/cleanup-loop.sh" docs/plans/collaborative-lo
 - **Acting on rejected findings** — when the reviewer rejects a driver finding, the driver MUST skip it. Rejected findings are false positives that would introduce regressions if "fixed". When Codex is driver, the validation file is passed as raw feedback — prepend an instruction to skip REJECTED findings, since the drive script's base prompt says "apply ALL findings"
 - **Using bare `codex` instead of `codex_run` on MINGW** — on Windows Git Bash, codex runs via WSL. Always source `check-codex.sh` and use `codex_run` instead of bare `codex` when running commands inline (the plugin scripts handle this automatically)
 - **Forgetting to synthesize verdict for `codex review --base` output** — round 1 code review with Codex uses `codex review` which has its own format; you must parse it and produce a verdict
+- **Parallelizing interdependent fixes** — if findings in Step 6 cross-reference files from different chunks (e.g., "change interface in A.ts and update caller in B.ts"), force single subagent. Parallel fixes to interdependent files cause merge conflicts and regressions
+- **Forgetting to merge chunk outputs** — parallel subagents produce chunk files (`*-chunk-1.md`, `*-chunk-2.md`). These MUST be merged into the expected single output file before the next phase. The rest of the loop doesn't know about chunks
+- **Parallelizing code round 1 review with Codex** — `codex review --base` reviews the entire branch diff and cannot be file-scoped. Always use a single subagent for this case
+- **Not deduplicating merged findings** — when two chunks flag the same file:line, keep only the higher severity version. Duplicate findings cause the driver to attempt the same fix twice
+- **Always using single subagent** — if `SUBAGENT_COUNT > 1` based on decomposition, spawn parallel subagents. Don't default to sequential when parallelism is safe — it wastes time on large file sets
+- **Spawning multiple `codex exec` CLI sessions instead of using native subagents** — Codex has a built-in subagent system (`features.multi_agent = true`, on by default). Include subagent spawning instructions in the prompt (e.g., "Spawn one subagent per file group, wait for all, consolidate"). Multiple raw CLI sessions cause session-state interference (Issue #11435) and bypass Codex's automatic result consolidation
+- **Ignoring partial failures in parallel execution** — if a subagent fails (Claude or Codex), retry only the failed portion. See "Handling Partial Failures"
+- **Exceeding Codex's `agents.max_threads` limit** — defaults to 6. If requesting more subagents than `max_threads` allows, Codex queues them. Keep chunk count ≤ 3 per the decomposition heuristic
+- **Skipping filesystem isolation for parallel fixes** — when Claude subagents modify files in parallel (Step 6), add `isolation: "worktree"` if any subagent might read files from another chunk's directory. Directory partitioning prevents write conflicts but not stale reads

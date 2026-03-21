@@ -2,13 +2,14 @@
 # Run Codex CLI as driver in the collaborative loop.
 # Produces or modifies artifacts based on task description and reviewer feedback.
 #
-# Usage: run-codex-drive.sh <artifact_type> <round> <output_dir> <project_dir> <feedback_file> [target_files...]
+# Usage: run-codex-drive.sh <artifact_type> <round> <output_dir> <project_dir> <feedback_file> [--chunk <chunk_id>] [target_files...]
 #
 #   artifact_type  : code | plan | architecture | design
 #   round          : round number (1, 2, 3...)
 #   output_dir     : directory for drive output (e.g., docs/plans/collaborative-loop)
 #   project_dir    : project root directory
 #   feedback_file  : path to reviewer feedback (use "none" for round 1)
+#   --chunk N      : optional chunk ID for parallel execution (appends -chunk-N to output filename)
 #   target_files   : space-separated list of files to work on
 
 set -euo pipefail
@@ -27,10 +28,21 @@ OUTPUT_DIR="${3:?Missing output directory}"
 PROJECT_DIR="${4:?Missing project directory}"
 FEEDBACK_FILE="${5:?Missing feedback file (use 'none' for round 1)}"
 shift 5
+
+# Parse optional --chunk parameter
+CHUNK_ID=""
+if [[ "${1:-}" == "--chunk" ]]; then
+    CHUNK_ID="${2:?Missing chunk ID after --chunk}"
+    shift 2
+fi
 TARGET_FILES="$*"
 
 mkdir -p "$OUTPUT_DIR"
-OUTPUT_FILE="$OUTPUT_DIR/loop-drive-round-${ROUND}.md"
+if [[ -n "$CHUNK_ID" ]]; then
+    OUTPUT_FILE="$OUTPUT_DIR/loop-drive-round-${ROUND}-chunk-${CHUNK_ID}.md"
+else
+    OUTPUT_FILE="$OUTPUT_DIR/loop-drive-round-${ROUND}.md"
+fi
 
 cd "$PROJECT_DIR"
 
@@ -72,7 +84,7 @@ else
 fi
 
 CODEX_EXIT=0
-codex_run exec --full-auto "$PROMPT" 2>&1 | tee "$OUTPUT_FILE" || CODEX_EXIT=$?
+codex_run exec --full-auto --ephemeral "$PROMPT" 2>&1 | tee "$OUTPUT_FILE" || CODEX_EXIT=$?
 
 if [[ "$CODEX_EXIT" -ne 0 ]]; then
     echo "WARNING: codex exited with code $CODEX_EXIT" >&2

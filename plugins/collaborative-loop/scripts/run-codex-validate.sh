@@ -2,12 +2,13 @@
 # Run Codex CLI to validate the driver's analysis/review output.
 # The validator confirms, rejects, or augments each finding before the driver acts.
 #
-# Usage: run-codex-validate.sh <artifact_type> <output_dir> <project_dir> <driver_output_file> [base_branch] [target_files...]
+# Usage: run-codex-validate.sh <artifact_type> <output_dir> <project_dir> <driver_output_file> [--chunk <chunk_id>] [base_branch] [target_files...]
 #
 #   artifact_type      : code | plan | architecture | design
 #   output_dir         : directory for validation output (e.g., docs/plans/collaborative-loop)
 #   project_dir        : project root directory
 #   driver_output_file : path to the driver's analysis output (loop-analysis.md)
+#   --chunk N          : optional chunk ID for parallel execution (appends -chunk-N to output filename)
 #   base_branch        : (code only, default: main) git base branch for diff
 #   target_files       : space-separated list of files the driver analyzed
 
@@ -27,6 +28,13 @@ PROJECT_DIR="${3:?Missing project directory}"
 DRIVER_OUTPUT="${4:?Missing driver output file}"
 shift 4
 
+# Parse optional --chunk parameter
+CHUNK_ID=""
+if [[ "${1:-}" == "--chunk" ]]; then
+    CHUNK_ID="${2:?Missing chunk ID after --chunk}"
+    shift 2
+fi
+
 # Parse base_branch for code artifacts, default to main
 BASE_BRANCH="main"
 if [[ "$ARTIFACT_TYPE" == "code" && $# -gt 0 ]]; then
@@ -36,7 +44,11 @@ fi
 TARGET_FILES="$*"
 
 mkdir -p "$OUTPUT_DIR"
-OUTPUT_FILE="$OUTPUT_DIR/loop-validation.md"
+if [[ -n "$CHUNK_ID" ]]; then
+    OUTPUT_FILE="$OUTPUT_DIR/loop-validation-chunk-${CHUNK_ID}.md"
+else
+    OUTPUT_FILE="$OUTPUT_DIR/loop-validation.md"
+fi
 
 cd "$PROJECT_DIR"
 
@@ -92,7 +104,7 @@ PROMPT+=$'\n\n'"$VALIDATION_FORMAT"
 echo "--- Validating driver analysis ($ARTIFACT_TYPE) ---" >&2
 
 CODEX_EXIT=0
-codex_run exec --full-auto "$PROMPT" 2>&1 | tee "$OUTPUT_FILE" || CODEX_EXIT=$?
+codex_run exec --full-auto --ephemeral "$PROMPT" 2>&1 | tee "$OUTPUT_FILE" || CODEX_EXIT=$?
 
 if [[ "$CODEX_EXIT" -ne 0 ]]; then
     echo "WARNING: codex exec exited with code $CODEX_EXIT" >&2
