@@ -1,5 +1,5 @@
 {
   "name": "collaborative-loop",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "Sequential AI-to-AI pair programming loop with produce-validate-act cycles and parallel native subagent support — driver analyzes, reviewer validates before any action, preventing false-positive fixes"
 }

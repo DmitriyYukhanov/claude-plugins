@@ -120,7 +120,7 @@ The script detects the environment and validates codex reachability:
 
 | Environment | Detection | How codex runs |
 |-------------|-----------|----------------|
-| **MINGW/MSYS** | `uname -s` starts with `MINGW` or `MSYS` | Via WSL: `wsl --cd <wsl_path> -- codex` |
+| **MINGW/MSYS** | `uname -s` starts with `MINGW` or `MSYS` | Via WSL: resolved absolute path (handles nvm/fnm/volta) |
 | **WSL** | `WSL_DISTRO_NAME` is set or `/proc/version` contains "Microsoft" | Directly: `codex` |
 | **Native** | Everything else (Linux, macOS) | Directly: `codex` |
 
@@ -128,6 +128,19 @@ The script detects the environment and validates codex reachability:
 **On failure:** prints `FAIL: ...` with install instructions. **STOP HERE** — tell the user what's missing and how to fix it. Do not continue.
 
 The shell scripts (`run-codex-drive.sh`, `run-codex-review.sh`, `run-codex-validate.sh`) source this script internally and use `codex_run` instead of bare `codex`, so WSL path translation is handled transparently.
+
+### Runtime Failure Policy
+
+**The collaborative loop requires BOTH collaborators.** The entire value of this skill is having two different models provide independent perspectives. If only one model is available, the loop degenerates into self-review — which is what a regular Agent subagent already does.
+
+**If Codex fails at runtime** (script exits non-zero, `codex: command not found`, timeout, or empty output):
+1. **Do NOT fall back to a Claude subagent as reviewer.** This defeats the purpose of the loop.
+2. **Do NOT continue the loop with only one model.** Stop immediately.
+3. **Report the failure clearly** — show the exact error, which script failed, and the exit code.
+4. **Suggest remediation** — e.g., "Codex CLI failed to run. Check that `codex auth login` has been run inside WSL and that your Codex subscription is active."
+5. **Clean up** — run `cleanup-loop.sh` before exiting.
+
+This applies to ALL phases: validation (Step 4), review (Step 7), and drive (Step 3/6 when Codex is driver).
 
 ## Step 2: Parse Arguments and Detect Context
 
@@ -278,6 +291,8 @@ For merged verdict files, synthesize the overall STATUS:
 - Otherwise → `MINOR_ISSUES`
 
 ### Handling Partial Failures
+
+**Note:** This section covers failures of individual **subagents within a phase** (e.g., 1 of 3 parallel subagents failing). If the **collaborator itself** is unavailable (Codex CLI not working, auth failure, etc.), the loop must STOP — see "Runtime Failure Policy" in Step 1.
 
 **Codex native subagents:** Codex handles internal subagent failures and reports them in the consolidated output. If the output is missing findings for a file group, the orchestrator should re-run the session for the missing group only (single subagent, no parallelism).
 
@@ -792,6 +807,7 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/cleanup-loop.sh" docs/plans/collaborative-lo
 - **Acting on rejected findings** — when the reviewer rejects a driver finding, the driver MUST skip it. Rejected findings are false positives that would introduce regressions if "fixed". When Codex is driver, the validation file is passed as raw feedback — prepend an instruction to skip REJECTED findings, since the drive script's base prompt says "apply ALL findings"
 - **Using bare `codex` instead of `codex_run` on MINGW** — on Windows Git Bash, codex runs via WSL. Always source `check-codex.sh` and use `codex_run` instead of bare `codex` when running commands inline (the plugin scripts handle this automatically)
 - **Forgetting to synthesize verdict for `codex review --base` output** — round 1 code review with Codex uses `codex review` which has its own format; you must parse it and produce a verdict
+- **Falling back to Claude as reviewer when Codex fails** — if Codex is assigned as reviewer and fails at runtime, do NOT substitute a Claude subagent. The loop's value comes from two independent models — Claude reviewing its own work is just a regular subagent, not a collaborative loop. STOP the loop and report the Codex failure to the user
 - **Parallelizing interdependent fixes** — if findings in Step 6 cross-reference files from different chunks (e.g., "change interface in A.ts and update caller in B.ts"), force single subagent. Parallel fixes to interdependent files cause merge conflicts and regressions
 - **Forgetting to merge chunk outputs** — parallel subagents produce chunk files (`*-chunk-1.md`, `*-chunk-2.md`). These MUST be merged into the expected single output file before the next phase. The rest of the loop doesn't know about chunks
 - **Parallelizing code round 1 review with Codex** — `codex review --base` reviews the entire branch diff and cannot be file-scoped. Always use a single subagent for this case

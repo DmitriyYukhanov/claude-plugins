@@ -50,9 +50,74 @@ _to_wsl_path() {
         local drive="${BASH_REMATCH[1]}"
         drive="${drive,,}"  # lowercase
         p="/mnt/${drive}/${p:3}"
+    # Handle MINGW-style: /d/... → /mnt/d/...
+    elif [[ "$p" =~ ^/([A-Za-z])/ ]]; then
+        local drive="${BASH_REMATCH[1]}"
+        drive="${drive,,}"  # lowercase
+        p="/mnt/${drive}/${p:3}"
     fi
     # Normalize backslashes
     echo "${p//\\//}"
+}
+
+# --- Resolve codex path in WSL ---
+
+# When codex is installed via nvm/fnm/volta, `wsl -- codex` fails because it
+# runs a non-interactive, non-login shell that doesn't source ~/.bashrc or
+# ~/.profile, so node version manager paths are never added to PATH.
+#
+# We resolve the absolute path once during validation using `bash -lc` (which
+# sources init files), then use that absolute path for all subsequent calls.
+_WSL_CODEX_PATH=""
+
+_resolve_wsl_codex() {
+    local wsl_timeout="${CODEX_WSL_TIMEOUT:-30}"
+    local resolved=""
+    local probe_exit=0
+
+    # Try login shell first (sources ~/.profile → ~/.bashrc, loads nvm/fnm/volta)
+    if command -v timeout &>/dev/null; then
+        resolved="$(timeout "$wsl_timeout" wsl -- bash -lc 'command -v codex' 2>/dev/null)" || probe_exit=$?
+    else
+        resolved="$(wsl -- bash -lc 'command -v codex' 2>/dev/null)" || probe_exit=$?
+    fi
+
+    if [[ "$probe_exit" -eq 124 ]]; then
+        echo "FAIL: WSL timed out after ${wsl_timeout}s (cold start?). Retry or set CODEX_WSL_TIMEOUT higher." >&2
+        return 1
+    fi
+
+    # If login shell didn't find it, try interactive shell (sources ~/.bashrc directly)
+    if [[ -z "$resolved" ]]; then
+        resolved="$(wsl -- bash -ic 'command -v codex' 2>/dev/null)" || true
+    fi
+
+    # Last resort: probe common node version manager paths directly
+    if [[ -z "$resolved" ]]; then
+        resolved="$(wsl -- bash -c '
+            for d in \
+                "$HOME/.nvm/versions/node"/*/bin \
+                "$HOME/.fnm/node-versions"/*/installation/bin \
+                "$HOME/.volta/bin" \
+                "$HOME/.local/bin" \
+                "$HOME/.npm-global/bin" \
+                /usr/local/bin \
+            ; do
+                if [[ -x "$d/codex" ]]; then
+                    echo "$d/codex"
+                    exit 0
+                fi
+            done
+            exit 1
+        ' 2>/dev/null)" || true
+    fi
+
+    if [[ -z "$resolved" ]]; then
+        return 1
+    fi
+
+    _WSL_CODEX_PATH="$resolved"
+    return 0
 }
 
 # --- Validation ---
@@ -67,23 +132,14 @@ _validate_codex() {
                 echo "  Codex CLI requires WSL on Windows. Install WSL: wsl --install" >&2
                 return 1
             fi
-            # Check codex is installed inside WSL
-            local wsl_timeout="${CODEX_WSL_TIMEOUT:-30}"
-            local wsl_probe_exit=0
-            if command -v timeout &>/dev/null; then
-                timeout "$wsl_timeout" wsl -- bash -lc "command -v codex" &>/dev/null || wsl_probe_exit=$?
-            else
-                wsl -- bash -lc "command -v codex" &>/dev/null || wsl_probe_exit=$?
-            fi
-            if [[ "$wsl_probe_exit" -eq 124 ]]; then
-                echo "FAIL: WSL timed out after ${wsl_timeout}s (cold start?). Retry or set CODEX_WSL_TIMEOUT higher." >&2
-                return 1
-            elif [[ "$wsl_probe_exit" -ne 0 ]]; then
+            if ! _resolve_wsl_codex; then
                 echo "FAIL: codex CLI not found in WSL." >&2
                 echo "  Install inside WSL: npm install -g @openai/codex" >&2
+                echo "  If installed via nvm/fnm/volta, ensure the node version manager" >&2
+                echo "  is sourced in ~/.bashrc before the interactive guard." >&2
                 return 1
             fi
-            echo "OK: MINGW detected — codex reachable via WSL" >&2
+            echo "OK: MINGW detected — codex reachable via WSL at $_WSL_CODEX_PATH" >&2
             ;;
         wsl)
             if ! command -v codex &>/dev/null; then
@@ -109,12 +165,16 @@ _validate_codex() {
 
 # Usage: codex_run <codex_args...>
 # Call from the project directory (after cd). Handles CWD translation for MINGW→WSL.
+# In MINGW mode, uses the resolved absolute path ($_WSL_CODEX_PATH) to avoid
+# PATH issues with nvm/fnm/volta-managed installations.
 codex_run() {
     case "$CODEX_ENV" in
         mingw)
             local wsl_cwd
             wsl_cwd="$(_to_wsl_path "$(pwd)")"
-            wsl --cd "$wsl_cwd" -- codex "$@"
+            # MSYS_NO_PATHCONV prevents MINGW from mangling Linux-absolute paths
+            # (e.g., /home/user/.nvm/... → C:/Program Files/Git/home/...)
+            MSYS_NO_PATHCONV=1 wsl --cd "$wsl_cwd" -- "$_WSL_CODEX_PATH" "$@"
             ;;
         *)
             codex "$@"
