@@ -17,8 +17,7 @@ Then install the plugins you want to use:
 /plugin install python-dev
 /plugin install typescript-dev
 /plugin install agent-teams
-/plugin install cross-review
-/plugin install collaborative-loop
+/plugin install codex-collaboration
 /plugin install implementation-prd
 /plugin install lsp-setup
 ```
@@ -89,26 +88,19 @@ Set up and orchestrate Claude Code agent teams with:
 
 [View documentation](./plugins/agent-teams/README.md)
 
-### cross-review
+### codex-collaboration
 
-Cross-review workflow between Claude and Codex CLI for:
-- Dual review of plans, architecture, design docs, and code
-- Review/triage/fix loops with explicit disagreement handling
-- Dynamic skill discovery for applying agreed fixes
-- Multi-round review process with cleanup of intermediate artifacts
+Cross-model collaboration between Claude and Codex with two workflows:
 
-[View skill documentation](./plugins/cross-review/skills/cross-review/SKILL.md)
+- **collaborative-loop** — Sequential drive/validate/act cycles. Claude analyzes, Codex validates each finding, both models must agree before any action is taken. Iterates until approved or max rounds.
+- **cross-review** — Parallel dual review. Both Claude and Codex review independently, findings are cross-validated and triaged, disagreements surfaced for user decision.
 
-### collaborative-loop
+**Requires** the [Codex plugin for Claude Code](https://github.com/openai/codex-plugin-cc). Install it first:
+1. `/plugin marketplace add openai/codex-plugin-cc`
+2. `/plugin install codex@openai-codex`
+3. `/codex:setup` to verify
 
-Sequential AI-to-AI collaboration loop with:
-- One model drives (writes/fixes), the other reviews with structured verdicts
-- Iterates until APPROVED, MINOR_ISSUES, or max rounds reached
-- Stall detection with mediator escalation for persistent disagreements
-- Supports Claude or Codex as driver via `--driver` flag
-- Artifact-type-aware prompts for code, plans, architecture, and design docs
-
-[View skill documentation](./plugins/collaborative-loop/skills/collaborative-loop/SKILL.md)
+[View skill documentation](./plugins/codex-collaboration/skills/collaborative-loop/SKILL.md)
 
 ### implementation-prd
 

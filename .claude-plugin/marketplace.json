@@ -51,14 +51,14 @@
       "homepage": "https://github.com/DmitriyYukhanov/claude-plugins"
     },
     {
-      "name": "cross-review",
-      "description": "Cross-review workflow between Claude and Codex CLI for plans, code, and architecture",
-      "version": "1.6.2",
+      "name": "codex-collaboration",
+      "description": "Cross-model collaboration between Claude and Codex — sequential drive/validate/act loops and parallel dual review with triage",
+      "version": "1.0.0",
       "author": {
         "name": "Dmitry Yuhanov"
       },
-      "source": "./plugins/cross-review",
-      "category": "development",
+      "source": "./plugins/codex-collaboration",
+      "category": "workflow",
       "homepage": "https://github.com/DmitriyYukhanov/claude-plugins"
     },
     {
@@ -70,17 +70,6 @@
       },
       "source": "./plugins/implementation-prd",
       "category": "productivity",
-      "homepage": "https://github.com/DmitriyYukhanov/claude-plugins"
-    },
-    {
-      "name": "collaborative-loop",
-      "description": "Sequential AI-to-AI pair programming loop with produce-validate-act cycles and parallel native subagent support — driver analyzes, reviewer validates before any action, preventing false-positive fixes",
-      "version": "1.4.0",
-      "author": {
-        "name": "Dmitry Yuhanov"
-      },
-      "source": "./plugins/collaborative-loop",
-      "category": "development",
       "homepage": "https://github.com/DmitriyYukhanov/claude-plugins"
     },
     {

@@ -23,7 +23,7 @@ fi
 # Collect unique plugin names that have changed files (excluding plugin.json itself)
 changed_plugins=()
 while IFS= read -r file; do
-  if [[ "$file" =~ ^plugins/([^/]+)/ ]] && [[ "$file" != plugins/*/plugin.json ]]; then
+  if [[ "$file" =~ ^plugins/([^/]+)/ ]] && [[ "$file" != plugins/*/.claude-plugin/plugin.json ]] && [[ "$file" != plugins/*/plugin.json ]]; then
     plugin_name="${BASH_REMATCH[1]}"
     # Deduplicate
     if [[ ! " ${changed_plugins[*]:-} " =~ " ${plugin_name} " ]]; then
@@ -37,7 +37,12 @@ done <<< "$staged_files"
 version_errors=()
 if [ ${#changed_plugins[@]} -gt 0 ]; then
   for plugin in "${changed_plugins[@]}"; do
-    plugin_json="plugins/${plugin}/plugin.json"
+    plugin_json="plugins/${plugin}/.claude-plugin/plugin.json"
+
+    # Skip if plugin is being removed entirely (manifest won't exist in staging)
+    if ! git show ":${plugin_json}" &>/dev/null; then
+      continue
+    fi
 
     # Check if plugin.json is in the staged files
     if ! echo "$staged_files" | grep -qx "$plugin_json"; then
@@ -59,8 +64,8 @@ fi
 
 # Collect all plugins whose plugin.json version changed (staged)
 sync_errors=()
-for plugin_json in $(echo "$staged_files" | grep -E '^plugins/[^/]+/plugin\.json$' || true); do
-  plugin_name=$(echo "$plugin_json" | sed 's|plugins/\([^/]*\)/plugin\.json|\1|')
+for plugin_json in $(echo "$staged_files" | grep -E '^plugins/[^/]+/\.claude-plugin/plugin\.json$' || true); do
+  plugin_name=$(echo "$plugin_json" | sed 's|plugins/\([^/]*\)/\.claude-plugin/plugin\.json|\1|')
 
   # Get the new version from staged plugin.json
   plugin_version=$(git show ":${plugin_json}" 2>/dev/null | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | grep -o '[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*' || echo "")
@@ -111,7 +116,7 @@ while IFS= read -r file; do
 done <<< "$staged_files"
 
 for plugin in "${all_staged_plugins[@]}"; do
-  plugin_json="plugins/${plugin}/plugin.json"
+  plugin_json="plugins/${plugin}/.claude-plugin/plugin.json"
 
   # Detect NEW plugins: plugin.json is staged AND didn't exist in HEAD
   if echo "$staged_files" | grep -qx "$plugin_json"; then
@@ -154,7 +159,7 @@ if [ ${#version_errors[@]} -gt 0 ]; then
   echo "The following plugins have changed files but no version bump in plugin.json:"
   echo ""
   for plugin in "${version_errors[@]}"; do
-    plugin_json="plugins/${plugin}/plugin.json"
+    plugin_json="plugins/${plugin}/.claude-plugin/plugin.json"
     current=$(cat "$plugin_json" 2>/dev/null | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | grep -o '[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*' || echo "unknown")
     echo "  - plugins/${plugin}/  (current version: ${current})"
   done
@@ -164,7 +169,7 @@ if [ ${#version_errors[@]} -gt 0 ]; then
   echo "  MINOR (x.Y.0) — new features, skill improvements, non-breaking changes"
   echo "  MAJOR (X.0.0) — breaking changes, major restructuring"
   echo ""
-  echo "Fix: update \"version\" in the plugin's plugin.json, then re-stage and commit."
+  echo "Fix: update \"version\" in the plugin's .claude-plugin/plugin.json, then re-stage and commit."
 fi
 
 if [ ${#sync_errors[@]} -gt 0 ]; then

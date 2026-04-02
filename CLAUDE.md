@@ -4,7 +4,7 @@ Collection of Claude Code plugins: skills, agents, hooks, commands, and scripts.
 
 ## Plugin Version Bumping (MANDATORY)
 
-When you modify ANY file inside `plugins/<name>/`, you MUST also bump the `"version"` in that plugin's `plugin.json` **and** update the matching version in `.claude-plugin/marketplace.json` before committing. A pre-commit hook enforces both — commits without a version bump or with mismatched marketplace versions will be rejected.
+When you modify ANY file inside `plugins/<name>/`, you MUST also bump the `"version"` in that plugin's `.claude-plugin/plugin.json` **and** update the matching version in `.claude-plugin/marketplace.json` before committing. A pre-commit hook enforces both — commits without a version bump or with mismatched marketplace versions will be rejected.
 
 **Semantic Versioning (follow Keep a Changelog):**
 - **PATCH** (x.y.Z) — bug fixes, typo corrections, minor documentation tweaks
@@ -20,12 +20,11 @@ When you modify ANY file inside `plugins/<name>/`, you MUST also bump the `"vers
 
 When creating a NEW plugin (new `plugins/<name>/` directory), you MUST complete ALL of these:
 
-1. `plugins/<name>/plugin.json` — manifest with name, version, description
-2. `plugins/<name>/.claude-plugin/plugin.json` — identical copy of the manifest
-3. `.claude-plugin/marketplace.json` — add entry with matching version, description, author, source, category, homepage
-4. `README.md` — add install command AND plugin description section (in alphabetical position among plugins)
+1. `plugins/<name>/.claude-plugin/plugin.json` — manifest with name, version, description (the only location Claude Code reads)
+2. `.claude-plugin/marketplace.json` — add entry with matching version, description, author, source, category, homepage
+3. `README.md` — add install command AND plugin description section (in alphabetical position among plugins)
 
-A pre-commit hook enforces items 1-3. Item 4 (README) is also enforced — commits introducing a new plugin directory without a corresponding README.md entry will be rejected.
+A pre-commit hook enforces items 1-2. Item 3 (README) is also enforced — commits introducing a new plugin directory without a corresponding README.md entry will be rejected.
 
 ## Git Hooks
 
@@ -34,25 +33,13 @@ This repo uses `.githooks/` for tracked git hooks. After cloning, run:
 git config core.hooksPath .githooks
 ```
 
-## Shared Scripts
-
-Scripts reused across multiple plugins live in `shared/scripts/`. Plugins reference them via **symlinks** (the official mechanism for cross-plugin code sharing — symlinks are followed during plugin cache copying).
-
-When modifying a shared script, bump the version of **every plugin that uses it**.
-
-Current shared scripts:
-- `shared/scripts/check-codex.sh` — Codex CLI environment detection + WSL support (used by: collaborative-loop, cross-review)
-
 ## Repository Structure
 
 ```
-shared/
-  scripts/               # Shared scripts symlinked from plugins
 plugins/
   <plugin-name>/
-    plugin.json          # Manifest with name, version, description
     .claude-plugin/
-      plugin.json        # Copy of manifest (used by plugin loader)
+      plugin.json        # Plugin manifest (the only location Claude Code reads)
     skills/              # Skill definitions (SKILL.md files)
     hooks/               # Plugin hooks
     agents/              # Agent definitions (.md files)
