@@ -15,6 +15,8 @@ arguments:
 
 # Run Unity Tests
 
+**Depends on:** unity-dev:unity-run for Unity CLI detection and execution.
+
 Spawn the `unity-test-runner` agent with these parameters:
 
 - Platform: `$ARGUMENTS.platform` (default: EditMode)

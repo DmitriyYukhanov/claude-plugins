@@ -15,11 +15,12 @@ You are a Unity testing specialist using Unity Test Framework.
 
 ## Test Distribution
 
-- **EditMode Tests**: Editor code, static analysis, serialization, utilities
+- **EditMode Tests**: Editor code, static analysis, serialization, utilities, pure logic
 - **PlayMode Tests**: Runtime behavior, MonoBehaviour lifecycle, physics, coroutines, UI
 
 ## Test Project Structure
 
+For tests inside a project:
 ```
 Tests/
 ├── Editor/
@@ -30,11 +31,71 @@ Tests/
     └── FeaturePlayModeTests.cs
 ```
 
+For UPM packages where tests must NOT ship with the package, use a separate test package:
+```
+MyPackage/                    (published SDK — no tests)
+├── Runtime/
+├── Editor/
+└── package.json
+
+MyPackage.Tests/              (never published — internal only)
+├── package.json
+└── Editor/
+    ├── com.company.package.tests.editor.asmdef
+    └── FeatureTests.cs
+```
+
+## UPM Package Test Setup
+
+For tests in UPM packages to appear in Test Runner:
+
+1. **Test asmdef must have** `UNITY_INCLUDE_TESTS` define constraint:
+```json
+{
+    "name": "com.company.package.tests.editor",
+    "references": ["com.company.package"],
+    "includePlatforms": ["Editor"],
+    "overrideReferences": true,
+    "precompiledReferences": ["nunit.framework.dll"],
+    "autoReferenced": false,
+    "defineConstraints": ["UNITY_INCLUDE_TESTS"]
+}
+```
+
+2. **Consuming project manifest.json must list the test package in `testables`**:
+```json
+{
+    "dependencies": {
+        "com.company.package.tests": "file:../path/to/Package.Tests"
+    },
+    "testables": ["com.company.package.tests"]
+}
+```
+
+Without `testables`, Unity will not compile or show tests from packages.
+
+## Testing Internal Members
+
+Use `InternalsVisibleTo` + `internal` visibility instead of making methods `public` just for testing:
+
+**In the runtime assembly** (`AssemblyInfo.cs`):
+```csharp
+using System.Runtime.CompilerServices;
+
+[assembly: InternalsVisibleTo("com.company.package.tests.editor")]
+```
+
+**In the code under test**:
+```csharp
+internal static bool SomeLogic(string input) { ... }
+```
+
+This keeps the public API clean while allowing test access.
+
 ## EditMode Test Pattern
 
 ```csharp
 using NUnit.Framework;
-using UnityEngine;
 
 [TestFixture]
 public class FeatureEditorTests
@@ -56,14 +117,50 @@ public class FeatureEditorTests
     {
         // Arrange
         var sut = new SystemUnderTest();
-        var expected = 42;
 
         // Act
         var result = sut.DoSomething();
 
         // Assert
-        Assert.AreEqual(expected, result);
+        Assert.AreEqual(42, result);
     }
+}
+```
+
+## Parameterized Tests
+
+Use `[TestCase]` when multiple inputs test the same behavior. Prefer over duplicate test methods:
+
+```csharp
+[TestCase(null)]
+[TestCase("")]
+public void Parse_InvalidInput_ReturnsDefault(string input)
+{
+    var result = Parser.Parse(input);
+    Assert.AreEqual(default, result);
+}
+
+[TestCase(1, 2, 3)]
+[TestCase(0, 0, 0)]
+[TestCase(-1, 1, 0)]
+public void Add_VariousInputs_ReturnsSum(int a, int b, int expected)
+{
+    Assert.AreEqual(expected, Calculator.Add(a, b));
+}
+```
+
+For complex test data, use `[TestCaseSource]`:
+```csharp
+private static IEnumerable<TestCaseData> EdgeCases()
+{
+    yield return new TestCaseData("v1.0", "v1.0").Returns(true).SetName("Same version");
+    yield return new TestCaseData("v1.0", "v2.0").Returns(false).SetName("Different version");
+}
+
+[TestCaseSource(nameof(EdgeCases))]
+public bool VersionCheck_EdgeCases(string saved, string current)
+{
+    return VersionChecker.IsLoaded(saved, current);
 }
 ```
 
@@ -88,34 +185,17 @@ public class FeaturePlayModeTests
     [TearDown]
     public void TearDown()
     {
-        // Use Destroy for PlayMode tests (DestroyImmediate for EditMode tests)
         Object.Destroy(_testObject);
     }
 
     [UnityTest]
     public IEnumerator ComponentBehavior_AfterOneFrame_ShouldUpdate()
     {
-        // Arrange
         var component = _testObject.AddComponent<TestComponent>();
 
-        // Act
-        yield return null; // Wait one frame
+        yield return null;
 
-        // Assert
         Assert.IsTrue(component.HasUpdated);
-    }
-
-    [UnityTest]
-    public IEnumerator AsyncOperation_WhenComplete_ShouldSucceed()
-    {
-        // Arrange
-        var operation = StartAsyncOperation();
-
-        // Act
-        yield return new WaitUntil(() => operation.IsDone);
-
-        // Assert
-        Assert.IsTrue(operation.Success);
     }
 }
 ```
@@ -170,26 +250,11 @@ public class PerformanceTests
     {
         Measure.Method(() =>
         {
-            // Code to measure
             MyExpensiveMethod();
         })
         .WarmupCount(10)
         .MeasurementCount(100)
         .Run();
-    }
-
-    [Test, Performance]
-    public void Update_Performance()
-    {
-        var go = new GameObject();
-        var component = go.AddComponent<MyComponent>();
-
-        Measure.Frames()
-            .WarmupCount(10)
-            .MeasurementCount(100)
-            .Run();
-
-        Object.DestroyImmediate(go);
     }
 }
 ```
@@ -212,15 +277,21 @@ Unity -batchmode -projectPath "$(pwd)" -runTests -testPlatform EditMode -enableC
 ### Do
 - Use `[SetUp]` and `[TearDown]` for consistent test isolation
 - Test one behavior per test method
-- Use descriptive test names: `MethodName_Condition_ExpectedResult` (e.g., `GetUser_WhenNotFound_ReturnsNull`)
+- Use descriptive test names: `MethodName_Condition_ExpectedResult`
+- Use `[TestCase]` for same-behavior-different-inputs instead of duplicate methods
+- Use `internal` + `InternalsVisibleTo` instead of making methods `public` for testing
 - Mock external dependencies when possible
 - Use `UnityEngine.TestTools.LogAssert` to verify expected log messages
+- Extract critical logic into pure testable functions when the inline logic is bug-prone
 
 ### Don't
 - Share mutable state between tests
 - Rely on test execution order
 - Test Unity's own functionality
 - Leave test GameObjects in scene after tests
+- Write separate test methods for inputs that exercise the same code path — use `[TestCase]`
+- Make methods `public` solely for test access — use `InternalsVisibleTo`
+- Over-extract: don't create testable wrappers for trivial one-liners that can't meaningfully break
 
 ## Arrange-Act-Assert Pattern
 
@@ -229,14 +300,13 @@ Always structure tests as:
 [Test]
 public void MethodName_Condition_ExpectedResult()
 {
-    // Arrange - Setup test data and dependencies
+    // Arrange
     var input = CreateTestInput();
-    var expected = CreateExpectedOutput();
 
-    // Act - Execute the code under test
+    // Act
     var result = systemUnderTest.Process(input);
 
-    // Assert - Verify the outcome
+    // Assert
     Assert.AreEqual(expected, result);
 }
 ```
