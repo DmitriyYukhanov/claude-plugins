@@ -1,0 +1,127 @@
+name: Release & Notify
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'plugins/**'
+
+jobs:
+  release-notify:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect updated plugins and build release notes
+        id: changelog
+        run: |
+          # Compare HEAD with its parent to find changed plugin directories
+          BEFORE="${{ github.event.before }}"
+
+          # Handle initial push (no before SHA)
+          if [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+            BEFORE=$(git rev-list --max-parents=0 HEAD)
+          fi
+
+          # Find all plugins with changed files
+          changed_plugins=$(git diff --name-only "$BEFORE" HEAD -- 'plugins/' \
+            | grep -oP '^plugins/\K[^/]+' \
+            | sort -u)
+
+          if [ -z "$changed_plugins" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+
+          # Build combined release body
+          release_body=""
+          plugin_count=0
+          plugin_summary=""
+
+          while IFS= read -r plugin; do
+            [ -z "$plugin" ] && continue
+
+            plugin_json="plugins/${plugin}/.claude-plugin/plugin.json"
+            changelog="plugins/${plugin}/CHANGELOG.md"
+
+            # Get version
+            version="unknown"
+            if [ -f "$plugin_json" ]; then
+              version=$(grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' "$plugin_json" \
+                | grep -o '[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*' || echo "unknown")
+            fi
+
+            # Extract the latest version section from CHANGELOG.md
+            # Matches from the first ## [X.Y.Z] header until the next ## [ header or EOF
+            entries=""
+            if [ -f "$changelog" ]; then
+              entries=$(awk '
+                /^## \[[0-9]/ {
+                  if (found) exit
+                  found=1
+                  next
+                }
+                found && /^## \[/ { exit }
+                found { print }
+              ' "$changelog" | sed '/^$/d')
+            fi
+
+            # Append to release body (GitHub Markdown)
+            release_body="${release_body}
+          ## ${plugin} v${version}
+
+          ${entries}
+          "
+
+            plugin_count=$((plugin_count + 1))
+            if [ -n "$plugin_summary" ]; then
+              plugin_summary="${plugin_summary}, ${plugin} v${version}"
+            else
+              plugin_summary="${plugin} v${version}"
+            fi
+
+          done <<< "$changed_plugins"
+
+          # Set outputs
+          DATE=$(date +%Y-%m-%d)
+          echo "date=${DATE}" >> "$GITHUB_OUTPUT"
+          echo "plugin_count=${plugin_count}" >> "$GITHUB_OUTPUT"
+          echo "plugin_summary=${plugin_summary}" >> "$GITHUB_OUTPUT"
+
+          # Use file for multiline content
+          echo "$release_body" > /tmp/release_body.md
+
+      - name: Create unique release tag
+        if: steps.changelog.outputs.skip != 'true'
+        id: tag
+        run: |
+          DATE="${{ steps.changelog.outputs.date }}"
+          BASE_TAG="release-${DATE}"
+          TAG="$BASE_TAG"
+
+          # If tag exists, append incrementing suffix
+          counter=2
+          while git rev-parse "$TAG" &>/dev/null; do
+            TAG="${BASE_TAG}-${counter}"
+            counter=$((counter + 1))
+          done
+
+          git tag "$TAG"
+          git push origin "$TAG"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        if: steps.changelog.outputs.skip != 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: "Plugin Updates — ${{ steps.changelog.outputs.date }}"
+          body_path: /tmp/release_body.md

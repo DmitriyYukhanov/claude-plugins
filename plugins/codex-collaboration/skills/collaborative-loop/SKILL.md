@@ -132,7 +132,7 @@ Hold findings in conversation context. Do not write intermediate files.
 
 Send Claude's numbered findings to Codex for per-finding validation. Codex independently evaluates each finding and returns CONFIRM or REJECT with evidence.
 
-**IMPORTANT:** Use `/codex:rescue` via the Skill tool -- NOT `/codex:adversarial-review`. Adversarial review produces its own independent findings and does not map back per-finding. Only `/codex:rescue` with a custom prompt supports per-finding CONFIRM/REJECT.
+**IMPORTANT:** Use `/codex:rescue --fresh` via the Skill tool -- NOT `/codex:adversarial-review`. Adversarial review produces its own independent findings and does not map back per-finding. Only `/codex:rescue` with a custom prompt supports per-finding CONFIRM/REJECT. Always pass `--fresh` to prevent the codex plugin from prompting the user about resuming a previous thread.
 
 ### Compose the Validation Prompt
 
@@ -235,7 +235,7 @@ Invoke `/codex:review --base <ref>` via the Skill tool, where `<ref>` is the com
 
 ### For Non-Code Artifacts
 
-Invoke `/codex:rescue` via the Skill tool with a review prompt. Compose the prompt using `gpt-5-4-prompting` patterns:
+Invoke `/codex:rescue --fresh` via the Skill tool with a review prompt. Compose the prompt using `gpt-5-4-prompting` patterns:
 
 - `<task>`: Review the changes made to these artifacts. Evaluate whether the fixes correctly address the validated findings without introducing new issues.
 - Include the modified artifact content

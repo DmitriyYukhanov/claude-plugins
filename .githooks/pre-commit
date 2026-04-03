@@ -1,10 +1,11 @@
 #!/bin/bash
-# Pre-commit hook: enforce plugin version bumps, marketplace sync, and new plugin registration
+# Pre-commit hook: enforce plugin version bumps, marketplace sync, changelog, and new plugin registration
 #
 # Checks:
 # 1. When files inside plugins/<name>/ change, plugin.json version must be bumped
 # 2. When plugin.json version changes, marketplace.json must match
-# 3. When a new plugin directory appears, it must be registered in marketplace.json and README.md
+# 3. When plugin.json version changes, CHANGELOG.md must be updated
+# 4. When a new plugin directory appears, it must be registered in marketplace.json and README.md
 #
 # Follows Keep a Changelog / Semantic Versioning conventions.
 # To bypass (emergency only): git commit --no-verify
@@ -62,7 +63,6 @@ fi
 
 # ── Check 2: marketplace.json version sync ─────────────────────────────
 
-# Collect all plugins whose plugin.json version changed (staged)
 sync_errors=()
 for plugin_json in $(echo "$staged_files" | grep -E '^plugins/[^/]+/\.claude-plugin/plugin\.json$' || true); do
   plugin_name=$(echo "$plugin_json" | sed 's|plugins/\([^/]*\)/\.claude-plugin/plugin\.json|\1|')
@@ -74,9 +74,7 @@ for plugin_json in $(echo "$staged_files" | grep -E '^plugins/[^/]+/\.claude-plu
     continue
   fi
 
-  # Get the marketplace version that will be in the commit:
-  # - If marketplace.json is staged, use the staged version
-  # - If not staged, use HEAD (what the commit will contain)
+  # Get the marketplace version that will be in the commit
   if echo "$staged_files" | grep -qx "$MARKETPLACE"; then
     marketplace_content=$(git show ":${MARKETPLACE}" 2>/dev/null || echo "")
   else
@@ -87,8 +85,6 @@ for plugin_json in $(echo "$staged_files" | grep -E '^plugins/[^/]+/\.claude-plu
     continue
   fi
 
-  # Extract version for this plugin from marketplace.json
-  # Use awk to find the plugin block by name and extract its version
   marketplace_version=$(echo "$marketplace_content" | awk -v name="$plugin_name" '
     /"name"/ { found = ($0 ~ "\"" name "\"") }
     found && /"version"/ { match($0, /[0-9]+\.[0-9]+\.[0-9]+/); print substr($0, RSTART, RLENGTH); found=0 }
@@ -99,12 +95,44 @@ for plugin_json in $(echo "$staged_files" | grep -E '^plugins/[^/]+/\.claude-plu
   fi
 done
 
-# ── Check 3: new plugin registration (README + marketplace) ───────────
+# ── Check 3: CHANGELOG.md updated when version bumps ──────────────────
+
+changelog_errors=()
+for plugin_json in $(echo "$staged_files" | grep -E '^plugins/[^/]+/\.claude-plugin/plugin\.json$' || true); do
+  plugin_name=$(echo "$plugin_json" | sed 's|plugins/\([^/]*\)/\.claude-plugin/plugin\.json|\1|')
+  changelog="plugins/${plugin_name}/CHANGELOG.md"
+
+  # Get the new version
+  new_version=$(git show ":${plugin_json}" 2>/dev/null | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | grep -o '[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*' || echo "")
+
+  if [ -z "$new_version" ]; then
+    continue
+  fi
+
+  # Check old version to see if it actually changed (skip for brand-new plugins)
+  old_version=$(git show "HEAD:${plugin_json}" 2>/dev/null | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | grep -o '[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*' || echo "0.0.0")
+  if [ "$old_version" = "$new_version" ]; then
+    continue
+  fi
+
+  # CHANGELOG.md must be staged
+  if ! echo "$staged_files" | grep -qx "$changelog"; then
+    changelog_errors+=("${plugin_name} (v${new_version}): CHANGELOG.md not staged")
+    continue
+  fi
+
+  # CHANGELOG.md must contain the new version number
+  changelog_content=$(git show ":${changelog}" 2>/dev/null || echo "")
+  if ! echo "$changelog_content" | grep -q "\[${new_version}\]"; then
+    changelog_errors+=("${plugin_name} (v${new_version}): CHANGELOG.md missing entry for [${new_version}]")
+  fi
+done
+
+# ── Check 4: new plugin registration (README + marketplace) ───────────
 
 readme_errors=()
 marketplace_missing=()
 
-# Collect ALL plugin names with any staged file (including plugin.json)
 all_staged_plugins=()
 while IFS= read -r file; do
   if [[ "$file" =~ ^plugins/([^/]+)/ ]]; then
@@ -123,7 +151,7 @@ for plugin in "${all_staged_plugins[@]}"; do
     if ! git show "HEAD:${plugin_json}" &>/dev/null; then
       # This is a brand-new plugin
 
-      # Check marketplace.json has an entry for this plugin
+      # Check marketplace.json has an entry
       if echo "$staged_files" | grep -qx "$MARKETPLACE"; then
         marketplace_content=$(git show ":${MARKETPLACE}" 2>/dev/null || echo "")
       else
@@ -185,6 +213,29 @@ if [ ${#sync_errors[@]} -gt 0 ]; then
   done
   echo ""
   echo "Fix: update the version in ${MARKETPLACE} to match, then re-stage and commit."
+fi
+
+if [ ${#changelog_errors[@]} -gt 0 ]; then
+  has_errors=true
+  echo ""
+  echo "ERROR: CHANGELOG.md update required"
+  echo "========================================"
+  echo ""
+  echo "The following plugins have version bumps but no corresponding CHANGELOG.md entry:"
+  echo ""
+  for err in "${changelog_errors[@]}"; do
+    echo "  - ${err}"
+  done
+  echo ""
+  echo "Fix: add a ## [X.Y.Z] - YYYY-MM-DD section to plugins/<name>/CHANGELOG.md with the changes,"
+  echo "     then re-stage and commit."
+  echo ""
+  echo "Changelog format (Keep a Changelog):"
+  echo "  ## [1.2.0] - 2026-04-03"
+  echo "  ### Added"
+  echo "  - New feature description"
+  echo "  ### Fixed"
+  echo "  - Bug fix description"
 fi
 
 if [ ${#marketplace_missing[@]} -gt 0 ]; then

@@ -129,7 +129,7 @@ Launch Codex **in the same turn** as Claude agents. Do not wait for Claude.
 - Do NOT combine `--base` with a prompt -- they are mutually exclusive in Codex CLI
 
 **For non-code artifacts:**
-- Invoke `/codex:rescue --background` via the Skill tool with a review prompt
+- Invoke `/codex:rescue --fresh --background` via the Skill tool with a review prompt
 - Compose the prompt using `gpt-5-4-prompting` patterns with XML-tagged blocks
 - Include focus areas from `${CLAUDE_PLUGIN_ROOT}/skills/shared/review-domains.md` for the detected artifact type
 - Include `${CLAUDE_PLUGIN_ROOT}/skills/shared/verdict-format.md` as `<structured_output_contract>`
@@ -255,7 +255,7 @@ After fixes are applied, go back to Step 3 with these adjustments:
 
 - **Claude side:** Scope agents to only changed files from this round (use `git diff` to identify delta)
 - **Codex side for code:** `/codex:review` reviews the full branch diff (branch-scoped) -- it will see all branch changes, not just this round's fixes
-- **Codex side for non-code:** `/codex:rescue` prompt can be scoped to specific changed files
+- **Codex side for non-code:** `/codex:rescue --fresh` prompt can be scoped to specific changed files
 
 Increment `ROUND` and repeat until exit conditions are met.
 

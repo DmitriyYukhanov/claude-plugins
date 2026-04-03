@@ -16,15 +16,53 @@ When you modify ANY file inside `plugins/<name>/`, you MUST also bump the `"vers
 - Rewrote a prompt template, added new sections → MINOR (1.1.0 → 1.2.0)
 - Removed a skill, changed plugin interface → MAJOR (1.2.0 → 2.0.0)
 
+## Changelog (MANDATORY)
+
+Every plugin has a `CHANGELOG.md` in its root directory (`plugins/<name>/CHANGELOG.md`). When you bump a plugin version, you MUST also add a changelog entry. The pre-commit hook enforces this — commits with a version bump but no changelog update will be rejected.
+
+**Format:** [Keep a Changelog](https://keepachangelog.com/) with these categories:
+- **Added** — new skills, commands, agents, features
+- **Changed** — modifications to existing behavior, prompt rewrites
+- **Deprecated** — features that will be removed in a future version
+- **Removed** — features removed in this version
+- **Fixed** — bug fixes, typo corrections
+- **Security** — vulnerability patches
+
+**Changelog gotchas — do NOT:**
+- Write vague entries like "various improvements" or "bug fixes" — be specific about what changed and why it matters to the user
+- Use commit messages as changelog entries — changelogs are for users, commits are for developers
+- Forget the date — every version header MUST include the ISO 8601 date: `## [1.2.0] - 2026-04-03`
+- Mix user-facing and internal changes — only document what affects plugin users (new skills, changed behavior, fixed bugs), not internal refactoring
+- Backfill changelog after the fact from memory — write entries as you make changes, not at release time
+- Use past tense in entries — use imperative mood: "Add search skill" not "Added search skill"
+
+**Changelog template for new plugins:**
+```markdown
+# Changelog
+
+All notable changes to the **<plugin-name>** plugin will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/),
+and this project adheres to [Semantic Versioning](https://semver.org/).
+
+## [1.0.0] - YYYY-MM-DD
+
+### Added
+- Initial release description
+```
+
+**Release automation:** On push to `main`, a GitHub Action automatically assembles a combined changelog from all updated plugins, creates a GitHub Release, and posts a summary to Slack. You do NOT need to create releases or notify the team manually — just keep the changelogs accurate.
+
 ## New Plugin Checklist (MANDATORY)
 
 When creating a NEW plugin (new `plugins/<name>/` directory), you MUST complete ALL of these:
 
 1. `plugins/<name>/.claude-plugin/plugin.json` — manifest with name, version, description (the only location Claude Code reads)
-2. `.claude-plugin/marketplace.json` — add entry with matching version, description, author, source, category, homepage
-3. `README.md` — add install command AND plugin description section (in alphabetical position among plugins)
+2. `plugins/<name>/CHANGELOG.md` — initial changelog with `[1.0.0]` entry
+3. `.claude-plugin/marketplace.json` — add entry with matching version, description, author, source, category, homepage
+4. `README.md` — add install command AND plugin description section (in alphabetical position among plugins)
 
-A pre-commit hook enforces items 1-2. Item 3 (README) is also enforced — commits introducing a new plugin directory without a corresponding README.md entry will be rejected.
+A pre-commit hook enforces items 1-3. Item 4 (README) is also enforced — commits introducing a new plugin directory without a corresponding README.md entry will be rejected.
 
 ## Git Hooks
 
@@ -50,6 +88,7 @@ plugins/
   <plugin-name>/
     .claude-plugin/
       plugin.json        # Plugin manifest (the only location Claude Code reads)
+    CHANGELOG.md         # Per-plugin changelog (Keep a Changelog format)
     skills/              # Skill definitions (SKILL.md files)
     hooks/               # Plugin hooks
     agents/              # Agent definitions (.md files)
@@ -60,6 +99,9 @@ skills/
     *.skill              # Binary skill files installable via Claude.ai settings
 .claude-plugin/
   marketplace.json       # Plugin marketplace listing (versions must match plugin.json)
+.github/
+  workflows/
+    release-notify.yml   # Auto-release on push to main
 docs/                    # Documentation and plans
   skill-creation.md      # Skill authoring best practices
 .githooks/               # Git hooks (pre-commit version enforcement)
