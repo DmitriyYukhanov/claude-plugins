@@ -33,6 +33,16 @@ This repo uses `.githooks/` for tracked git hooks. After cloning, run:
 git config core.hooksPath .githooks
 ```
 
+## Skill Frontmatter
+
+Use only the fields recognized by Claude Code. The canonical reference is https://docs.anthropic.com/en/docs/claude-code/skills.
+
+Key fields: `name`, `description`, `argument-hint`, `disable-model-invocation`, `user-invocable`, `allowed-tools`, `model`, `effort`, `context`, `agent`, `hooks`, `paths`, `shell`.
+
+**`argument-hint`** (string) shows during `/` autocomplete to indicate expected arguments. Example: `argument-hint: "[patch|minor|major] [--silent]"`. Do NOT use `arguments` (array) — that is not a recognized Claude Code field and does nothing.
+
+**`description`** is truncated at 250 characters in the skill listing. Front-load the key use case.
+
 ## Repository Structure
 
 ```
