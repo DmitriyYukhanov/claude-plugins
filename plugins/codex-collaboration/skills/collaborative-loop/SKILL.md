@@ -39,14 +39,51 @@ Invoke `/codex:setup` via the Skill tool. Two failure modes:
 
 On success, proceed to Step 2.
 
+### Liveness Check
+
+After `/codex:setup` succeeds, verify the Codex broker can actually complete work (not just accept connections). Run a trivial Codex task:
+
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/../codex/scripts/codex-companion.mjs" task --fresh "Reply with OK"
+```
+
+If this hangs for >60 seconds or returns empty output, the broker's app-server subprocess is likely dead while the broker process stays alive on the named pipe. Recovery:
+
+1. Find the broker PID: `cat <session-dir>/broker.pid` (or check the broker.json state file)
+2. Kill the orphaned broker: `taskkill /PID <pid> /T /F` (Windows) or `kill <pid>` (Unix)
+3. Re-run `/codex:setup` -- the companion will spawn a fresh broker with a live app-server
+4. Repeat the liveness check
+
+Only proceed to Step 2 after the liveness check passes.
+
 ### Runtime Failure Policy
 
-The collaborative loop requires BOTH collaborators. If Codex fails at any point during the workflow (script error, timeout, empty output):
+The collaborative loop requires BOTH collaborators. If Codex fails at any point during the workflow (script error, empty output):
 
 1. Do NOT fall back to a Claude subagent as reviewer -- self-review defeats the purpose
 2. STOP the loop immediately
 3. Report the failure clearly with the exact error
 4. Suggest remediation (re-run `/codex:setup`, check auth, verify CLI installation)
+
+### Hang Detection (Stale-Log Monitor)
+
+Codex tasks can legitimately run for 20+ minutes on complex analyses. Do NOT use a hard timeout. Instead, detect hangs via log staleness:
+
+1. After invoking `/codex:rescue`, note the task's log file path from the job record
+2. Every **2 minutes**, check the log file's last-modified timestamp and tail the last few lines
+3. If the log file has **not been modified for 5 minutes** AND the task phase is still `starting` or has not advanced, the task is stalled
+4. If the log file shows active progress (new lines, phase changes like `verifying`, `reading files`), the task is healthy -- keep waiting
+
+When a stall is detected:
+
+1. Cancel the stalled task via `/codex:cancel` or kill its PID
+2. Attempt **one** automatic retry with a fresh task
+3. If the retry also stalls (same 5-minute staleness), STOP the loop and report:
+   ```
+   Codex hung twice consecutively. The broker's app-server subprocess may be dead.
+   Remediation: kill the broker process and re-run /codex:setup.
+   ```
+4. Do NOT retry more than once -- repeated hangs indicate an infrastructure problem, not a transient failure
 
 ## Step 2: Detect Context
 
@@ -133,6 +170,8 @@ Hold findings in conversation context. Do not write intermediate files.
 Send Claude's numbered findings to Codex for per-finding validation. Codex independently evaluates each finding and returns CONFIRM or REJECT with evidence.
 
 **IMPORTANT:** Use `/codex:rescue --fresh` via the Skill tool -- NOT `/codex:adversarial-review`. Adversarial review produces its own independent findings and does not map back per-finding. Only `/codex:rescue` with a custom prompt supports per-finding CONFIRM/REJECT. Always pass `--fresh` to prevent the codex plugin from prompting the user about resuming a previous thread.
+
+**Monitor the task using the Hang Detection (Stale-Log Monitor) procedure from Step 1.** Do not poll with rapid bash commands -- check every 2 minutes, and only act if the log is stale for 5 minutes.
 
 ### Compose the Validation Prompt
 
@@ -351,3 +390,7 @@ Findings remaining: Z
 - **Do NOT forget `gpt-5-4-prompting` patterns.** When composing any prompt for Codex (Steps 4, 6), invoke the `gpt-5-4-prompting` skill to use proper XML-tagged block structure. Codex performs significantly better with structured prompts.
 
 - **Do NOT skip Step 4.5.** The re-evaluation gate is what distinguishes this from a simple "send to Codex and trust the result" workflow. Claude's independent review of Codex's decisions catches validation errors.
+
+- **Do NOT poll Codex status rapidly.** Check the log file every 2 minutes, not every few seconds. 50+ bash commands polling status wastes context and provides no value. Use the Stale-Log Monitor procedure: check timestamp + tail, decide healthy or stalled, act accordingly.
+
+- **Do NOT use hard timeouts for Codex tasks.** Complex validations legitimately take 15-25 minutes. A hard timeout would kill healthy tasks. Instead, detect hangs via log staleness (no modification for 5 minutes while phase hasn't advanced).
