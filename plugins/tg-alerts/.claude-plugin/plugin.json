@@ -1,0 +1,8 @@
+{
+  "name": "tg-alerts",
+  "version": "1.0.0",
+  "description": "Add Telegram error/alert notifications to any project — guides through bot setup, chat ID discovery, and framework integration with deduplication and graceful failure",
+  "author": {
+    "name": "Dmitry Yuhanov"
+  }
+}

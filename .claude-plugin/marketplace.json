@@ -82,6 +82,17 @@
       "source": "./plugins/lsp-setup",
       "category": "development",
       "homepage": "https://github.com/DmitriyYukhanov/claude-plugins"
+    },
+    {
+      "name": "tg-alerts",
+      "description": "Add Telegram error/alert notifications to any project — guides through bot setup, chat ID discovery, and framework integration with deduplication and graceful failure",
+      "version": "1.0.0",
+      "author": {
+        "name": "Dmitry Yuhanov"
+      },
+      "source": "./plugins/tg-alerts",
+      "category": "operations",
+      "homepage": "https://github.com/DmitriyYukhanov/claude-plugins"
     }
   ]
 }

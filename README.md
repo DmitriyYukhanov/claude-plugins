@@ -20,6 +20,7 @@ Then install the plugins you want to use:
 /plugin install codex-collaboration
 /plugin install implementation-prd
 /plugin install lsp-setup
+/plugin install tg-alerts
 ```
 
 You can also install individual plugins directly, for example:
@@ -65,6 +66,17 @@ Python development workflow with:
 - Python-specific review agent that can delegate to general feature review
 
 [View documentation](./plugins/python-dev/README.md)
+
+### tg-alerts
+
+Add Telegram error/alert notifications to any project with:
+- Interactive 7-phase setup flow (assess, create bot, get chat ID, generate code, integrate, configure, test)
+- Step-by-step @BotFather and chat ID discovery guide (private chat, group, channel, forum topics)
+- Reference implementations for Python async (FastAPI), Python sync (Django/Flask), and Node.js/TypeScript (Express/NestJS)
+- Built-in deduplication, HTML formatting, graceful failure handling, and fire-and-forget delivery
+- Framework-specific integration guidance for error handlers and logging bridges
+
+[View skill documentation](./plugins/tg-alerts/skills/tg-alerts/SKILL.md)
 
 ### typescript-dev
 
