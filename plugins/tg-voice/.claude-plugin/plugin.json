@@ -1,0 +1,8 @@
+{
+  "name": "tg-voice",
+  "version": "1.0.0",
+  "description": "Transcribe Telegram voice messages using local Whisper (faster-whisper) — automatic PostToolUse hook with setup skill for installation and model download",
+  "author": {
+    "name": "Dmitry Yuhanov"
+  }
+}

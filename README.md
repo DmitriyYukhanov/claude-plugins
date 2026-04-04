@@ -18,7 +18,8 @@ Then install the plugins you want to use:
 /plugin install implementation-prd
 /plugin install lsp-setup
 /plugin install python-dev
-/plugin install tg-extras
+/plugin install tg-alerts
+/plugin install tg-voice
 /plugin install typescript-dev
 /plugin install unity-dev
 ```
@@ -129,16 +130,25 @@ Python development workflow with:
 
 [View documentation](./plugins/python-dev/README.md)
 
-### tg-extras
+### tg-alerts
 
-Telegram-related skills and hooks:
+Add Telegram error/alert notifications to any project:
+- Interactive 7-phase setup: @BotFather bot creation, chat ID discovery, code generation, integration, testing
+- Reference implementations for Python async (FastAPI), Python sync (Django/Flask), and Node.js/TypeScript (Express/NestJS)
+- Built-in deduplication, HTML formatting, graceful failure handling, and fire-and-forget delivery
 
-- **Voice transcription** — PostToolUse hook automatically transcribes voice messages from the official Telegram channel plugin using local Whisper (`faster-whisper`). Configurable model size via `WHISPER_MODEL` env var.
-- **Error alerts** (`/tg-alerts`) — Interactive 7-phase setup for Telegram error notifications with @BotFather guide, reference implementations (Python async/sync, Node.js/TypeScript), deduplication, and graceful failure.
+[View skill documentation](./plugins/tg-alerts/skills/tg-alerts/SKILL.md)
 
-**Requires:** `faster-whisper` (`pip install faster-whisper`) and `ffmpeg` for voice transcription.
+### tg-voice
 
-[View plugin](./plugins/tg-extras/)
+Transcribe Telegram voice messages using local Whisper:
+- PostToolUse hook automatically transcribes `.oga` voice messages downloaded via the Telegram channel plugin
+- `/voice-to-text-config` skill for guided setup: faster-whisper installation, model download, and end-to-end verification
+- Configurable model size via `WHISPER_MODEL` env var (default: `base`)
+
+**Requires:** `faster-whisper` (`pip install faster-whisper`) and the [Telegram channel plugin](https://github.com/anthropics/claude-code).
+
+[View plugin](./plugins/tg-voice/)
 
 ### typescript-dev
 

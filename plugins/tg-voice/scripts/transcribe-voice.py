@@ -42,7 +42,7 @@ def main():
             {
                 "systemMessage": (
                     "Voice message received but faster-whisper is not installed.\n"
-                    "Ask the user to run /voice-to-text-config (tg-extras skill) to set it up,\n"
+                    "Ask the user to run /voice-to-text-config (tg-voice skill) to set it up,\n"
                     "or install manually: pip install faster-whisper"
                 )
             },
@@ -61,7 +61,7 @@ def main():
                 {
                     "systemMessage": (
                         f"Voice message received but the whisper '{MODEL_SIZE}' model is not downloaded yet.\n"
-                        "Ask the user to run /voice-to-text-config (tg-extras skill) to download it,\n"
+                        "Ask the user to run /voice-to-text-config (tg-voice skill) to download it,\n"
                         f"or download manually:\n"
                         f"  python -c \"from faster_whisper import WhisperModel; WhisperModel('{MODEL_SIZE}')\""
                     )
