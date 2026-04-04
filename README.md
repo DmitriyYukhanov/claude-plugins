@@ -13,14 +13,14 @@ Add this marketplace to Claude Code:
 Then install the plugins you want to use:
 
 ```bash
-/plugin install unity-dev
-/plugin install python-dev
-/plugin install typescript-dev
 /plugin install agent-teams
 /plugin install codex-collaboration
 /plugin install implementation-prd
 /plugin install lsp-setup
+/plugin install python-dev
 /plugin install tg-alerts
+/plugin install typescript-dev
+/plugin install unity-dev
 ```
 
 You can also install individual plugins directly, for example:
@@ -30,19 +30,81 @@ You can also install individual plugins directly, for example:
 /plugin install typescript-dev@DmitriyYukhanov/claude-plugins
 ```
 
-## Available Plugins
+## Highlights
 
-### unity-dev
+### codex-collaboration
 
-Unity C# development workflow with:
-- `/unity-dev` command for full workflow orchestration
-- Architecture design with Mermaid diagrams
-- C# coding guidelines following Microsoft conventions
-- EditMode/PlayMode testing patterns
-- Unity-specific code review agent
-- Code simplification agent
+Cross-model collaboration between Claude and Codex with two workflows:
 
-[View documentation](./plugins/unity-dev/README.md)
+- **collaborative-loop** — Sequential drive/validate/act cycles. Claude analyzes, Codex validates each finding, both models must agree before any action is taken. Iterates until approved or max rounds.
+- **cross-review** — Parallel dual review. Both Claude and Codex review independently, findings are cross-validated and triaged, disagreements surfaced for user decision.
+
+**Requires** the [Codex plugin for Claude Code](https://github.com/openai/codex-plugin-cc). Install it first:
+1. `/plugin marketplace add openai/codex-plugin-cc`
+2. `/plugin install codex@openai-codex`
+3. `/codex:setup` to verify
+
+[View skill documentation](./plugins/codex-collaboration/skills/collaborative-loop/SKILL.md)
+
+### implementation-prd
+
+Implementation-ready spec bundle authoring with:
+- Auto-activating skill for turning requests into build-ready spec bundles
+- Templates for product, system, and feature PRDs, contracts, schemas, data models, and test plans
+- `init-spec-bundle.sh` scaffolding script for standard 4-file bundles
+- Quality gates checklist and cross-file alignment rules
+- Worked example from a real desktop app project
+
+[View documentation](./plugins/implementation-prd/README.md)
+
+### agent-teams
+
+Set up and orchestrate Claude Code agent teams with:
+- Auto-activating skill for agent team setup and coordination
+- Teams vs subagents decision guide
+- Display modes (in-process and split pane)
+- Prompt templates for code review, debugging, and exploration
+- Configuration reference with architecture, permissions, and limitations
+
+[View documentation](./plugins/agent-teams/README.md)
+
+## All Plugins
+
+### agent-teams
+
+Set up and orchestrate Claude Code agent teams with:
+- Auto-activating skill for agent team setup and coordination
+- Teams vs subagents decision guide
+- Display modes (in-process and split pane)
+- Prompt templates for code review, debugging, and exploration
+- Configuration reference with architecture, permissions, and limitations
+
+[View documentation](./plugins/agent-teams/README.md)
+
+### codex-collaboration
+
+Cross-model collaboration between Claude and Codex with two workflows:
+
+- **collaborative-loop** — Sequential drive/validate/act cycles. Claude analyzes, Codex validates each finding, both models must agree before any action is taken. Iterates until approved or max rounds.
+- **cross-review** — Parallel dual review. Both Claude and Codex review independently, findings are cross-validated and triaged, disagreements surfaced for user decision.
+
+**Requires** the [Codex plugin for Claude Code](https://github.com/openai/codex-plugin-cc). Install it first:
+1. `/plugin marketplace add openai/codex-plugin-cc`
+2. `/plugin install codex@openai-codex`
+3. `/codex:setup` to verify
+
+[View skill documentation](./plugins/codex-collaboration/skills/collaborative-loop/SKILL.md)
+
+### implementation-prd
+
+Implementation-ready spec bundle authoring with:
+- Auto-activating skill for turning requests into build-ready spec bundles
+- Templates for product, system, and feature PRDs, contracts, schemas, data models, and test plans
+- `init-spec-bundle.sh` scaffolding script for standard 4-file bundles
+- Quality gates checklist and cross-file alignment rules
+- Worked example from a real desktop app project
+
+[View documentation](./plugins/implementation-prd/README.md)
 
 ### lsp-setup
 
@@ -89,41 +151,17 @@ TypeScript development workflow with:
 
 [View documentation](./plugins/typescript-dev/README.md)
 
-### agent-teams
+### unity-dev
 
-Set up and orchestrate Claude Code agent teams with:
-- Auto-activating skill for agent team setup and coordination
-- Teams vs subagents decision guide
-- Display modes (in-process and split pane)
-- Prompt templates for code review, debugging, and exploration
-- Configuration reference with architecture, permissions, and limitations
+Unity C# development workflow with:
+- `/unity-dev` command for full workflow orchestration
+- Architecture design with Mermaid diagrams
+- C# coding guidelines following Microsoft conventions
+- EditMode/PlayMode testing patterns
+- Unity-specific code review agent
+- Code simplification agent
 
-[View documentation](./plugins/agent-teams/README.md)
-
-### codex-collaboration
-
-Cross-model collaboration between Claude and Codex with two workflows:
-
-- **collaborative-loop** — Sequential drive/validate/act cycles. Claude analyzes, Codex validates each finding, both models must agree before any action is taken. Iterates until approved or max rounds.
-- **cross-review** — Parallel dual review. Both Claude and Codex review independently, findings are cross-validated and triaged, disagreements surfaced for user decision.
-
-**Requires** the [Codex plugin for Claude Code](https://github.com/openai/codex-plugin-cc). Install it first:
-1. `/plugin marketplace add openai/codex-plugin-cc`
-2. `/plugin install codex@openai-codex`
-3. `/codex:setup` to verify
-
-[View skill documentation](./plugins/codex-collaboration/skills/collaborative-loop/SKILL.md)
-
-### implementation-prd
-
-Implementation-ready spec bundle authoring with:
-- Auto-activating skill for turning requests into build-ready spec bundles
-- Templates for product, system, and feature PRDs, contracts, schemas, data models, and test plans
-- `init-spec-bundle.sh` scaffolding script for standard 4-file bundles
-- Quality gates checklist and cross-file alignment rules
-- Worked example from a real desktop app project
-
-[View documentation](./plugins/implementation-prd/README.md)
+[View documentation](./plugins/unity-dev/README.md)
 
 ## Claude.ai Skills
 
