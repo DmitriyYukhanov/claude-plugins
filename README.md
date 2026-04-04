@@ -33,41 +33,13 @@ You can also install individual plugins directly, for example:
 
 ## Highlights
 
-### codex-collaboration
-
-Cross-model collaboration between Claude and Codex with two workflows:
-
-- **collaborative-loop** — Sequential drive/validate/act cycles. Claude analyzes, Codex validates each finding, both models must agree before any action is taken. Iterates until approved or max rounds.
-- **cross-review** — Parallel dual review. Both Claude and Codex review independently, findings are cross-validated and triaged, disagreements surfaced for user decision.
-
-**Requires** the [Codex plugin for Claude Code](https://github.com/openai/codex-plugin-cc). Install it first:
-1. `/plugin marketplace add openai/codex-plugin-cc`
-2. `/plugin install codex@openai-codex`
-3. `/codex:setup` to verify
-
-[View skill documentation](./plugins/codex-collaboration/skills/collaborative-loop/SKILL.md)
-
-### implementation-prd
-
-Implementation-ready spec bundle authoring with:
-- Auto-activating skill for turning requests into build-ready spec bundles
-- Templates for product, system, and feature PRDs, contracts, schemas, data models, and test plans
-- `init-spec-bundle.sh` scaffolding script for standard 4-file bundles
-- Quality gates checklist and cross-file alignment rules
-- Worked example from a real desktop app project
-
-[View documentation](./plugins/implementation-prd/README.md)
-
-### agent-teams
-
-Set up and orchestrate Claude Code agent teams with:
-- Auto-activating skill for agent team setup and coordination
-- Teams vs subagents decision guide
-- Display modes (in-process and split pane)
-- Prompt templates for code review, debugging, and exploration
-- Configuration reference with architecture, permissions, and limitations
-
-[View documentation](./plugins/agent-teams/README.md)
+| Plugin | What it does |
+|--------|-------------|
+| [codex-collaboration](#codex-collaboration) | Cross-model Claude + Codex collaboration — sequential drive/validate loops and parallel dual review |
+| [implementation-prd](#implementation-prd) | Turn feature requests into build-ready spec bundles with PRDs, contracts, schemas, and test plans |
+| [agent-teams](#agent-teams) | Orchestrate multiple Claude Code instances working in parallel with shared tasks and messaging |
+| [tg-alerts](#tg-alerts) | Add Telegram error/alert notifications to any project — guided setup with reference implementations |
+| [tg-voice](#tg-voice) | Auto-transcribe Telegram voice messages using local Whisper via PostToolUse hook |
 
 ## All Plugins
 
