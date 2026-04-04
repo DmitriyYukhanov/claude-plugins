@@ -49,6 +49,9 @@ jobs:
           while IFS= read -r plugin; do
             [ -z "$plugin" ] && continue
 
+            # Skip plugins that were deleted in this push
+            [ -d "plugins/${plugin}" ] || continue
+
             plugin_json="plugins/${plugin}/.claude-plugin/plugin.json"
             changelog="plugins/${plugin}/CHANGELOG.md"
 
