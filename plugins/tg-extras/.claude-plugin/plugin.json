@@ -1,0 +1,8 @@
+{
+  "name": "tg-extras",
+  "version": "2.0.0",
+  "description": "Telegram extras — error alert notifications, voice message transcription, and other Telegram-related skills and hooks",
+  "author": {
+    "name": "Dmitry Yuhanov"
+  }
+}

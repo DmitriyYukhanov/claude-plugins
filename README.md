@@ -18,7 +18,7 @@ Then install the plugins you want to use:
 /plugin install implementation-prd
 /plugin install lsp-setup
 /plugin install python-dev
-/plugin install tg-alerts
+/plugin install tg-extras
 /plugin install typescript-dev
 /plugin install unity-dev
 ```
@@ -129,16 +129,16 @@ Python development workflow with:
 
 [View documentation](./plugins/python-dev/README.md)
 
-### tg-alerts
+### tg-extras
 
-Add Telegram error/alert notifications to any project with:
-- Interactive 7-phase setup flow (assess, create bot, get chat ID, generate code, integrate, configure, test)
-- Step-by-step @BotFather and chat ID discovery guide (private chat, group, channel, forum topics)
-- Reference implementations for Python async (FastAPI), Python sync (Django/Flask), and Node.js/TypeScript (Express/NestJS)
-- Built-in deduplication, HTML formatting, graceful failure handling, and fire-and-forget delivery
-- Framework-specific integration guidance for error handlers and logging bridges
+Telegram-related skills and hooks:
 
-[View skill documentation](./plugins/tg-alerts/skills/tg-alerts/SKILL.md)
+- **Voice transcription** — PostToolUse hook automatically transcribes voice messages from the official Telegram channel plugin using local Whisper (`faster-whisper`). Configurable model size via `WHISPER_MODEL` env var.
+- **Error alerts** (`/tg-alerts`) — Interactive 7-phase setup for Telegram error notifications with @BotFather guide, reference implementations (Python async/sync, Node.js/TypeScript), deduplication, and graceful failure.
+
+**Requires:** `faster-whisper` (`pip install faster-whisper`) and `ffmpeg` for voice transcription.
+
+[View plugin](./plugins/tg-extras/)
 
 ### typescript-dev
 

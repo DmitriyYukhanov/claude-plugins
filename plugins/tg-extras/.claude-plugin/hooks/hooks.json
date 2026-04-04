@@ -1,0 +1,17 @@
+{
+  "description": "Transcribe voice messages downloaded from Telegram",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "mcp__plugin_telegram_telegram__download_attachment",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"${CLAUDE_PLUGIN_ROOT}/scripts/transcribe-voice.py\"",
+            "timeout": 120
+          }
+        ]
+      }
+    ]
+  }
+}

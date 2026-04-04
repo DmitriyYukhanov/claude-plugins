@@ -6,10 +6,15 @@ Do not restate large parts of those docs inside a new skill. Keep the skill itse
 
 ## Metadata
 
+Use only the fields recognized by Claude Code. The canonical frontmatter reference is the official docs link above.
+
+Recognized fields: `name`, `description`, `argument-hint`, `disable-model-invocation`, `user-invocable`, `allowed-tools`, `model`, `effort`, `context`, `agent`, `hooks`, `paths`, `shell`.
+
 - `name`: short hyphen-case, match the folder name exactly, under 64 characters.
 - Prefer verb-led names that make triggering obvious. Avoid overloaded or reserved names.
-- `description` is always in context, so keep it tight. Write in third person or imperative. Avoid first person.
+- `description` is always in context and truncated at 250 characters in the skill listing. Front-load the key use case. Write in third person or imperative. Avoid first person.
 - Include likely user trigger phrases in `description`, not just abstract capability text.
+- `argument-hint` (string) shows during `/` autocomplete to indicate expected arguments. Example: `argument-hint: "[patch|minor|major] [--silent]"`. Do NOT use `arguments` (array) — it is not a recognized Claude Code field and does nothing.
 - Only add optional frontmatter (`model`, `allowed-tools`, `argument-hint`, `user-invocable`, `disable-model-invocation`, `context`, `agent`, `hooks`) when the skill's behavior actually depends on it.
 - Treat `allowed-tools` and `user-invocable` as least-privilege controls: restrict tool access and invocation surface to the minimum the skill needs.
 
