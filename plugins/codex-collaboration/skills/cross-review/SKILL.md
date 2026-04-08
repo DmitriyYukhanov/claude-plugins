@@ -1,16 +1,16 @@
 ---
 name: cross-review
 model: opus
-description: Parallel dual review between Claude and Codex. Both models review independently, findings are cross-validated and triaged, disagreements surfaced for user decision. Use for reviewing existing work with independent perspectives.
+description: Parallel dual review between Claude and Codex. Both models review independently, findings are cross-validated and resolved by evidence, with only genuinely inconclusive disagreements surfaced for user decision. Use for reviewing existing work with independent perspectives.
 ---
 
 # Cross-Review: Parallel Dual Review
 
 ## Overview
 
-Parallel review workflow between Claude and Codex CLI. Both models review the same artifact **simultaneously and independently**, findings are cross-validated and triaged into auto-fixable / needs-decision / informational buckets, and only approved fixes are applied. Disagreements are always surfaced for user mediation. Repeats until clean or max rounds reached.
+Parallel review workflow between Claude and Codex CLI. Both models review the same artifact **simultaneously and independently**, then findings go through a three-stage resolution pipeline: initial triage → cross-validation (each model verifies the other's findings) → evidence-based research (documentation/code inspection for remaining disputes). Only genuinely inconclusive disagreements reach the user. Repeats until clean or max rounds reached.
 
-**Core principle:** Two independent perspectives are stronger than one. Neither model sees the other's review until triage. Disagreements go to the user, never resolved silently.
+**Core principle:** Two independent perspectives are stronger than one. Neither model sees the other's review until triage. Disagreements are resolved by **evidence first** (cross-validation, then documentation/code research) — the user is only asked to decide when evidence is genuinely inconclusive.
 
 ## Trigger Phrases
 
@@ -59,15 +59,7 @@ If no target files provided:
 
 ### Classify Artifact Type
 
-Follow the rules in `artifact-detection.md`:
-
-| Signal | Type |
-|--------|------|
-| Source code extensions (`.ts`, `.py`, `.js`, `.go`, `.rs`, `.cs`, `.java`, etc.) | **code** |
-| `*-plan*`, `*-tasks*`, `*implementation-plan*` | **plan** |
-| `*-architecture*`, `*-spec*` | **architecture** |
-| Other `.md` in `docs/` or `plans/` | **design** |
-| Mixed | default to **code** |
+Follow the rules in `artifact-detection.md`.
 
 ### Initialize State
 
@@ -81,21 +73,13 @@ BASE_BRANCH = <detected>
 
 ## Step 3: Parallel Review
 
-**CRITICAL: Launch Claude agents and Codex simultaneously. Do NOT wait for one before starting the other.** Both review independently; cross-validation happens in Step 4.
+**CRITICAL: Launch Claude agents and Codex simultaneously. Do NOT wait for one before starting the other.** Both review independently; cross-validation happens in Step 5.
 
 ### Claude Side (Background Agents)
 
 Spawn focused review agents using the Agent tool. Each agent reviews through its domain lens using focus areas from `${CLAUDE_PLUGIN_ROOT}/skills/shared/review-domains.md`.
 
-**Domain agents:**
-
-| Agent | Focus |
-|-------|-------|
-| `security-reviewer` | Auth, injection, validation, secrets, data exposure |
-| `performance-reviewer` | Bottlenecks, N+1 queries, memory leaks, scalability |
-| `correctness-reviewer` | Logic errors, edge cases, error handling, type safety |
-| `test-coverage-reviewer` | Test gaps, missing edge cases, flaky test risks |
-| `maintainability-reviewer` | Code clarity, patterns, coupling, naming, duplication |
+**Domain agents by artifact type:** Select agents and focus areas from `review-domains.md` for the detected artifact type. Do not use code-focused agents for design specs or vice versa.
 
 **Scoping:**
 - Use agent teams when scope is large (5+ files or complex multi-component changes)
@@ -148,40 +132,116 @@ If Codex background job fails (auth expired, CLI error, timeout):
 3. Mark all Claude findings as single-source (no cross-validation possible)
 4. If user wants full cross-review, they should fix Codex and re-run
 
-This differs from collaborative-loop, which ABORTs entirely on Codex failure. Cross-review can degrade gracefully because Claude's findings still have value as independent review, even without cross-validation.
+This differs from collaborative-loop, which ABORTs entirely on Codex failure. Cross-review can degrade gracefully because Claude's findings still have value as independent review, even without cross-validation. In degraded mode, skip Steps 5-6 (cross-validation and evidence research are meaningless without a second model) and present all Claude findings as unverified in Step 7.
 
-## Step 4: Triage Findings
+### Fast-Path: Zero Findings
 
-Claude cross-validates findings from both sides. Compare the two independent reviews to find agreements, unique findings, and disagreements.
+If both reviewers produced zero findings, skip directly to Step 9 (Exit) with "all clean" status. Do not run triage, cross-validation, or evidence research on empty results.
 
-### Classification Rules
+## Step 4: Initial Triage
 
-| Situation | Classification |
-|-----------|---------------|
-| Both agree (same issue, same or similar fix) | **auto-fixable** (if fix is unambiguous) |
-| Only one side found it, Claude evaluates as real | **auto-fixable** |
-| Only one side found it, uncertain | **needs-decision** |
-| Disagreement (severity, fix approach, or validity) | **needs-decision** |
-| Both rate as minor + no concrete action | **informational** |
+Claude compares the two independent reviews to find agreements, unique findings, and disagreements.
 
-### Cross-Validation Process
+### Matching Process
 
 For each unique finding across both reviews:
 
 1. **Match findings** -- identify when both reviewers found the same issue (even if worded differently or categorized under different domains)
-2. **Evaluate unique findings** -- when only one reviewer found an issue, Claude independently assesses whether it is genuine
+2. **Evaluate unique findings** -- when only one reviewer found an issue, note it as single-source
 3. **Detect disagreements** -- flag cases where reviewers conflict on severity, fix approach, or whether something is an issue at all
-4. **Classify** -- apply the classification table above
+4. **Classify** -- apply the initial classification table:
 
-Hold triage results in conversation context.
+| Situation | Initial Classification |
+|-----------|----------------------|
+| Both agree (same issue, same or similar fix) | **agreed** |
+| Only one side found it | **single-source** |
+| Disagreement (severity, fix approach, or validity) | **disagreement** |
+| Both rate as minor + no concrete action | **informational** |
 
-## Step 5: Present Triage to User
+Hold initial triage results in conversation context. **Do NOT present to user yet** — proceed to cross-validation first.
 
-Present findings in priority order:
+### Fast-Path: Full Agreement
+
+If triage yields only **agreed** and **informational** items (no single-source findings, no disagreements), skip Steps 5-6 entirely. Promote all agreed items to **auto-fixable** and go directly to Step 7 (Present).
+
+## Step 5: Cross-Validation
+
+**Purpose:** Verify single-source findings and attempt to resolve disagreements before involving the user. Each model's findings are verified by the other. Agreed and informational items from Step 4 pass through unchanged — only single-source and disagreement items are cross-validated.
+
+### Launch Cross-Validation in Parallel
+
+1. **Claude verifies Codex findings** — spawn a background Agent that:
+   - Receives all Codex-only (single-source) findings and Codex's side of each disagreement
+   - Reads the actual code/spec/docs referenced in each finding
+   - For each finding: CONFIRM (with evidence from code) or REJECT (with counter-evidence)
+   - May also REFINE (agree with the issue but disagree on severity/fix)
+
+2. **Codex verifies Claude findings** — invoke `/codex:rescue --fresh --background` with:
+   - All Claude-only (single-source) findings and Claude's side of each disagreement
+   - Include `${CLAUDE_PLUGIN_ROOT}/skills/shared/validation-format.md` as `<structured_output_contract>`
+   - Ask Codex to CONFIRM, REJECT, or REFINE each finding with evidence
+
+Both run simultaneously — do NOT wait for one before launching the other.
+
+### Process Cross-Validation Results
+
+After both complete, reclassify each finding:
+
+| Cross-Validation Result | New Classification |
+|------------------------|-------------------|
+| Single-source finding confirmed by other model | **auto-fixable** |
+| Single-source finding refined by other model | **auto-fixable** (use refined severity/fix) |
+| Single-source finding rejected by other model | **disagreement** (escalate) |
+| Original disagreement — cross-validation resolved it | **auto-fixable** (use agreed fix) |
+| Original disagreement — cross-validation refined it | **auto-fixable** (use refined fix) |
+| Original disagreement — cross-validation did NOT resolve it | **disagreement** (escalate) |
+
+Agreed and informational items from Step 4 carry forward unchanged (agreed → auto-fixable).
+
+If zero disagreements remain after cross-validation, skip Step 6 and go directly to Step 7 (Present).
+
+## Step 6: Evidence-Based Dispute Resolution
+
+**Purpose:** Resolve remaining disagreements through documentation and code evidence before asking the user. Many disagreements stem from one model having incorrect assumptions about a framework, API, or codebase convention — evidence can settle these without user involvement.
+
+### For Each Remaining Disagreement
+
+1. **Identify the factual claim** — extract the specific assertion each model makes (e.g., "path points to unityLibrary" vs "path points to launcher")
+
+2. **Research the claim** using available tools (prefer higher-quality sources, fall back as needed):
+   - **Exa MCP** (`mcp__exa__web_search_exa`, `mcp__exa__web_fetch_exa`) — best for doc search and fetching; fall back to built-in `WebSearch`/`WebFetch` if Exa is not installed
+   - **Context7 MCP** (`resolve-library-id` → `query-docs`) — best for framework/library docs; fall back to web search + fetch if not installed
+   - **Code inspection** — read the actual files, check existing patterns in the codebase (always available)
+   - Use whichever tools are available. The research step must not fail because a specific MCP server is missing.
+
+3. **Evaluate evidence:**
+   - If evidence **conclusively** supports one model's claim → classify as **resolved-by-evidence** (apply the evidenced fix)
+   - If evidence is **ambiguous or insufficient** → remains a **disagreement** for user decision
+   - If evidence **disproves both** models → flag as new finding with correct information
+
+### Research Prompt Pattern
+
+For each disagreement, search for the specific factual claim, not the general topic:
+- Bad: "Unity Android manifest" (too broad)
+- Good: "Unity IPostGenerateGradleAndroidProject path parameter unityLibrary vs launcher" (specific claim)
+
+### Parallelism
+
+Research multiple disagreements in parallel when they are independent. Use background agents or parallel tool calls.
+
+### Output
+
+After research, each disagreement is either:
+- **resolved-by-evidence** — cite the source (doc URL, code file:line, API reference)
+- **needs-decision** — evidence was inconclusive, present both sides + research findings to user
+
+## Step 7: Present Results to User
+
+Present findings in priority order. This step now only shows items that survived cross-validation AND evidence-based resolution.
 
 ### 1. Needs-Decision Items (First)
 
-Show these first -- they block progress until the user decides:
+Only shown if evidence-based resolution could not settle the disagreement:
 
 ```
 ## Needs Decision
@@ -189,41 +249,49 @@ Show these first -- they block progress until the user decides:
 [1] [high] [security] src/auth.ts:42
     Claude: SQL injection via string concatenation. Fix: use parameterized query.
     Codex: Not exploitable -- input is validated upstream at line 30.
+    Research: [summary of what evidence was found and why it was inconclusive]
     -> Please decide: fix or dismiss?
-
-[2] [medium] [performance] lib/cache.ts:15
-    Claude: Medium severity -- cache grows unbounded.
-    Codex: High severity -- will cause OOM in production.
-    -> Please decide on severity and fix approach.
 ```
 
 Wait for user decisions on each item before proceeding.
 
 ### 2. Auto-Fixable Items (Second)
 
-List for confirmation:
+Includes items agreed by both models AND items resolved by cross-validation/evidence:
 
 ```
 ## Auto-Fixable (confirm to proceed)
 
-[3] [high] [correctness] src/handler.ts:87 -- Missing null check (both reviewers agree)
+[3] [high] [correctness] src/handler.ts:87 -- Missing null check (both agree)
     Fix: Add guard clause before accessing .data property
 
-[4] [medium] [test-coverage] src/auth.ts -- No tests for login flow (Claude found, confirmed valid)
+[4] [medium] [test-coverage] src/auth.ts -- No tests for login flow (Claude found, Codex confirmed)
     Fix: Add unit tests for success and failure paths
 ```
 
-### 3. Informational Items (Last)
+### 3. Resolved by Evidence (Third)
 
-Show as FYI, no action needed:
+Items where disagreements were settled by documentation/code research:
+
+```
+## Resolved by Evidence
+
+[5] [critical] [technical] spec:40 -- manifest path correctness
+    Claude claimed: path points to wrong module (launcher needed)
+    Codex claimed: path is correct (unityLibrary has activity declarations)
+    Evidence: Unity API docs confirm path = unityLibrary module. Codex is correct.
+    -> Applied Codex's recommendation. No user action needed.
+```
+
+### 4. Informational Items (Last)
 
 ```
 ## Informational
 
-[5] [minor] [maintainability] src/utils.ts:12 -- Variable name could be more descriptive
+[6] [minor] [maintainability] src/utils.ts:12 -- Variable name could be more descriptive
 ```
 
-## Step 6: Apply Fixes and Re-Review
+## Step 8: Apply Fixes and Re-Review
 
 After user confirms auto-fixable items and resolves needs-decision items, apply approved fixes.
 
@@ -251,7 +319,7 @@ Search available skills for the best match based on artifact type:
 
 ### Re-Review
 
-After fixes are applied, go back to Step 3 with these adjustments:
+After fixes are applied, go back to Step 3 (Parallel Review) with these adjustments:
 
 - **Claude side:** Scope agents to only changed files from this round (use `git diff` to identify delta)
 - **Codex side for code:** `/codex:review` reviews the full branch diff (branch-scoped) -- it will see all branch changes, not just this round's fixes
@@ -261,7 +329,7 @@ Increment `ROUND` and repeat until exit conditions are met.
 
 **File scoping constraint:** `/codex:review` and `/codex:adversarial-review` are branch-scoped. Codex will review all branch changes in re-reviews, not just the current round's files. Previously-fixed issues should not reappear, but Codex may surface new findings in unchanged code.
 
-## Step 7: Exit and Summary
+## Step 9: Exit and Summary
 
 Exit when any of these conditions is met:
 - All clean (no findings in latest round)
@@ -273,21 +341,25 @@ Present final state:
 ```
 ## Cross-Review Summary
 
-Rounds completed: N
+Rounds completed: N (M included cross-validation)
 Exit reason: <all clean | max rounds reached | user stopped>
 
-### Issues Found: X
-### Issues Fixed: Y
-### Issues Remaining: Z
+Issues Found: X (across all reviewers)
+Issues Fixed: Y
+Issues Resolved by Evidence: Z
+Issues Remaining: W
 
 ### Resolved
 - [1] [severity] [category] file:line -- fixed in round N
 
+### Resolved by Evidence
+- [2] [severity] [category] file:line -- <source>: <brief explanation>
+
 ### Dismissed (user decision)
-- [2] [severity] [category] file:line -- user dismissed: <reason>
+- [3] [severity] [category] file:line -- user dismissed: <reason>
 
 ### Remaining (if max rounds reached)
-- [3] [severity] [category] file:line -- description
+- [4] [severity] [category] file:line -- description
 ```
 
 ## Key Differences from Collaborative Loop
@@ -296,7 +368,7 @@ Exit reason: <all clean | max rounds reached | user stopped>
 |--------|-------------|-------------------|
 | Execution model | **Parallel** -- both review at once | **Sequential** -- produce, validate, act |
 | Primary goal | **Finding issues** in existing work | **Driving changes** iteratively |
-| Disagreement handling | **User mediation** via triage | Automated bilateral consensus gate |
+| Disagreement handling | **Evidence-first** (cross-validate → research → user only if inconclusive) | Automated bilateral consensus gate |
 | Codex failure | Degrades gracefully (Claude-only) | ABORTs entirely |
 | Best for | **Review of existing work** | **Iterative improvement** |
 | Agent structure | Domain-specific reviewers | Single analysis pass |
@@ -305,7 +377,7 @@ Use cross-review when you want independent perspectives on existing work. Use co
 
 ## Common Mistakes
 
-- **Do NOT resolve disagreements silently.** Any conflict between Claude and Codex findings MUST be surfaced to the user. Never auto-resolve in favor of either model.
+- **Do NOT resolve disagreements by opinion.** Never silently pick one model's view over the other. Disagreements must be resolved by **evidence** (cross-validation + research) or escalated to the user. "Claude thinks X" is not evidence — documentation, code inspection, and API references are.
 
 - **Do NOT run Claude agents to completion before launching Codex.** Both must start simultaneously. Launch Codex first (Skill tool), then spawn Claude agents in the same turn.
 
@@ -320,3 +392,5 @@ Use cross-review when you want independent perspectives on existing work. Use co
 - **Do NOT skip user confirmation for auto-fixable items.** Present the triage and wait for user to confirm before applying fixes.
 
 - **Do NOT use `/codex:adversarial-review` for this workflow.** It produces independent findings without cross-mapping. Use `/codex:review` for code and `/codex:rescue` with structured prompts for non-code.
+
+- **Do NOT escalate disagreements to the user before cross-validation and research.** The usage pattern is: triage → cross-validate → research evidence → only then ask the user. Premature escalation wastes the user's time on questions that documentation can answer.

@@ -201,6 +201,9 @@ Codex returns per `validation-format.md`:
 - [1] CONFIRM -- evidence from code/spec
 - [3] CONFIRM -- evidence from code/spec
 
+## Refined Findings
+- [4] REFINE -- agree with issue but severity should be medium, not high: <reasoning>
+
 ## Rejected Findings
 - [2] REJECT -- evidence why this is a false positive
 
@@ -212,7 +215,7 @@ Codex returns per `validation-format.md`:
 VALIDATED | PARTIALLY_VALIDATED | REJECTED
 
 ## Summary
-Brief assessment (confirmed X, rejected Y, found Z new)
+Brief assessment (confirmed X, refined Y, rejected Z, found W new)
 ```
 
 ## Step 4.5: Claude RE-EVALUATES Codex Validation
@@ -225,6 +228,8 @@ Claude reviews Codex's CONFIRM/REJECT decisions against the original analysis. T
 |------------|---------------|--------|
 | CONFIRMED | Yes | **Proceed** -- act on this finding in Step 5 |
 | CONFIRMED | No | **Flag for user** -- present disagreement, ask for mediation |
+| REFINED | Yes | **Proceed** -- act with Codex's adjusted severity/fix |
+| REFINED | No | **Flag for user** -- present disagreement on the refinement |
 | REJECTED | Yes | **Drop** -- both agree this is not a real issue |
 | REJECTED | No | **Flag for user** -- present disagreement, ask for mediation |
 
@@ -232,9 +237,11 @@ Claude reviews Codex's CONFIRM/REJECT decisions against the original analysis. T
 
 1. For each CONFIRMED finding: Claude reviews whether the confirmation is sound. If Claude still agrees the finding is real, mark as **proceed**. If Claude now thinks Codex's confirmation was based on a misunderstanding, mark as **flag**.
 
-2. For each REJECTED finding: Claude reviews whether the rejection is justified. If Claude agrees the finding was a false positive, mark as **drop**. If Claude still believes the finding is valid despite Codex's rejection, mark as **flag**.
+2. For each REFINED finding: Claude reviews the adjusted severity/fix. If Claude agrees with the refinement, mark as **proceed** (using Codex's adjusted severity/fix). If Claude disagrees with the refinement, mark as **flag**.
 
-3. For new findings from Codex: Claude evaluates each. If Claude agrees it is a real issue, mark as **proceed**. If Claude disagrees, mark as **flag**.
+3. For each REJECTED finding: Claude reviews whether the rejection is justified. If Claude agrees the finding was a false positive, mark as **drop**. If Claude still believes the finding is valid despite Codex's rejection, mark as **flag**.
+
+4. For new findings from Codex: Claude evaluates each. If Claude agrees it is a real issue, mark as **proceed**. If Claude disagrees, mark as **flag**.
 
 4. **Flagged disagreements:** Present ALL flagged items to the user with both models' reasoning. Wait for user mediation before continuing. The user may:
    - Confirm the finding (add to proceed list)

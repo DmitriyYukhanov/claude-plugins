@@ -28,13 +28,21 @@ Every plugin has a `CHANGELOG.md` in its root directory (`plugins/<name>/CHANGEL
 - **Fixed** — bug fixes, typo corrections
 - **Security** — vulnerability patches
 
+**Changelog style:**
+- Each entry should be **one short sentence** describing the user-facing outcome, not the implementation detail
+- Good: "Cross-validation step — each model verifies the other's findings before presenting to user"
+- Bad: "Cross-validation step (Step 5) — after initial triage, each model's findings are verified by the other model before presenting to user, using CONFIRM/REJECT/REFINE verdicts from validation-format.md"
+- Merge related entries — don't list every file or sub-change separately when they serve a single purpose
+- Use imperative mood: "Add search skill" not "Added search skill"
+
 **Changelog gotchas — do NOT:**
-- Write vague entries like "various improvements" or "bug fixes" — be specific about what changed and why it matters to the user
+- Write vague entries like "various improvements" or "bug fixes" — be specific about what changed
+- Pad entries with implementation details (step numbers, file names, tool names) — describe WHAT changed for the user, not HOW it was implemented
+- List every sub-change as a separate entry — group them by user-visible outcome
 - Use commit messages as changelog entries — changelogs are for users, commits are for developers
 - Forget the date — every version header MUST include the ISO 8601 date: `## [1.2.0] - 2026-04-03`
-- Mix user-facing and internal changes — only document what affects plugin users (new skills, changed behavior, fixed bugs), not internal refactoring
+- Mix user-facing and internal changes — only document what affects plugin users
 - Backfill changelog after the fact from memory — write entries as you make changes, not at release time
-- Use past tense in entries — use imperative mood: "Add search skill" not "Added search skill"
 
 **Changelog template for new plugins:**
 ```markdown

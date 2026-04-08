@@ -4,6 +4,8 @@ Focus areas per artifact type. Inject these into `<task>` blocks when composing 
 
 ## Code
 
+Agents: `security-reviewer`, `performance-reviewer`, `correctness-reviewer`, `test-coverage-reviewer`, `maintainability-reviewer`
+
 - Correctness & edge cases
 - Security vulnerabilities
 - Performance bottlenecks
@@ -15,6 +17,8 @@ Focus areas per artifact type. Inject these into `<task>` blocks when composing 
 
 ## Plan
 
+Agents: `completeness-reviewer`, `feasibility-reviewer`
+
 - Requirement completeness (every requirement → at least one task)
 - DAG validity (no cycles in task ordering)
 - Dependency correctness
@@ -22,6 +26,8 @@ Focus areas per artifact type. Inject these into `<task>` blocks when composing 
 - Task clarity and assumption identification
 
 ## Architecture
+
+Agents: `patterns-reviewer`, `scalability-reviewer`
 
 - Pattern consistency across components
 - Separation of concerns / clear boundaries
@@ -32,6 +38,8 @@ Focus areas per artifact type. Inject these into `<task>` blocks when composing 
 - Trade-off rationale
 
 ## Design
+
+Agents: `requirements-reviewer`, `tradeoffs-reviewer`
 
 - Requirements coverage
 - Technical feasibility

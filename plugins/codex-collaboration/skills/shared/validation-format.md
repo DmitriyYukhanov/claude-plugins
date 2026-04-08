@@ -10,6 +10,9 @@ Include this as `<structured_output_contract>` in Codex validation prompts compo
 ## Confirmed Findings
 - [finding #] CONFIRM — evidence from code/spec
 
+## Refined Findings
+- [finding #] REFINE — agree with the issue but disagree on severity/fix: <revised assessment>
+
 ## Rejected Findings
 - [finding #] REJECT — evidence why this is a false positive
 
@@ -20,11 +23,12 @@ Include this as `<structured_output_contract>` in Codex validation prompts compo
 VALIDATED | PARTIALLY_VALIDATED | REJECTED
 
 ## Summary
-Brief assessment (confirmed X, rejected Y, found Z new)
+Brief assessment (confirmed X, refined Y, rejected Z, found W new)
 ```
 
 ## Parsing Rules
 
-- `VALIDATED` — majority confirmed, proceed with confirmed + new findings
-- `PARTIALLY_VALIDATED` — some confirmed, some rejected, proceed with confirmed + new only
+- `VALIDATED` — majority confirmed, proceed with confirmed + refined + new findings
+- `PARTIALLY_VALIDATED` — some confirmed, some rejected, proceed with confirmed + refined + new only
 - `REJECTED` — majority rejected, escalate to user before proceeding
+- REFINE counts as partial agreement — the issue is real but the severity or fix needs adjustment. Treat refined findings as confirmed with the validator's severity/fix taking precedence.
