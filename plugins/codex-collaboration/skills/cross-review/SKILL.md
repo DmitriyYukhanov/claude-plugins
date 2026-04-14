@@ -107,6 +107,8 @@ Be specific: reference file paths, line numbers, and concrete examples.
 
 Launch Codex **in the same turn** as Claude agents. Do not wait for Claude.
 
+**Pre-dispatch: fresh setup.** Before dispatching, re-invoke `/codex:setup` to verify the runtime is alive. Read the "Fresh Setup Before Dispatch" section in `${CLAUDE_PLUGIN_ROOT}/skills/shared/prerequisites.md`. Do NOT reuse the preflight result from Step 1 — the runtime endpoint may have changed.
+
 **For code artifacts:**
 - Invoke `/codex:review --base <ref> --background` via the Skill tool
 - `/codex:review` reviews the entire branch diff, not specific files -- this is by design
@@ -119,18 +121,22 @@ Launch Codex **in the same turn** as Claude agents. Do not wait for Claude.
 - Include `${CLAUDE_PLUGIN_ROOT}/skills/shared/verdict-format.md` as `<structured_output_contract>`
 - Non-code prompts can be scoped to specific files by including them in the prompt
 
+**Post-dispatch: PID liveness check.** Within 30 seconds of dispatch, verify the task's PID is alive using the platform-appropriate command from `${CLAUDE_PLUGIN_ROOT}/skills/shared/prerequisites.md` ("PID Liveness Verification"). If the PID is dead, follow the Auto-Retry Protocol in the same file.
+
 **Poll and retrieve:**
 - Poll job status via `/codex:status` (Skill tool)
 - Retrieve output via `/codex:result` (Skill tool) when complete
+- **Starting-stuck detection:** if the task phase stays `starting` for >2 minutes, check PID liveness immediately — do not wait for log staleness. See "Starting-Stuck Detection" in prerequisites.md.
 
 ### Codex Job Failure Handling
 
-If Codex background job fails (auth expired, CLI error, timeout):
+If Codex background job fails (auth expired, CLI error, timeout, dead PID):
 
-1. Report the failure to the user with the specific error
-2. Proceed to triage with Claude-only findings but **warn that cross-validation is degraded**
-3. Mark all Claude findings as single-source (no cross-validation possible)
-4. If user wants full cross-review, they should fix Codex and re-run
+1. If dead PID detected: follow the Auto-Retry Protocol in `${CLAUDE_PLUGIN_ROOT}/skills/shared/prerequisites.md` (re-setup → re-dispatch, max 1 retry)
+2. If retry also fails, or failure is non-retriable (auth expired, CLI error): report the failure to the user with the specific error
+3. Proceed to triage with Claude-only findings but **warn that cross-validation is degraded**
+4. Mark all Claude findings as single-source (no cross-validation possible)
+5. If user wants full cross-review, they should fix Codex and re-run
 
 This differs from collaborative-loop, which ABORTs entirely on Codex failure. Cross-review can degrade gracefully because Claude's findings still have value as independent review, even without cross-validation. In degraded mode, skip Steps 5-6 (cross-validation and evidence research are meaningless without a second model) and present all Claude findings as unverified in Step 7.
 
@@ -394,3 +400,5 @@ Use cross-review when you want independent perspectives on existing work. Use co
 - **Do NOT use `/codex:adversarial-review` for this workflow.** It produces independent findings without cross-mapping. Use `/codex:review` for code and `/codex:rescue` with structured prompts for non-code.
 
 - **Do NOT escalate disagreements to the user before cross-validation and research.** The usage pattern is: triage → cross-validate → research evidence → only then ask the user. Premature escalation wastes the user's time on questions that documentation can answer.
+
+- **Do NOT reuse stale preflight state for Codex dispatch.** The runtime endpoint (named pipe) can change between Step 1 preflight and Step 3 dispatch. Always re-run `/codex:setup` immediately before dispatching Codex. A 5-second setup call prevents 10+ minutes of debugging zombie tasks.

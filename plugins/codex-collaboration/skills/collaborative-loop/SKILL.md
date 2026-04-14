@@ -65,25 +65,37 @@ The collaborative loop requires BOTH collaborators. If Codex fails at any point 
 3. Report the failure clearly with the exact error
 4. Suggest remediation (re-run `/codex:setup`, check auth, verify CLI installation)
 
-### Hang Detection (Stale-Log Monitor)
+### Hang Detection (PID Liveness + Stale-Log Monitor)
 
-Codex tasks can legitimately run for 20+ minutes on complex analyses. Do NOT use a hard timeout. Instead, detect hangs via log staleness:
+Codex tasks can legitimately run for 20+ minutes on complex analyses. Do NOT use a hard timeout. Instead, use a two-tier detection approach: **PID liveness first** (fast, catches dead processes), then **log staleness** (slow, catches live-but-stuck processes).
+
+**Tier 1 — PID liveness (within 30 seconds of dispatch):**
+
+After dispatching a Codex task, verify the task's PID is alive within 30 seconds. Use the platform-appropriate command from `${CLAUDE_PLUGIN_ROOT}/skills/shared/prerequisites.md` ("PID Liveness Verification"). If dead, follow the Auto-Retry Protocol in the same file.
+
+**Tier 1b — Starting-stuck detection (2-minute threshold):**
+
+If the task phase stays `starting` for >2 minutes without advancing to `running` or showing file reads in the log, check PID liveness immediately. If PID is dead → Auto-Retry Protocol. If PID is alive → fall through to Tier 2.
+
+**Tier 2 — Log staleness (5-minute threshold):**
 
 1. After invoking `/codex:rescue`, note the task's log file path from the job record
 2. Every **2 minutes**, check the log file's last-modified timestamp and tail the last few lines
-3. If the log file has **not been modified for 5 minutes** AND the task phase is still `starting` or has not advanced, the task is stalled
+3. If the log file has **not been modified for 5 minutes** AND the task phase has not advanced, the task is stalled
 4. If the log file shows active progress (new lines, phase changes like `verifying`, `reading files`), the task is healthy -- keep waiting
 
-When a stall is detected:
+**When a stall is detected (either tier):**
 
 1. Cancel the stalled task via `/codex:cancel` or kill its PID
-2. Attempt **one** automatic retry with a fresh task
-3. If the retry also stalls (same 5-minute staleness), STOP the loop and report:
+2. Re-run `/codex:setup` to establish a fresh runtime
+3. Attempt **one** automatic retry with a fresh task
+4. Verify the retry's PID is alive within 30 seconds
+5. If the retry also fails (dead PID or same staleness), STOP the loop and report:
    ```
-   Codex hung twice consecutively. The broker's app-server subprocess may be dead.
-   Remediation: kill the broker process and re-run /codex:setup.
+   Codex process died or hung twice. The runtime may be unstable.
+   Remediation: close all Codex instances, re-run /codex:setup, then re-invoke this skill.
    ```
-4. Do NOT retry more than once -- repeated hangs indicate an infrastructure problem, not a transient failure
+6. Do NOT retry more than once -- repeated failures indicate an infrastructure problem, not a transient failure
 
 ## Step 2: Detect Context
 
@@ -169,9 +181,11 @@ Hold findings in conversation context. Do not write intermediate files.
 
 Send Claude's numbered findings to Codex for per-finding validation. Codex independently evaluates each finding and returns CONFIRM or REJECT with evidence.
 
+**Pre-dispatch: fresh setup.** Before dispatching, re-invoke `/codex:setup` to verify the runtime is alive. Read the "Fresh Setup Before Dispatch" section in `${CLAUDE_PLUGIN_ROOT}/skills/shared/prerequisites.md`. Do NOT reuse the preflight result from Step 1 — the runtime endpoint may have changed since preflight.
+
 **IMPORTANT:** Use `/codex:rescue --fresh` via the Skill tool -- NOT `/codex:adversarial-review`. Adversarial review produces its own independent findings and does not map back per-finding. Only `/codex:rescue` with a custom prompt supports per-finding CONFIRM/REJECT. Always pass `--fresh` to prevent the codex plugin from prompting the user about resuming a previous thread.
 
-**Monitor the task using the Hang Detection (Stale-Log Monitor) procedure from Step 1.** Do not poll with rapid bash commands -- check every 2 minutes, and only act if the log is stale for 5 minutes.
+**Monitor the task using the Hang Detection procedure from Step 1.** Verify PID within 30 seconds, watch for starting-stuck at 2 minutes, and fall back to log-staleness at 5 minutes. Do not poll with rapid bash commands.
 
 ### Compose the Validation Prompt
 
@@ -274,6 +288,8 @@ Dropped (both models agreed not real):
 ## Step 6: Codex REVIEWS Changes
 
 After Claude implements fixes, Codex reviews the resulting changes.
+
+**Pre-dispatch: fresh setup.** Before dispatching, re-invoke `/codex:setup` to verify the runtime is alive. Same rationale as Step 4 — the runtime endpoint may have changed during Claude's implementation work in Step 5.
 
 ### For Code Artifacts
 
@@ -400,4 +416,8 @@ Findings remaining: Z
 
 - **Do NOT poll Codex status rapidly.** Check the log file every 2 minutes, not every few seconds. 50+ bash commands polling status wastes context and provides no value. Use the Stale-Log Monitor procedure: check timestamp + tail, decide healthy or stalled, act accordingly.
 
-- **Do NOT use hard timeouts for Codex tasks.** Complex validations legitimately take 15-25 minutes. A hard timeout would kill healthy tasks. Instead, detect hangs via log staleness (no modification for 5 minutes while phase hasn't advanced).
+- **Do NOT use hard timeouts for Codex tasks.** Complex validations legitimately take 15-25 minutes. A hard timeout would kill healthy tasks. Instead, use the two-tier detection: PID liveness (30s + 2min starting-stuck), then log staleness (5 minutes).
+
+- **Do NOT reuse stale preflight state for Codex dispatch.** The runtime endpoint (named pipe) can change between Step 1 preflight and Steps 4/6 dispatch. Always re-run `/codex:setup` immediately before dispatching Codex. A 5-second setup call prevents 10+ minutes of debugging zombie tasks.
+
+- **Do NOT trust companion task status without verifying PID.** The companion script reports tasks as "running" from saved state even when the process is dead. Always verify the PID is alive after dispatch and when investigating stalls.

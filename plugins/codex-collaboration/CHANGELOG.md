@@ -5,6 +5,18 @@ All notable changes to the **codex-collaboration** plugin will be documented in 
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.3.0] - 2026-04-14
+
+### Added
+- PID liveness verification within 30 seconds of Codex dispatch to catch dead processes early
+- Starting-stuck detection at 2-minute threshold (down from 9+ minutes in practice)
+- Fresh `/codex:setup` re-invocation before each Codex dispatch to prevent pipe-mismatch zombie tasks
+- Auto-retry protocol on dead process: re-setup then re-dispatch with max 1 retry
+
+### Changed
+- Hang detection is now two-tier: PID liveness (fast) then log staleness (slow)
+- Stale-log monitor re-runs `/codex:setup` before retry to establish fresh runtime
+
 ## [1.2.0] - 2026-04-08
 
 ### Added
