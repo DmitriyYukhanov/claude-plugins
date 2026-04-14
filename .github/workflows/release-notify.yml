@@ -62,24 +62,49 @@ jobs:
                 | grep -o '[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*' || echo "unknown")
             fi
 
-            # Extract the latest version section from CHANGELOG.md
-            # Matches from the first ## [X.Y.Z] header until the next ## [ header or EOF
+            # Extract new changelog entries added since $BEFORE
             entries=""
             if [ -f "$changelog" ]; then
-              entries=$(awk '
+              old_top_version=""
+              old_changelog=$(git show "${BEFORE}:${changelog}" 2>/dev/null || true)
+
+              # If plugin was renamed, find predecessor changelog in deleted dirs
+              if [ -z "$old_changelog" ]; then
+                for old_plugin in $changed_plugins; do
+                  if [ ! -d "plugins/${old_plugin}" ]; then
+                    old_changelog=$(git show "${BEFORE}:plugins/${old_plugin}/CHANGELOG.md" 2>/dev/null || true)
+                    [ -n "$old_changelog" ] && break
+                  fi
+                done
+              fi
+
+              if [ -n "$old_changelog" ]; then
+                old_top_version=$(echo "$old_changelog" \
+                  | sed -n 's/^## \[\([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\)\].*/\1/p' \
+                  | head -1)
+              fi
+
+              # stop="" extracts all entries (new plugin); otherwise stop at old version
+              entries=$(awk -v stop="$old_top_version" '
                 /^## \[[0-9]/ {
-                  if (found) exit
+                  if (match($0, /\[[0-9]+\.[0-9]+\.[0-9]+\]/)) {
+                    v = substr($0, RSTART+1, RLENGTH-2)
+                  } else {
+                    next
+                  }
+                  if (stop != "" && v == stop) exit
+                  if (found) print ""
                   found=1
+                  print
                   next
                 }
-                found && /^## \[/ { exit }
                 found { print }
-              ' "$changelog" | sed '/^$/d')
+              ' "$changelog" | sed -e '/./,$!d' -e :a -e '/^\n*$/{$d;N;ba;}')
             fi
 
             # Append to release body (GitHub Markdown)
             release_body="${release_body}
-          ## ${plugin} v${version}
+          ## ${plugin}
 
           ${entries}
           "
