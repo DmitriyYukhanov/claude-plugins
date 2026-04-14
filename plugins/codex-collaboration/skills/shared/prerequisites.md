@@ -93,7 +93,8 @@ When a dead PID or starting-stuck condition with dead PID is detected:
 2. Re-run `/codex:setup` (establishes fresh runtime on new pipe)
 3. Re-dispatch the same Codex task
 4. Verify the new task's PID is alive within 30 seconds
-5. **Max 1 auto-retry** — if the retry's PID also dies, STOP and report:
+5. **Dismiss stale task artifacts** — if a scheduled poll or background notification exists for the original (dead) task, ignore its result when it fires. The original task's PID is known-dead; its late-arriving notification should not overwrite or confuse results from the retry.
+6. **Max 1 auto-retry** — if the retry's PID also dies, STOP and report:
    ```
    Codex process died twice. The runtime may be unstable.
    Remediation: close all Codex instances, re-run /codex:setup, then re-invoke this skill.

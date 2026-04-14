@@ -61,6 +61,15 @@ If no target files provided:
 
 Follow the rules in `artifact-detection.md`.
 
+### Gather Context for Non-Code Artifacts
+
+For **design**, **plan**, and **architecture** artifacts, reviewers need codebase context to validate claims made in the spec. Code artifacts get this naturally from `git diff`, but specs reference source files that reviewers must read.
+
+1. Scan the target spec for referenced file paths, function names, class names, and modules
+2. Read the referenced source files (use an Explore agent for large blast radii, direct Read for 1-3 files)
+3. Include key source context in the Codex prompt (`<codebase_context>` block) and pass file paths to Claude agents
+4. This step pays for itself — reviewers without source context produce vague findings; reviewers WITH context catch concrete issues like wrong call-site counts and missing files in blast radius
+
 ### Initialize State
 
 ```
@@ -107,7 +116,7 @@ Be specific: reference file paths, line numbers, and concrete examples.
 
 Launch Codex **in the same turn** as Claude agents. Do not wait for Claude.
 
-**Pre-dispatch: fresh setup.** Before dispatching, re-invoke `/codex:setup` to verify the runtime is alive. Read the "Fresh Setup Before Dispatch" section in `${CLAUDE_PLUGIN_ROOT}/skills/shared/prerequisites.md`. Do NOT reuse the preflight result from Step 1 — the runtime endpoint may have changed.
+**Pre-dispatch: fresh setup.** Before dispatching, re-invoke `/codex:setup` to verify the runtime is alive. Read the "Fresh Setup Before Dispatch" section in `${CLAUDE_PLUGIN_ROOT}/skills/shared/prerequisites.md`. Do NOT reuse the preflight result from Step 1 — the runtime endpoint may have changed. **After setup confirms success, proceed immediately to dispatch in the same turn. Do not stop, summarize setup status, or wait for user acknowledgment — the user said "cross-review", not "set up and ask me before continuing".**
 
 **For code artifacts:**
 - Invoke `/codex:review --base <ref> --background` via the Skill tool
@@ -125,6 +134,7 @@ Launch Codex **in the same turn** as Claude agents. Do not wait for Claude.
 
 **Poll and retrieve:**
 - Poll job status via `/codex:status` (Skill tool)
+- If `/codex:status` fails via Skill tool (e.g., `disable-model-invocation` error), fall back to querying the Codex companion's task status via Bash commands directly
 - Retrieve output via `/codex:result` (Skill tool) when complete
 - **Starting-stuck detection:** if the task phase stays `starting` for >2 minutes, check PID liveness immediately — do not wait for log staleness. See "Starting-Stuck Detection" in prerequisites.md.
 
@@ -164,7 +174,19 @@ For each unique finding across both reviews:
 | Disagreement (severity, fix approach, or validity) | **disagreement** |
 | Both rate as minor + no concrete action | **informational** |
 
-Hold initial triage results in conversation context. **Do NOT present to user yet** — proceed to cross-validation first.
+### Triage Presentation (Internal)
+
+Present the cross-model agreement matrix as a table for internal tracking. This table is NOT shown to the user yet — it feeds Step 5.
+
+```
+| # | Severity | Finding | Claude Agent 1 | Claude Agent 2 | Codex |
+|---|----------|---------|----------------|----------------|-------|
+| 1 | critical | Missing files in blast radius | critical | critical | major |
+| 2 | high     | Call site count wrong | high | minor | major |
+| 3 | —        | (Claude-only finding) | high | medium | — |
+```
+
+This format makes it immediately visible which findings are agreed, single-source, or disputed. Use `—` for reviewers that didn't find the issue. After classification, proceed **immediately** to Step 5 — do not stop or wait for user acknowledgment between triage and cross-validation.
 
 ### Fast-Path: Full Agreement
 

@@ -5,6 +5,18 @@ All notable changes to the **codex-collaboration** plugin will be documented in 
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.4.0] - 2026-04-14
+
+### Added
+- Context gathering guidance for non-code artifacts — reviewers now read referenced source files before reviewing design/plan/architecture specs
+- Cross-reference triage table showing which reviewers found each issue at what severity
+- Fallback path when `/codex:status` Skill tool fails with `disable-model-invocation`
+- Stale task dismissal step in auto-retry protocol to ignore late-arriving notifications from dead tasks
+
+### Fixed
+- Flow interruption after Codex setup — setup → dispatch is now explicitly uninterruptible
+- Triage → cross-validation flow runs without stopping for user acknowledgment
+
 ## [1.3.0] - 2026-04-14
 
 ### Added
