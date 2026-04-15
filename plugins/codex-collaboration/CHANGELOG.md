@@ -5,6 +5,26 @@ All notable changes to the **codex-collaboration** plugin will be documented in 
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.5.0] - 2026-04-15
+
+### Changed
+- Remove degraded mode from cross-review — both models are now required, same as collaborative-loop
+- Replace PID-based liveness checks with companion task status checks — Windows CLI launcher exits immediately, making `tasklist` unreliable
+- Increase starting-stuck threshold from 2 minutes to 5 minutes to reduce false positives
+- Replace log-staleness timer with response-generation awareness (wait up to 45 min after tool calls go quiet)
+- Increase max auto-retries from 1 to 2, with diagnostic check between retries
+- Polling interval from 2 minutes to 5 minutes to reduce context waste
+
+### Added
+- Response-generation awareness — after tool calls go quiet, Codex is likely composing its response (10-30 min); do NOT cancel
+- Diagnostic escalation protocol — run connectivity test and check companion status for errors before blindly retrying
+- WebSocket connection limit guidance — detect and recover from OpenAI's 60-minute WebSocket TTL
+- Common failure signature table with specific remediation steps
+
+### Removed
+- `tasklist` / `kill -0` PID liveness commands — replaced by companion status checks
+- Degraded mode (Claude-only fallback) from cross-review — cross-review now ABORTs on Codex failure
+
 ## [1.4.0] - 2026-04-14
 
 ### Added

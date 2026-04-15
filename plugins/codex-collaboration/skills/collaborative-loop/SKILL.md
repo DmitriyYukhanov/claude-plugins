@@ -47,12 +47,11 @@ After `/codex:setup` succeeds, verify the Codex broker can actually complete wor
 node "${CLAUDE_PLUGIN_ROOT}/../codex/scripts/codex-companion.mjs" task --fresh "Reply with OK"
 ```
 
-If this hangs for >60 seconds or returns empty output, the broker's app-server subprocess is likely dead while the broker process stays alive on the named pipe. Recovery:
+If this hangs for >60 seconds or returns empty output, the runtime's connection is dead (likely WebSocket TTL expired — see "WebSocket Connection Limit" in prerequisites.md). Recovery:
 
-1. Find the broker PID: `cat <session-dir>/broker.pid` (or check the broker.json state file)
-2. Kill the orphaned broker: `taskkill /PID <pid> /T /F` (Windows) or `kill <pid>` (Unix)
-3. Re-run `/codex:setup` -- the companion will spawn a fresh broker with a live app-server
-4. Repeat the liveness check
+1. Ask the user to close all Codex instances and restart the Codex app/CLI
+2. Re-run `/codex:setup` — the companion will establish a fresh connection
+3. Repeat the liveness check
 
 Only proceed to Step 2 after the liveness check passes.
 
@@ -65,37 +64,33 @@ The collaborative loop requires BOTH collaborators. If Codex fails at any point 
 3. Report the failure clearly with the exact error
 4. Suggest remediation (re-run `/codex:setup`, check auth, verify CLI installation)
 
-### Hang Detection (PID Liveness + Stale-Log Monitor)
+### Hang Detection
 
-Codex tasks can legitimately run for 20+ minutes on complex analyses. Do NOT use a hard timeout. Instead, use a two-tier detection approach: **PID liveness first** (fast, catches dead processes), then **log staleness** (slow, catches live-but-stuck processes).
+Codex tasks can legitimately run for 30+ minutes on complex analyses. Do NOT use a hard timeout. Use companion task status to assess health — **never PID-based checks on Windows** (see "Task Health Verification" in `${CLAUDE_PLUGIN_ROOT}/skills/shared/prerequisites.md`).
 
-**Tier 1 — PID liveness (within 30 seconds of dispatch):**
+**Tier 1 — Task health check (within 60 seconds of dispatch):**
 
-After dispatching a Codex task, verify the task's PID is alive within 30 seconds. Use the platform-appropriate command from `${CLAUDE_PLUGIN_ROOT}/skills/shared/prerequisites.md` ("PID Liveness Verification"). If dead, follow the Auto-Retry Protocol in the same file.
+After dispatching a Codex task, verify it is making progress within 60 seconds using the companion's task status. If the companion reports the task as `failed` or the runtime pipe is gone, follow the Auto-Retry Protocol in prerequisites.md.
 
-**Tier 1b — Starting-stuck detection (2-minute threshold):**
+**Tier 2 — Starting-stuck detection (5-minute threshold):**
 
-If the task phase stays `starting` for >2 minutes without advancing to `running` or showing file reads in the log, check PID liveness immediately. If PID is dead → Auto-Retry Protocol. If PID is alive → fall through to Tier 2.
+If the task phase stays `starting` for >5 minutes without advancing to `running` or showing any log entries, run Diagnostic Escalation from prerequisites.md. This catches dead connections (WebSocket limit, 403 errors) quickly.
 
-**Tier 2 — Log staleness (5-minute threshold):**
+**Tier 3 — Response-generation awareness (critical):**
 
-1. After invoking `/codex:rescue`, note the task's log file path from the job record
-2. Every **2 minutes**, check the log file's last-modified timestamp and tail the last few lines
-3. If the log file has **not been modified for 5 minutes** AND the task phase has not advanced, the task is stalled
-4. If the log file shows active progress (new lines, phase changes like `verifying`, `reading files`), the task is healthy -- keep waiting
+After tool calls go quiet, Codex is composing its response (10-30 min). **Do NOT cancel.** See "Response-Generation Awareness" in prerequisites.md for the full decision tree and the 45-minute max wait threshold.
 
-**When a stall is detected (either tier):**
+**When a genuine failure is detected:**
 
-1. Cancel the stalled task via `/codex:cancel` or kill its PID
-2. Re-run `/codex:setup` to establish a fresh runtime
-3. Attempt **one** automatic retry with a fresh task
-4. Verify the retry's PID is alive within 30 seconds
-5. If the retry also fails (dead PID or same staleness), STOP the loop and report:
+1. Cancel the stalled task via `/codex:cancel` or the companion
+2. Run Diagnostic Escalation from prerequisites.md — check for connection errors before blindly retrying
+3. If diagnostics reveal a connection issue → report to user with specific remediation, do NOT retry
+4. If no connection issue → re-run `/codex:setup` and retry (max 2 retries)
+5. If all retries fail, STOP the loop and report diagnostics:
    ```
-   Codex process died or hung twice. The runtime may be unstable.
-   Remediation: close all Codex instances, re-run /codex:setup, then re-invoke this skill.
+   Codex failed after retries. Diagnostics: <specific findings from logs>
+   Remediation: <specific action based on diagnostics>
    ```
-6. Do NOT retry more than once -- repeated failures indicate an infrastructure problem, not a transient failure
 
 ## Step 2: Detect Context
 
@@ -185,7 +180,7 @@ Send Claude's numbered findings to Codex for per-finding validation. Codex indep
 
 **IMPORTANT:** Use `/codex:rescue --fresh` via the Skill tool -- NOT `/codex:adversarial-review`. Adversarial review produces its own independent findings and does not map back per-finding. Only `/codex:rescue` with a custom prompt supports per-finding CONFIRM/REJECT. Always pass `--fresh` to prevent the codex plugin from prompting the user about resuming a previous thread.
 
-**Monitor the task using the Hang Detection procedure from Step 1.** Verify PID within 30 seconds, watch for starting-stuck at 2 minutes, and fall back to log-staleness at 5 minutes. Do not poll with rapid bash commands.
+**Monitor the task using the Hang Detection procedure from Step 1.** Verify task health within 60 seconds, watch for starting-stuck at 5 minutes. Remember: after tool calls go quiet, Codex is likely generating its response (10-30 minutes) — do NOT cancel. Poll status every 5 minutes, not every 2 minutes.
 
 ### Compose the Validation Prompt
 
@@ -414,10 +409,12 @@ Findings remaining: Z
 
 - **Do NOT skip Step 4.5.** The re-evaluation gate is what distinguishes this from a simple "send to Codex and trust the result" workflow. Claude's independent review of Codex's decisions catches validation errors.
 
-- **Do NOT poll Codex status rapidly.** Check the log file every 2 minutes, not every few seconds. 50+ bash commands polling status wastes context and provides no value. Use the Stale-Log Monitor procedure: check timestamp + tail, decide healthy or stalled, act accordingly.
+- **Do NOT poll Codex status rapidly.** Check status every 5 minutes, not every few seconds. 50+ bash commands polling status wastes context and provides no value.
 
-- **Do NOT use hard timeouts for Codex tasks.** Complex validations legitimately take 15-25 minutes. A hard timeout would kill healthy tasks. Instead, use the two-tier detection: PID liveness (30s + 2min starting-stuck), then log staleness (5 minutes).
+- **Do NOT use hard timeouts for Codex tasks.** Complex validations legitimately take 15-30 minutes. A hard timeout would kill healthy tasks. Use the Hang Detection procedure from Step 1.
+
+- **Do NOT cancel a task after tool calls go quiet** — it is generating its response (10-30 min). See "Response-Generation Awareness" in prerequisites.md.
+
+- **Do NOT use PID-based liveness checks on Windows** — use companion task status. See "Task Health Verification" in prerequisites.md.
 
 - **Do NOT reuse stale preflight state for Codex dispatch.** The runtime endpoint (named pipe) can change between Step 1 preflight and Steps 4/6 dispatch. Always re-run `/codex:setup` immediately before dispatching Codex. A 5-second setup call prevents 10+ minutes of debugging zombie tasks.
-
-- **Do NOT trust companion task status without verifying PID.** The companion script reports tasks as "running" from saved state even when the process is dead. Always verify the PID is alive after dispatch and when investigating stalls.

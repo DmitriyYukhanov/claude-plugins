@@ -130,25 +130,24 @@ Launch Codex **in the same turn** as Claude agents. Do not wait for Claude.
 - Include `${CLAUDE_PLUGIN_ROOT}/skills/shared/verdict-format.md` as `<structured_output_contract>`
 - Non-code prompts can be scoped to specific files by including them in the prompt
 
-**Post-dispatch: PID liveness check.** Within 30 seconds of dispatch, verify the task's PID is alive using the platform-appropriate command from `${CLAUDE_PLUGIN_ROOT}/skills/shared/prerequisites.md` ("PID Liveness Verification"). If the PID is dead, follow the Auto-Retry Protocol in the same file.
+**Post-dispatch: health check.** Within 60 seconds of dispatch, verify the task is making progress using the companion's task status (see "Task Health Verification" in `${CLAUDE_PLUGIN_ROOT}/skills/shared/prerequisites.md`). **Do NOT use PID-based checks on Windows** — the CLI launcher exits immediately while the actual work happens in the runtime server.
 
 **Poll and retrieve:**
 - Poll job status via `/codex:status` (Skill tool)
 - If `/codex:status` fails via Skill tool (e.g., `disable-model-invocation` error), fall back to querying the Codex companion's task status via Bash commands directly
 - Retrieve output via `/codex:result` (Skill tool) when complete
-- **Starting-stuck detection:** if the task phase stays `starting` for >2 minutes, check PID liveness immediately — do not wait for log staleness. See "Starting-Stuck Detection" in prerequisites.md.
+- **Starting-stuck detection:** if the task phase stays `starting` for >5 minutes with no log entries, run Diagnostic Escalation from prerequisites.md
+- **Response generation awareness:** after tool calls go quiet, the task is likely composing its response — this can take 10-30 minutes for complex reviews. Do NOT cancel. See "Response-Generation Awareness" in prerequisites.md.
 
 ### Codex Job Failure Handling
 
-If Codex background job fails (auth expired, CLI error, timeout, dead PID):
+If Codex background job fails (auth expired, CLI error, timeout, dead task):
 
-1. If dead PID detected: follow the Auto-Retry Protocol in `${CLAUDE_PLUGIN_ROOT}/skills/shared/prerequisites.md` (re-setup → re-dispatch, max 1 retry)
-2. If retry also fails, or failure is non-retriable (auth expired, CLI error): report the failure to the user with the specific error
-3. Proceed to triage with Claude-only findings but **warn that cross-validation is degraded**
-4. Mark all Claude findings as single-source (no cross-validation possible)
-5. If user wants full cross-review, they should fix Codex and re-run
+1. Follow the Auto-Retry Protocol in `${CLAUDE_PLUGIN_ROOT}/skills/shared/prerequisites.md` — run diagnostics, then retry (max 2 retries)
+2. If diagnostics reveal a connection issue (WebSocket limit, 403, etc.): report the specific error and remediation to the user. **Do NOT retry against a dead connection.** Wait for user to fix and confirm.
+3. If all retries fail: **STOP and report.** Do NOT proceed with Claude-only findings.
 
-This differs from collaborative-loop, which ABORTs entirely on Codex failure. Cross-review can degrade gracefully because Claude's findings still have value as independent review, even without cross-validation. In degraded mode, skip Steps 5-6 (cross-validation and evidence research are meaningless without a second model) and present all Claude findings as unverified in Step 7.
+**Both models are required.** The entire value of cross-review is independent perspectives from two different models. Claude reviewing its own output provides no cross-validation signal. If Codex cannot complete, the review must be retried after fixing the underlying issue — never degraded to single-model.
 
 ### Fast-Path: Zero Findings
 
@@ -397,11 +396,11 @@ Issues Remaining: W
 | Execution model | **Parallel** -- both review at once | **Sequential** -- produce, validate, act |
 | Primary goal | **Finding issues** in existing work | **Driving changes** iteratively |
 | Disagreement handling | **Evidence-first** (cross-validate → research → user only if inconclusive) | Automated bilateral consensus gate |
-| Codex failure | Degrades gracefully (Claude-only) | ABORTs entirely |
+| Codex failure | ABORTs (both models required) | ABORTs entirely |
 | Best for | **Review of existing work** | **Iterative improvement** |
 | Agent structure | Domain-specific reviewers | Single analysis pass |
 
-Use cross-review when you want independent perspectives on existing work. Use collaborative-loop when you want iterative improvement driven by bilateral consensus.
+Both skills require Codex — neither falls back to Claude-only mode. Use cross-review when you want independent perspectives on existing work. Use collaborative-loop when you want iterative improvement driven by bilateral consensus.
 
 ## Common Mistakes
 
@@ -409,7 +408,13 @@ Use cross-review when you want independent perspectives on existing work. Use co
 
 - **Do NOT run Claude agents to completion before launching Codex.** Both must start simultaneously. Launch Codex first (Skill tool), then spawn Claude agents in the same turn.
 
-- **Do NOT forget to poll `/codex:status` for background jobs.** Codex runs in the background -- you must check status and retrieve results before triage.
+- **Do NOT forget to poll `/codex:status` for background jobs.** Codex runs in the background -- you must check status and retrieve results before triage. Poll every 5 minutes, not every 2 minutes — frequent polling wastes context.
+
+- **Do NOT cancel a task after tool calls go quiet** — it is generating its response (10-30 min). See "Response-Generation Awareness" in prerequisites.md.
+
+- **Do NOT use PID-based liveness checks on Windows** — use companion task status. See "Task Health Verification" in prerequisites.md.
+
+- **Do NOT proceed with Claude-only findings if Codex fails.** Both models are required. STOP and report the failure with diagnostics.
 
 - **Do NOT skip triage and apply both reviews directly.** The two reviews may contain contradictions. Triage reconciles them and identifies disagreements.
 

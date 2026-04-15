@@ -53,7 +53,7 @@ The collaborative loop requires BOTH collaborators. If Codex fails at runtime:
 
 ## Runtime Health Checks
 
-These checks are used by both skills **at dispatch time**, not just during preflight. The Codex runtime endpoint (named pipe on Windows, socket on Unix) can change between preflight and dispatch if the user opens Codex from another terminal, the desktop app restarts, or the broker process crashes.
+These checks are used by both skills **at dispatch time**, not just during preflight. The Codex runtime endpoint (named pipe on Windows, socket on Unix) can change between preflight and dispatch if the user opens Codex from another terminal, the desktop app restarts, or the runtime process crashes.
 
 ### Fresh Setup Before Dispatch
 
@@ -61,41 +61,107 @@ These checks are used by both skills **at dispatch time**, not just during prefl
 
 This takes ~5 seconds and prevents the entire class of pipe-mismatch zombie tasks.
 
-### PID Liveness Verification
+### Task Health Verification
 
-After dispatching a Codex task, verify the task's process is alive **within 30 seconds**:
+After dispatching a Codex task, verify it is making progress **within 60 seconds**. Check companion task status — if the task has a phase (`starting`, `running`) and shows log entries, it is alive.
+
+**Do NOT use PID-based liveness checks on Windows.** The Codex CLI launcher process exits immediately after dispatching work to the shared runtime server via a named pipe. `tasklist /FI "PID eq <PID>"` will always show the launcher PID as dead, even when the task is running normally. The actual work happens in the runtime server process, which is a different PID.
+
+**Instead, verify health through the companion's task status:**
 
 ```bash
-# Windows
-tasklist /FI "PID eq <PID>" /NH 2>/dev/null | grep -q "<PID>"
-
-# Unix
-kill -0 <PID> 2>/dev/null
+# Check task phase and recent log activity
+node "${CLAUDE_PLUGIN_ROOT}/../codex/scripts/codex-companion.mjs" status
 ```
 
-Extract the PID from the companion's task record (job status output). If the PID does not exist, the task was dispatched to a dead or restarted runtime — trigger the Auto-Retry Protocol.
+A task is healthy if:
+- Phase is `starting` or `running`
+- Log file exists and has been modified recently (check timestamp)
+- Log shows tool calls, file reads, or other activity
+
+A task is likely dead if:
+- Companion reports task as `failed` or `cancelled`
+- Phase is `starting` with zero log entries for >5 minutes
+- The Codex runtime pipe endpoint no longer exists
 
 ### Starting-Stuck Detection
 
-If a task's phase remains `starting` for **>2 minutes** without advancing to `running` or showing file reads / tool invocations in the log:
+If a task's phase remains `starting` for **>5 minutes** without advancing to `running` or showing any log entries:
 
-1. **Check PID liveness immediately** — do not wait for the 5-minute log-staleness threshold
-2. If PID is dead → trigger Auto-Retry Protocol
-3. If PID is alive → continue with normal stale-log monitoring (the task may be in a long reasoning phase)
+1. Check companion task status for error messages
+2. Run the Diagnostic Escalation procedure (see below) to check for connection errors
+3. If diagnostics reveal a connection issue (WebSocket limit, 403, etc.) → report to user with specific remediation
+4. If no diagnostic clue → trigger Auto-Retry Protocol
 
-This catches "process died at launch" within 2 minutes instead of 9+.
+### Response-Generation Awareness
 
-### Auto-Retry Protocol (Dead Process)
+Codex tasks have two distinct phases of apparent inactivity:
 
-When a dead PID or starting-stuck condition with dead PID is detected:
+1. **Reasoning phase** — Codex is thinking before its first tool call. Usually <2 minutes.
+2. **Response generation phase** — after finishing all tool calls, Codex composes its final response. This can take **10-30 minutes** for complex reviews with many findings. During this time, the log shows no new tool calls but the task is still active.
+
+**Do NOT cancel a task that has been actively making tool calls and then goes quiet.** Check the log: if the last entries are tool calls (file reads, searches), the task is likely generating its response. Only consider it stuck if:
+- The task was in `starting` phase and never made any tool calls (starting-stuck)
+- The companion reports it as `failed`
+- Diagnostics reveal a connection error
+
+**When in doubt, wait.** A premature cancellation wastes 10-30 minutes of completed Codex work and forces a full restart. A false-positive "hang" wastes only waiting time.
+
+**Maximum wait:** If the task has been in response generation (no new tool calls) for **>45 minutes**, run Diagnostic Escalation. At that point, it is more likely a silent failure than a slow generation.
+
+### Diagnostic Escalation
+
+When a Codex task fails or appears stuck, check deeper before retrying blindly. These diagnostics often reveal the root cause immediately:
+
+**1. Check companion task status for error details:**
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/../codex/scripts/codex-companion.mjs" status
+```
+Look for error messages, failure reasons, or `failed` status in the output.
+
+**2. Quick connectivity test** — verify the runtime can actually reach the API:
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/../codex/scripts/codex-companion.mjs" task --fresh "Reply with OK"
+```
+If this hangs for >60 seconds or returns an error, the connection is dead.
+
+**3. Common failure signatures and remediation:**
+
+| Symptom | Likely Cause | Remediation |
+|---------|-------------|-------------|
+| Task stuck in `starting`, connectivity test hangs | OpenAI 60-minute WebSocket TTL expired | User must restart Codex app/CLI for fresh connection |
+| `403 Forbidden` in companion output | API access blocked (rate limit, auth, or network) | Check auth (`codex auth login`), VPN, or wait and retry |
+| Connectivity test returns empty/error | Stale runtime pipe — server crashed but pipe persists | User must close all Codex instances and restart |
+| Companion reports `failed` with no details | Transient API error | Re-run `/codex:setup` and retry |
+
+**4. Report diagnostics to the user** with the specific symptom and remediation step. Do NOT silently retry when the root cause is a connection issue — retrying against a dead WebSocket just wastes time.
+
+### WebSocket Connection Limit
+
+OpenAI's API enforces a **60-minute WebSocket TTL** on the shared app server connection. When this limit is hit:
+
+- The Codex CLI (interactive) still works because it creates a **fresh connection each time**
+- The companion dispatch fails because it routes through the **shared app server**, which holds a stale WebSocket
+- Tasks get stuck in `starting` or fail with `websocket_connection_limit_reached`
+
+**Detection:** If a task fails and the user confirms the interactive Codex CLI works fine, the shared app server's WebSocket is almost certainly stale.
+
+**Recovery:** The user must restart the Codex desktop app or close and reopen the Codex CLI to reset the app server. Then re-run `/codex:setup` and retry.
+
+### Auto-Retry Protocol
+
+When a task failure is detected:
 
 1. Cancel/kill the stale task entry
-2. Re-run `/codex:setup` (establishes fresh runtime on new pipe)
-3. Re-dispatch the same Codex task
-4. Verify the new task's PID is alive within 30 seconds
-5. **Dismiss stale task artifacts** — if a scheduled poll or background notification exists for the original (dead) task, ignore its result when it fires. The original task's PID is known-dead; its late-arriving notification should not overwrite or confuse results from the retry.
-6. **Max 1 auto-retry** — if the retry's PID also dies, STOP and report:
+2. **Run Diagnostic Escalation** — check logs for connection errors before blindly retrying
+3. If diagnostics reveal a connection issue → report to user with specific remediation, do NOT retry (retrying against a dead connection is pointless)
+4. If no connection issue found → re-run `/codex:setup` and re-dispatch the same task
+5. **Dismiss stale task artifacts** — ignore late-arriving notifications from the original dead task
+6. **Max 2 auto-retries** — if the second retry also fails, STOP and run full Diagnostic Escalation:
    ```
-   Codex process died twice. The runtime may be unstable.
-   Remediation: close all Codex instances, re-run /codex:setup, then re-invoke this skill.
+   Codex failed 3 times. Checking logs for root cause...
+   [run diagnostics and report findings]
+   
+   Remediation: <specific action based on diagnostics>
+   If unclear: close all Codex instances, restart the Codex app, re-run /codex:setup, then re-invoke this skill.
    ```

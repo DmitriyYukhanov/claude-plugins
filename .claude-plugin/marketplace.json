@@ -53,7 +53,7 @@
     {
       "name": "codex-collaboration",
       "description": "Cross-model collaboration between Claude and Codex — sequential drive/validate/act loops and parallel dual review with triage",
-      "version": "1.4.0",
+      "version": "1.5.0",
       "author": {
         "name": "Dmitry Yuhanov"
       },
