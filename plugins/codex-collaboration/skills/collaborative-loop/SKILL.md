@@ -60,9 +60,9 @@ Only proceed to Step 2 after the liveness check passes.
 The collaborative loop requires BOTH collaborators. If Codex fails at any point during the workflow (script error, empty output):
 
 1. Do NOT fall back to a Claude subagent as reviewer -- self-review defeats the purpose
-2. STOP the loop immediately
-3. Report the failure clearly with the exact error
-4. Suggest remediation (re-run `/codex:setup`, check auth, verify CLI installation)
+2. Attempt Direct CLI Fallback (see prerequisites.md) before stopping — construct a self-contained prompt with all context inlined and run via `codex exec`
+3. Only STOP the loop if both companion and CLI fallback fail
+4. Report the failure clearly with the exact error and suggest remediation (re-run `/codex:setup`, check auth, check OpenAI API status)
 
 ### Hang Detection
 
@@ -78,18 +78,20 @@ If the task phase stays `starting` for >5 minutes without advancing to `running`
 
 **Tier 3 — Response-generation awareness (critical):**
 
-After tool calls go quiet, Codex is composing its response (10-30 min). **Do NOT cancel.** See "Response-Generation Awareness" in prerequisites.md for the full decision tree and the 45-minute max wait threshold.
+After tool calls go quiet, Codex is composing its response. Max wait: **15 minutes** of silence (reduced from prior guidance — session data shows silence >10 min is almost always a dead task, not slow generation). After 15 minutes, escalate to Direct CLI Fallback. See "Response-Generation Awareness" in prerequisites.md.
 
 **When a genuine failure is detected:**
 
 1. Cancel the stalled task via `/codex:cancel` or the companion
 2. Run Diagnostic Escalation from prerequisites.md — check for connection errors before blindly retrying
 3. If diagnostics reveal a connection issue → report to user with specific remediation, do NOT retry
-4. If no connection issue → re-run `/codex:setup` and retry (max 2 retries)
-5. If all retries fail, STOP the loop and report diagnostics:
+4. If no connection issue → re-run `/codex:setup` and retry (max 2 companion retries)
+5. If companion retries fail → escalate to Direct CLI Fallback (see prerequisites.md). Construct a self-contained prompt with all context inlined and run via `codex exec`
+6. If both companion and CLI fail, STOP the loop and report diagnostics:
    ```
-   Codex failed after retries. Diagnostics: <specific findings from logs>
-   Remediation: <specific action based on diagnostics>
+   Codex failed via both companion (N retries) and direct CLI.
+   Diagnostics: <specific findings from logs>
+   Remediation: Check OpenAI API status, verify auth (codex auth login), check network.
    ```
 
 ## Step 2: Detect Context
@@ -413,8 +415,12 @@ Findings remaining: Z
 
 - **Do NOT use hard timeouts for Codex tasks.** Complex validations legitimately take 15-30 minutes. A hard timeout would kill healthy tasks. Use the Hang Detection procedure from Step 1.
 
-- **Do NOT cancel a task after tool calls go quiet** — it is generating its response (10-30 min). See "Response-Generation Awareness" in prerequisites.md.
+- **Do NOT cancel a task after tool calls go quiet** — it may be generating its response. But do NOT wait more than **15 minutes** of silence either — escalate to Direct CLI Fallback. See "Response-Generation Awareness" in prerequisites.md.
 
 - **Do NOT use PID-based liveness checks on Windows** — use companion task status. See "Task Health Verification" in prerequisites.md.
 
 - **Do NOT reuse stale preflight state for Codex dispatch.** The runtime endpoint (named pipe) can change between Step 1 preflight and Steps 4/6 dispatch. Always re-run `/codex:setup` immediately before dispatching Codex. A 5-second setup call prevents 10+ minutes of debugging zombie tasks.
+
+- **Do NOT poll Codex status with repeated bash commands.** Use the Monitor tool to wait for completion. One manual health check at 60 seconds, then Monitor events. Excessive polling wastes context for no value.
+
+- **Do NOT give up when companion retries fail.** Always try Direct CLI Fallback (`codex exec`) before stopping. The companion has a known reliability issue on Windows — direct CLI creates fresh connections and consistently succeeds.

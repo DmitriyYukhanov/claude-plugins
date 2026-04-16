@@ -48,8 +48,9 @@ multi_agent = true
 The collaborative loop requires BOTH collaborators. If Codex fails at runtime:
 
 1. Do NOT fall back to a Claude subagent as reviewer — self-review defeats the purpose
-2. Stop immediately and report the failure clearly
-3. Suggest remediation (e.g., re-run `/codex:setup`, check auth)
+2. Attempt Direct CLI Fallback before stopping (see section below)
+3. Only stop and report the failure if both companion and CLI fallback fail
+4. Suggest remediation (e.g., re-run `/codex:setup`, check auth, check OpenAI API status)
 
 ## Runtime Health Checks
 
@@ -107,7 +108,7 @@ Codex tasks have two distinct phases of apparent inactivity:
 
 **When in doubt, wait.** A premature cancellation wastes 10-30 minutes of completed Codex work and forces a full restart. A false-positive "hang" wastes only waiting time.
 
-**Maximum wait:** If the task has been in response generation (no new tool calls) for **>45 minutes**, run Diagnostic Escalation. At that point, it is more likely a silent failure than a slow generation.
+**Maximum wait:** If the task has been in response generation (no new tool calls) for **>15 minutes**, run Diagnostic Escalation. Session data shows that tasks silent for 10-15 minutes are almost always dead (pipe crash or API hang), not generating. At that point, escalate to Direct CLI Fallback rather than continuing to wait.
 
 ### Diagnostic Escalation
 
@@ -148,6 +149,16 @@ OpenAI's API enforces a **60-minute WebSocket TTL** on the shared app server con
 
 **Recovery:** The user must restart the Codex desktop app or close and reopen the Codex CLI to reset the app server. Then re-run `/codex:setup` and retry.
 
+### Session Reliability Tracking
+
+Track companion reliability within the current session. After the **first companion failure** (pipe crash, hanging task, or runtime death), mark the session as degraded. In a degraded session:
+
+- Lower the response-generation max wait from 15 minutes to **8 minutes**
+- After a single companion retry failure, skip directly to Direct CLI Fallback instead of exhausting the retry budget
+- Prefer CLI fallback for complex tasks (cross-validation prompts, multi-finding reviews) even before the companion fails on them
+
+This prevents the pattern observed in real usage: companion works for a short initial review, then fails repeatedly on longer cross-validation tasks, wasting 30+ minutes of retries before the user manually suggests CLI.
+
 ### Auto-Retry Protocol
 
 When a task failure is detected:
@@ -157,11 +168,55 @@ When a task failure is detected:
 3. If diagnostics reveal a connection issue → report to user with specific remediation, do NOT retry (retrying against a dead connection is pointless)
 4. If no connection issue found → re-run `/codex:setup` and re-dispatch the same task
 5. **Dismiss stale task artifacts** — ignore late-arriving notifications from the original dead task
-6. **Max 2 auto-retries** — if the second retry also fails, STOP and run full Diagnostic Escalation:
-   ```
-   Codex failed 3 times. Checking logs for root cause...
-   [run diagnostics and report findings]
-   
-   Remediation: <specific action based on diagnostics>
-   If unclear: close all Codex instances, restart the Codex app, re-run /codex:setup, then re-invoke this skill.
-   ```
+6. **Max 2 auto-retries via companion** — if the second retry also fails, escalate to Direct CLI Fallback (see below). Do NOT stop entirely until CLI fallback has also been attempted.
+
+### Direct CLI Fallback
+
+When companion retries are exhausted (or immediately in a degraded session for complex tasks), bypass the companion broker entirely and run Codex via the CLI directly. This creates a fresh connection per invocation and avoids the pipe/WebSocket issues that plague the shared app server.
+
+**Why this works:** The companion routes tasks through a shared app server with a persistent WebSocket. When that connection dies (pipe crash, 60-min TTL, Windows pipe backpressure), all tasks fail. Direct `codex exec` creates a **fresh connection each time**, which is why it succeeds when the companion doesn't.
+
+**How to invoke:**
+
+```bash
+# Write prompt to a temp file (avoids shell escaping issues with long prompts)
+cat > /tmp/codex-prompt.txt << 'PROMPT_EOF'
+<your full prompt here, including all context inline>
+PROMPT_EOF
+
+# Run codex directly — capture output
+codex exec --model gpt-5.4 --full-auto < /tmp/codex-prompt.txt 2>/dev/null | tee /tmp/codex-output.txt
+```
+
+**Critical: inline all context.** Unlike companion tasks, `codex exec` may not have reliable file access in all sandbox configurations. Include the full artifact content, codebase context, and structured output contracts directly in the prompt text. Do not rely on Codex being able to `cat` or `grep` repo files.
+
+**Prompt construction for CLI fallback:**
+1. Take the same prompt you would send via `/codex:rescue`
+2. Inline any file contents that were previously referenced by path
+3. Keep the XML-tagged structure (`<task>`, `<context>`, `<structured_output_contract>`)
+4. Include `validation-format.md` or `verdict-format.md` content inline
+
+**Timeout:** Set a bash timeout of 10 minutes for the CLI call. If it exceeds this, the API itself is likely down — report to user.
+
+```bash
+timeout 600 codex exec --model gpt-5.4 --full-auto < /tmp/codex-prompt.txt 2>/dev/null | tee /tmp/codex-output.txt
+```
+
+**When CLI fallback also fails:** NOW stop and report to user with full diagnostics:
+```
+Codex failed via both companion (N retries) and direct CLI.
+This indicates an API-level issue, not a local runtime problem.
+
+Diagnostics: <specific findings>
+Remediation: Check OpenAI API status, verify auth (codex auth login), check network connectivity.
+```
+
+### Polling Efficiency
+
+Excessive status polling wastes conversation context (20-30 bash commands observed in real sessions). Follow these rules:
+
+1. **Use the Monitor tool** for waiting on task completion — it streams events without burning context
+2. **One manual health check** at 60 seconds post-dispatch (Task Health Verification)
+3. **One manual check** if the Monitor times out or reports an unexpected event
+4. **Do NOT poll in a loop** with repeated bash commands every 30-60 seconds — this is the single largest source of context waste in observed sessions
+5. If you need to check status between Monitor events, limit to **one check per 5 minutes**

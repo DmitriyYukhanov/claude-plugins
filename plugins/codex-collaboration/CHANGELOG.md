@@ -5,6 +5,22 @@ All notable changes to the **codex-collaboration** plugin will be documented in 
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.6.0] - 2026-04-16
+
+### Added
+- Direct CLI Fallback — when companion retries fail, bypass the broker and run `codex exec` directly before giving up
+- Session reliability tracking — after the first companion failure, lower patience thresholds and prefer CLI for complex tasks
+- Code-level verification in cross-review — when Codex cross-validation fails, verify single-source findings against source code instead of marking them all "unverified"
+- Graceful degradation for cross-validation — initial review still requires both models, but cross-validation can continue with partial results
+- Polling efficiency guidance — use Monitor tool for waiting, limit manual bash checks to reduce context waste
+- Explicit `codex:result` error handling — fall back to companion bash commands when Skill tool returns `disable-model-invocation`
+
+### Changed
+- Reduce response-generation max wait from 45 minutes to 15 minutes — session data shows silence >10 min is almost always a dead task
+- In degraded sessions, reduce max wait further to 8 minutes and skip to CLI after one companion retry
+- Runtime failure policy now requires CLI fallback attempt before stopping — "STOP and report" is the last resort, not the first
+- Clarify that "both models required" applies to initial review; cross-validation can degrade gracefully
+
 ## [1.5.0] - 2026-04-15
 
 ### Changed
