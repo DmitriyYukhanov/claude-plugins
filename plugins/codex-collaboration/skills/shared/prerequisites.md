@@ -6,30 +6,30 @@ Both skills share this preflight check. Read this file and execute the steps bef
 
 1. **Check codex plugin** — invoke `/codex:setup`. Two failure modes:
 
-2. **Command not recognized** (plugin not installed) — print install instructions and ABORT:
-   ```
-   The codex-collaboration plugin requires the Codex plugin for Claude Code.
+   - **Command not recognized** (plugin not installed) — print install instructions and ABORT:
+     ```
+     The codex-collaboration plugin requires the Codex plugin for Claude Code.
 
-   Install it:
-   1. /plugin marketplace add openai/codex-plugin-cc
-   2. /plugin install codex@openai-codex
-   3. /reload-plugins
-   4. Run /codex:setup to verify Codex CLI authentication
+     Install it:
+     1. /plugin marketplace add openai/codex-plugin-cc
+     2. /plugin install codex@openai-codex
+     3. /reload-plugins
+     4. Run /codex:setup to verify Codex CLI authentication
 
-   Then re-run this skill.
-   ```
+     Then re-run this skill.
+     ```
 
-3. **Setup reports failure** (plugin installed but CLI missing or auth expired) — report the specific issue and ABORT:
-   ```
-   Codex plugin is installed but setup failed: <specific error from /codex:setup>
+   - **Setup reports failure** (plugin installed but CLI missing or auth expired) — report the specific issue and ABORT:
+     ```
+     Codex plugin is installed but setup failed: <specific error from /codex:setup>
 
-   Fix it:
-   - CLI not found: npm install -g @openai/codex
-   - Auth expired: codex auth login
-   - Then re-run this skill.
-   ```
+     Fix it:
+     - CLI not found: npm install -g @openai/codex
+     - Auth expired: codex auth login
+     - Then re-run this skill.
+     ```
 
-4. **On success** — proceed with the workflow.
+2. **On success** — proceed with the workflow.
 
 ## Recommended Codex Config
 
@@ -64,16 +64,13 @@ This takes ~5 seconds and prevents the entire class of pipe-mismatch zombie task
 
 ### Task Health Verification
 
-After dispatching a Codex task, verify it is making progress **within 60 seconds**. Check companion task status — if the task has a phase (`starting`, `running`) and shows log entries, it is alive.
+After dispatching a Codex task, verify it is making progress **within 60 seconds**. Check task status via `/codex:status` (Skill tool) — if the task has a phase (`starting`, `running`) and shows log entries, it is alive.
 
 **Do NOT use PID-based liveness checks on Windows.** The Codex CLI launcher process exits immediately after dispatching work to the shared runtime server via a named pipe. `tasklist /FI "PID eq <PID>"` will always show the launcher PID as dead, even when the task is running normally. The actual work happens in the runtime server process, which is a different PID.
 
-**Instead, verify health through the companion's task status:**
+**Instead, verify health through Skill tools:**
 
-```bash
-# Check task phase and recent log activity
-node "${CLAUDE_PLUGIN_ROOT}/../codex/scripts/codex-companion.mjs" status
-```
+Use `/codex:status` (Skill tool) — it returns task phase and recent log activity without touching the companion script directly. Only fall back to the raw companion script when the Skill tool errors (see "Skill-tool Fallback" below).
 
 A task is healthy if:
 - Phase is `starting` or `running`
@@ -81,7 +78,7 @@ A task is healthy if:
 - Log shows tool calls, file reads, or other activity
 
 A task is likely dead if:
-- Companion reports task as `failed` or `cancelled`
+- `/codex:status` reports it as `failed` or `cancelled`
 - Phase is `starting` with zero log entries for >5 minutes
 - The Codex runtime pipe endpoint no longer exists
 
@@ -89,7 +86,7 @@ A task is likely dead if:
 
 If a task's phase remains `starting` for **>5 minutes** without advancing to `running` or showing any log entries:
 
-1. Check companion task status for error messages
+1. Check task status (via `/codex:status`) for error messages
 2. Run the Diagnostic Escalation procedure (see below) to check for connection errors
 3. If diagnostics reveal a connection issue (WebSocket limit, 403, etc.) → report to user with specific remediation
 4. If no diagnostic clue → trigger Auto-Retry Protocol
@@ -103,7 +100,7 @@ Codex tasks have two distinct phases of apparent inactivity:
 
 **Do NOT cancel a task that has been actively making tool calls and then goes quiet.** Check the log: if the last entries are tool calls (file reads, searches), the task is likely generating its response. Only consider it stuck if:
 - The task was in `starting` phase and never made any tool calls (starting-stuck)
-- The companion reports it as `failed`
+- `/codex:status` reports it as `failed`
 - Diagnostics reveal a connection error
 
 **When in doubt, wait.** A premature cancellation wastes 10-30 minutes of completed Codex work and forces a full restart. A false-positive "hang" wastes only waiting time.
@@ -114,26 +111,23 @@ Codex tasks have two distinct phases of apparent inactivity:
 
 When a Codex task fails or appears stuck, check deeper before retrying blindly. These diagnostics often reveal the root cause immediately:
 
-**1. Check companion task status for error details:**
-```bash
-node "${CLAUDE_PLUGIN_ROOT}/../codex/scripts/codex-companion.mjs" status
-```
-Look for error messages, failure reasons, or `failed` status in the output.
+**1. Check task status for error details:** invoke `/codex:status` via the Skill tool. Look for error messages, failure reasons, or `failed` status in the output.
 
-**2. Quick connectivity test** — verify the runtime can actually reach the API:
-```bash
-node "${CLAUDE_PLUGIN_ROOT}/../codex/scripts/codex-companion.mjs" task --fresh "Reply with OK"
-```
-If this hangs for >60 seconds or returns an error, the connection is dead.
+**2. Quick connectivity test** — verify the runtime can actually reach the API: invoke `/codex:rescue --fresh` with a trivial prompt like "Reply with OK". Cap the wait at **90 seconds** for this probe specifically (the 15-min response-generation threshold does not apply — a probe that can't echo "OK" in 90s is dead). If the user has already denied `/codex:rescue` earlier this session, skip the probe and go straight to Direct CLI Fallback — re-asking permission for a diagnostic just to diagnose around the denial is a dead end. Interpret the result:
+
+- **Task dispatched but hangs >90 seconds or returns an empty/runtime error** → the runtime connection is dead (WebSocket TTL, pipe crash); continue with the remediation table below
+- **Skill-tool-level error on `/codex:rescue` dispatch** (`disable-model-invocation`, permission denial, or the Skill gate rejects the invocation) → this is NOT a dead connection; do NOT run dead-runtime remediation. Route as follows:
+  - **Permission denial at the Skill gate** → inform the user, then offer Direct CLI Fallback (`codex exec`). Wait for the user's explicit choice before dispatching — denial is the user exercising control. The top-level skills (collaborative-loop Step 4 / Step 6, cross-review Step 3) document this as "Skill-gate Rejection"
+  - **`disable-model-invocation` or similar non-user errors** → go directly to Direct CLI Fallback (below); the Skill tool is unavailable but the underlying runtime may still work
 
 **3. Common failure signatures and remediation:**
 
 | Symptom | Likely Cause | Remediation |
 |---------|-------------|-------------|
 | Task stuck in `starting`, connectivity test hangs | OpenAI 60-minute WebSocket TTL expired | User must restart Codex app/CLI for fresh connection |
-| `403 Forbidden` in companion output | API access blocked (rate limit, auth, or network) | Check auth (`codex auth login`), VPN, or wait and retry |
+| `403 Forbidden` in `/codex:status` output | API access blocked (rate limit, auth, or network) | Check auth (`codex auth login`), VPN, or wait and retry |
 | Connectivity test returns empty/error | Stale runtime pipe — server crashed but pipe persists | User must close all Codex instances and restart |
-| Companion reports `failed` with no details | Transient API error | Re-run `/codex:setup` and retry |
+| `/codex:status` reports `failed` with no details | Transient API error | Re-run `/codex:setup` and retry |
 
 **4. Report diagnostics to the user** with the specific symptom and remediation step. Do NOT silently retry when the root cause is a connection issue — retrying against a dead WebSocket just wastes time.
 
@@ -153,9 +147,10 @@ OpenAI's API enforces a **60-minute WebSocket TTL** on the shared app server con
 
 Track companion reliability within the current session. After the **first companion failure** (pipe crash, hanging task, or runtime death), mark the session as degraded. In a degraded session:
 
-- Lower the response-generation max wait from 15 minutes to **8 minutes**
 - After a single companion retry failure, skip directly to Direct CLI Fallback instead of exhausting the retry budget
 - Prefer CLI fallback for complex tasks (cross-validation prompts, multi-finding reviews) even before the companion fails on them
+
+The 15-minute response-generation threshold stays flat — session data showed the prior "drop to 8 min in degraded" rule produced inconsistent escalation timing depending on which file was last read. Session reliability affects *retry budget and CLI preference*, not the silence threshold.
 
 This prevents the pattern observed in real usage: companion works for a short initial review, then fails repeatedly on longer cross-validation tasks, wasting 30+ minutes of retries before the user manually suggests CLI.
 
@@ -176,19 +171,31 @@ When companion retries are exhausted (or immediately in a degraded session for c
 
 **Why this works:** The companion routes tasks through a shared app server with a persistent WebSocket. When that connection dies (pipe crash, 60-min TTL, Windows pipe backpressure), all tasks fail. Direct `codex exec` creates a **fresh connection each time**, which is why it succeeds when the companion doesn't.
 
-**How to invoke:**
+**How to invoke (cross-platform):**
+
+Resolve a temp directory that works on the current platform:
+- Unix/macOS/Linux: `$TMPDIR` (fallback: `/tmp`)
+- Windows (Git Bash / WSL): `$TEMP` (usually `C:/Users/<user>/AppData/Local/Temp`)
+- Windows PowerShell / cmd: `$env:TEMP` / `%TEMP%`
+
+Write the prompt to a temp file to avoid shell escaping issues, then run `codex exec` capturing **combined stdout+stderr** so the Monitor tool can see runtime errors (not just model output):
 
 ```bash
-# Write prompt to a temp file (avoids shell escaping issues with long prompts)
-cat > /tmp/codex-prompt.txt << 'PROMPT_EOF'
+# Unix / Git Bash / WSL
+TMP="${TMPDIR:-/tmp}"
+cat > "$TMP/codex-prompt.txt" << 'PROMPT_EOF'
 <your full prompt here, including all context inline>
 PROMPT_EOF
 
-# Run codex directly — capture output
-codex exec --model gpt-5.4 --full-auto < /tmp/codex-prompt.txt 2>/dev/null | tee /tmp/codex-output.txt
+# Capture stdout AND stderr — stderr carries sandbox errors Monitor needs to see.
+# Append the exit code to the SAME log file Monitor tails, so the completion marker is observable.
+codex exec --model gpt-5.4 --full-auto < "$TMP/codex-prompt.txt" > "$TMP/codex-output.txt" 2>&1
+echo "EXIT_CODE=$?" >> "$TMP/codex-output.txt"
 ```
 
-**Critical: inline all context.** Unlike companion tasks, `codex exec` may not have reliable file access in all sandbox configurations. Include the full artifact content, codebase context, and structured output contracts directly in the prompt text. Do not rely on Codex being able to `cat` or `grep` repo files.
+**Do NOT discard stderr with `2>/dev/null`.** Codex emits reliability signals (`CreateProcessWithLogonW failed: 1056`, `websocket`, `403`, `stream error`) on stderr. The Monitor tool can only react to what reaches the output file. Use `2>&1` to merge streams into the same log that Monitor tails.
+
+**Critical: inline all context.** Unlike companion tasks, `codex exec` may not have reliable file access in all sandbox configurations — Windows especially can hit intermittent `CreateProcessWithLogonW failed: 1056` errors on PowerShell tool calls. Include the full artifact content, codebase context, and structured output contracts directly in the prompt text. With context inlined, these sandbox errors may occur but do NOT invalidate the review — progress continues on other tool calls. Only treat them as fatal if Monitor reports silence past the response-generation threshold.
 
 **Prompt construction for CLI fallback:**
 1. Take the same prompt you would send via `/codex:rescue`
@@ -196,10 +203,41 @@ codex exec --model gpt-5.4 --full-auto < /tmp/codex-prompt.txt 2>/dev/null | tee
 3. Keep the XML-tagged structure (`<task>`, `<context>`, `<structured_output_contract>`)
 4. Include `validation-format.md` or `verdict-format.md` content inline
 
-**Timeout:** Set a bash timeout of 10 minutes for the CLI call. If it exceeds this, the API itself is likely down — report to user.
+**Arming Monitor on the output file:**
+
+The Monitor tool streams output without burning context on polling. Filter for status markers, error signatures, AND progress indicators so silence is distinguishable from a stuck task. The exact filter depends on the structured output contract used in the prompt — adapt as needed. A working starting point:
 
 ```bash
-timeout 600 codex exec --model gpt-5.4 --full-auto < /tmp/codex-prompt.txt 2>/dev/null | tee /tmp/codex-output.txt
+# Bash / Git Bash / WSL
+tail -f "$TMP/codex-output.txt" 2>/dev/null | grep -E --line-buffered \
+  "## Status|## Findings|## Summary|APPROVED|MINOR_ISSUES|CHANGES_REQUESTED|VALIDATED|PARTIALLY_VALIDATED|REJECTED|EXIT_CODE=|Error|ERROR|403|401|websocket|timeout|Killed|OOM|stream error|disconnected|authentication|CreateProcessWithLogonW|tokens used"
+```
+
+```powershell
+# Native Windows PowerShell — Get-Content -Wait is the tail -f equivalent
+Get-Content "$env:TEMP\codex-output.txt" -Wait | Select-String -Pattern '## Status|## Findings|## Summary|APPROVED|MINOR_ISSUES|CHANGES_REQUESTED|VALIDATED|PARTIALLY_VALIDATED|REJECTED|EXIT_CODE=|Error|ERROR|403|401|websocket|timeout|Killed|OOM|stream error|disconnected|authentication|CreateProcessWithLogonW|tokens used'
+```
+
+**Silence is not success** — if your filter would stay silent on a crash, broaden it. Cover every terminal verdict your structured-output contract emits, every runtime failure signature you'd act on, and at least one progress marker (`tokens used`, `thinking`) so alive-but-slow is distinguishable from dead.
+
+**Timeout:** `timeout 600` requires GNU coreutils — not available on native Windows PowerShell/cmd. On Git Bash or WSL it works; on native Windows, omit the `timeout` wrapper and rely on Monitor's response-generation threshold (15 min silence → escalate). The Bash tool's own timeout parameter is a portable alternative when invoking `codex exec` from within Claude Code.
+
+```bash
+# Bash / Git Bash / WSL with GNU coreutils
+timeout 600 codex exec --model gpt-5.4 --full-auto < "$TMP/codex-prompt.txt" > "$TMP/codex-output.txt" 2>&1
+echo "EXIT_CODE=$?" >> "$TMP/codex-output.txt"
+
+# Bash / Git Bash / WSL without timeout — rely on Monitor
+codex exec --model gpt-5.4 --full-auto < "$TMP/codex-prompt.txt" > "$TMP/codex-output.txt" 2>&1
+echo "EXIT_CODE=$?" >> "$TMP/codex-output.txt"
+```
+
+```powershell
+# Native Windows PowerShell — no timeout, rely on Monitor
+$prompt = Join-Path $env:TEMP 'codex-prompt.txt'
+$log    = Join-Path $env:TEMP 'codex-output.txt'
+Get-Content $prompt | codex exec --model gpt-5.4 --full-auto *> $log
+"EXIT_CODE=$LASTEXITCODE" | Add-Content $log
 ```
 
 **When CLI fallback also fails:** NOW stop and report to user with full diagnostics:
@@ -211,12 +249,30 @@ Diagnostics: <specific findings>
 Remediation: Check OpenAI API status, verify auth (codex auth login), check network connectivity.
 ```
 
+### Skill-tool Fallback
+
+The Skill tool invocations (`/codex:status`, `/codex:result`, `/codex:cancel`) are the primary way to interact with an active Codex job. Only when a Skill tool errors (e.g., `disable-model-invocation`) should you fall back to shelling out to the companion script directly — and in that case the script lives in the **codex plugin's** cache, not in codex-collaboration's cache. Do NOT hardcode `${CLAUDE_PLUGIN_ROOT}/../codex/scripts/codex-companion.mjs` — that path is wrong when codex and codex-collaboration come from different marketplaces, which is the default installation layout.
+
+Resolve the companion path at runtime by listing the cache:
+
+```bash
+COMPANION=$(ls -t "$HOME/.claude/plugins/cache"/*/codex/*/scripts/codex-companion.mjs 2>/dev/null | head -1)
+node "$COMPANION" status
+```
+
+On Windows PowerShell:
+```powershell
+$companion = Get-ChildItem -Path "$HOME/.claude/plugins/cache" -Recurse -Filter codex-companion.mjs | Select-Object -First 1
+node $companion.FullName status
+```
+
+If no companion script is found, the codex plugin is not installed — report and abort.
+
 ### Polling Efficiency
 
 Excessive status polling wastes conversation context (20-30 bash commands observed in real sessions). Follow these rules:
 
 1. **Use the Monitor tool** for waiting on task completion — it streams events without burning context
 2. **One manual health check** at 60 seconds post-dispatch (Task Health Verification)
-3. **One manual check** if the Monitor times out or reports an unexpected event
-4. **Do NOT poll in a loop** with repeated bash commands every 30-60 seconds — this is the single largest source of context waste in observed sessions
-5. If you need to check status between Monitor events, limit to **one check per 5 minutes**
+3. **One manual check** if Monitor times out or reports an unexpected event, and one immediately before retrieving results
+4. **Do NOT poll in a loop** with repeated bash commands — this is the single largest source of context waste in observed sessions

@@ -116,7 +116,7 @@ Be specific: reference file paths, line numbers, and concrete examples.
 
 Launch Codex **in the same turn** as Claude agents. Do not wait for Claude.
 
-**Pre-dispatch: fresh setup.** Before dispatching, re-invoke `/codex:setup` to verify the runtime is alive. Read the "Fresh Setup Before Dispatch" section in `${CLAUDE_PLUGIN_ROOT}/skills/shared/prerequisites.md`. Do NOT reuse the preflight result from Step 1 — the runtime endpoint may have changed. **After setup confirms success, proceed immediately to dispatch in the same turn. Do not stop, summarize setup status, or wait for user acknowledgment — the user said "cross-review", not "set up and ask me before continuing".**
+**Pre-dispatch: fresh setup.** Before dispatching, re-invoke `/codex:setup` to verify the runtime is alive. Read the "Fresh Setup Before Dispatch" section in `${CLAUDE_PLUGIN_ROOT}/skills/shared/prerequisites.md`. Do NOT reuse the preflight result from Step 1 — the runtime endpoint may have changed. After setup confirms success, proceed immediately to dispatch in the same turn — do not stop or summarize setup status mid-workflow.
 
 **For code artifacts:**
 - Invoke `/codex:review --base <ref> --background` via the Skill tool
@@ -130,7 +130,7 @@ Launch Codex **in the same turn** as Claude agents. Do not wait for Claude.
 - Include `${CLAUDE_PLUGIN_ROOT}/skills/shared/verdict-format.md` as `<structured_output_contract>`
 - Non-code prompts can be scoped to specific files by including them in the prompt
 
-**Post-dispatch: health check.** Within 60 seconds of dispatch, verify the task is making progress using the companion's task status (see "Task Health Verification" in `${CLAUDE_PLUGIN_ROOT}/skills/shared/prerequisites.md`). **Do NOT use PID-based checks on Windows** — the CLI launcher exits immediately while the actual work happens in the runtime server.
+**Post-dispatch: health check.** Within 60 seconds of dispatch, verify the task is making progress using `/codex:status` (Skill tool) — see "Task Health Verification" in `${CLAUDE_PLUGIN_ROOT}/skills/shared/prerequisites.md`. **Do NOT use PID-based checks on Windows** — the CLI launcher exits immediately while the actual work happens in the runtime server.
 
 **Poll and retrieve:**
 - Use the **Monitor tool** to wait for task completion — avoid repeated bash polling commands that waste context
@@ -148,6 +148,16 @@ If Codex background job fails (auth expired, CLI error, timeout, dead task):
 3. If companion retries are exhausted: **escalate to Direct CLI Fallback** (see prerequisites.md). Construct a self-contained prompt with all context inlined and run via `codex exec`
 4. If both companion and CLI fail: **STOP and report.** Do NOT proceed with Claude-only findings for the initial review (Step 3).
 
+### Skill-gate Rejection (Distinct from Runtime Failure)
+
+If the user denies the `/codex:rescue` or `/codex:review` Skill invocation at the permission prompt, no job was dispatched — the Auto-Retry Protocol does NOT apply (retrying against the same permission prompt is futile and looks like a bypass attempt). Instead:
+
+1. Report to the user that Codex review is required for cross-review (both models needed)
+2. Offer Direct CLI Fallback (`codex exec`) as an alternative that doesn't route through the Skill gate
+3. Wait for the user's explicit choice before dispatching via CLI — denial at the Skill gate is the user exercising control, not a runtime fault
+
+User denial ≠ runtime failure. Treat them as two distinct paths.
+
 **Both models are required for the initial review.** The entire value of cross-review is independent perspectives from two different models. Claude reviewing its own output provides no cross-validation signal.
 
 **Exception — cross-validation (Step 5) can degrade gracefully.** If the initial review (Step 3) succeeded from both models but Codex fails during cross-validation, the skill MAY continue with partial cross-validation (see Step 5 for details). The initial review already provides independent perspectives; cross-validation adds rigor but its failure doesn't void the initial findings.
@@ -155,11 +165,8 @@ If Codex background job fails (auth expired, CLI error, timeout, dead task):
 ### Retrieving Codex Output
 
 - Retrieve output via `/codex:result` (Skill tool) when complete
-- If `/codex:result` fails with `disable-model-invocation` error, fall back to reading the task output directly via the companion:
-  ```bash
-  node "${CLAUDE_PLUGIN_ROOT}/../codex/scripts/codex-companion.mjs" result
-  ```
-- If `/codex:status` fails via Skill tool, fall back to querying the companion's task status via Bash commands directly
+- If `/codex:result` fails with `disable-model-invocation` error, fall back to the companion script — but resolve its path at runtime (it lives in the **codex** plugin's cache, not codex-collaboration's). See the "Skill-tool Fallback" section in `prerequisites.md` for the cross-platform discovery commands. Do NOT use `${CLAUDE_PLUGIN_ROOT}/../codex/scripts/...` — that assumes a sibling layout that is wrong when the two plugins come from different marketplaces.
+- If `/codex:status` fails via Skill tool, apply the same fallback approach
 
 ### Fast-Path: Zero Findings
 
@@ -433,11 +440,11 @@ Both skills require Codex — neither falls back to Claude-only mode. Use cross-
 
 - **Do NOT run Claude agents to completion before launching Codex.** Both must start simultaneously. Launch Codex first (Skill tool), then spawn Claude agents in the same turn.
 
-- **Do NOT forget to poll `/codex:status` for background jobs.** Codex runs in the background -- you must check status and retrieve results before triage. Poll every 5 minutes, not every 2 minutes — frequent polling wastes context.
+- **Do NOT forget to retrieve Codex background job output before triage.** Codex runs in the background — results won't appear on their own. Use the Monitor tool (armed on the output log or on `/codex:status` until the phase flips to `completed`) rather than looped status polling. One manual health check at 60 seconds is enough; after that, let Monitor events drive the next action.
 
 - **Do NOT cancel a task after tool calls go quiet** — it is generating its response (10-30 min). See "Response-Generation Awareness" in prerequisites.md.
 
-- **Do NOT use PID-based liveness checks on Windows** — use companion task status. See "Task Health Verification" in prerequisites.md.
+- **Do NOT use PID-based liveness checks on Windows** — use `/codex:status` (Skill tool). See "Task Health Verification" in prerequisites.md.
 
 - **Do NOT proceed with Claude-only findings if Codex fails during initial review (Step 3).** Both models are required for the initial review. Try Direct CLI Fallback before stopping. For cross-validation (Step 5), graceful degradation with code-level verification is acceptable.
 
@@ -455,8 +462,6 @@ Both skills require Codex — neither falls back to Claude-only mode. Use cross-
 
 - **Do NOT reuse stale preflight state for Codex dispatch.** The runtime endpoint (named pipe) can change between Step 1 preflight and Step 3 dispatch. Always re-run `/codex:setup` immediately before dispatching Codex. A 5-second setup call prevents 10+ minutes of debugging zombie tasks.
 
-- **Do NOT poll Codex status with repeated bash commands.** Use the Monitor tool to wait for completion. One manual health check at 60 seconds, then Monitor events. Observed sessions wasted 20-30 bash commands on polling — this burns context for no value.
-
-- **Do NOT wait 30+ minutes for a silent task hoping it's "generating."** If log activity stopped >15 minutes ago and the session already had a companion failure, the task is dead. Escalate to Direct CLI Fallback immediately.
+- **Do NOT wait 30+ minutes for a silent task hoping it's "generating."** The flat threshold is 15 minutes of no new tool calls — past that, escalate to Direct CLI Fallback immediately. Session data shows tasks silent for 10-15 minutes are almost always dead, not generating.
 
 - **Do NOT give up when companion retries fail.** Always try Direct CLI Fallback (`codex exec`) before stopping. The companion has a known reliability issue on Windows (pipe crashes, no response timeout). Direct CLI creates fresh connections and consistently succeeds when the companion doesn't.

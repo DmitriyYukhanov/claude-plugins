@@ -5,6 +5,25 @@ All notable changes to the **codex-collaboration** plugin will be documented in 
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.7.0] - 2026-04-21
+
+### Fixed
+- Broken companion script path replaced with Skill tool invocations (`/codex:status`, `/codex:result`, `/codex:cancel`, `/codex:rescue --fresh`) — the old `${CLAUDE_PLUGIN_ROOT}/../codex/scripts/...` path never resolved when the two plugins lived in different marketplace caches
+- Preflight Check numbering — failure modes are now sub-items of step 1, not separate top-level steps
+- Health-check wording normalized — all skills now point to `/codex:status` as the primary path, with companion script only mentioned in the explicit fallback section
+- Connectivity test distinguishes dead runtime from Skill-gate errors — `disable-model-invocation` no longer misclassified as a dead connection
+- Liveness probe capped at 90 seconds (down from unbounded); harmonized across prerequisites.md and collaborative-loop
+- Direct CLI Fallback no longer discards stderr with `2>/dev/null` — runtime errors (sandbox failures, websocket errors, auth issues) are now merged into the output log so Monitor can see them
+- `EXIT_CODE=` completion marker now appends to the same log file Monitor tails (previously echoed to terminal, making the marker unobservable)
+- Internal contradiction removed — stale "poll every 5 minutes" guidance conflicted with the Polling Efficiency section that says to use Monitor without looped polls
+
+### Added
+- Distinct branch for Skill-gate rejection (user denies `/codex:rescue` or `/codex:review` at the permission prompt) covering both the validate phase (Step 4) and review phase (Step 6) — Auto-Retry Protocol no longer fires against a non-dispatched job; instead the user is offered Direct CLI Fallback and the decision stays with them
+- Concrete Monitor filter examples with both Bash (tail -f + grep) and PowerShell (Get-Content -Wait + Select-String) variants, framed as a starting point to adapt per workflow
+- PowerShell-native `codex exec` example for native Windows users — prior Bash-only snippet failed under PowerShell due to `$TMP`, stdin redirection, and `>>` append differences
+- Windows sandbox reliability note — intermittent `CreateProcessWithLogonW failed: 1056` errors may occur and do not invalidate a review when context is inlined; only Monitor silence past the response-generation threshold signals a real stall
+- Cross-platform temp file and timeout guidance — Unix/`$TMPDIR`, Windows/`$TEMP`, and documented that `timeout 600` requires GNU coreutils (not native Windows cmd/PowerShell)
+
 ## [1.6.0] - 2026-04-16
 
 ### Added
