@@ -37,11 +37,13 @@ Informational, not blocking:
 
 ```toml
 # ~/.codex/config.toml
-model = "gpt-5.4"
+model = "gpt-5.5"
 model_reasoning_effort = "xhigh"
 [features]
 multi_agent = true
 ```
+
+`gpt-5.5` is OpenAI's recommended Codex model (released 2026-04-23). It is available via ChatGPT sign-in; during the rollout it is **not yet available with API-key authentication**. If `codex exec -m gpt-5.5` errors with an unknown/unavailable model, fall back to `model = "gpt-5.4"` — per OpenAI's own guidance.
 
 ## Runtime Failure Policy
 
@@ -189,7 +191,7 @@ PROMPT_EOF
 
 # Capture stdout AND stderr — stderr carries sandbox errors Monitor needs to see.
 # Append the exit code to the SAME log file Monitor tails, so the completion marker is observable.
-codex exec --model gpt-5.4 --full-auto < "$TMP/codex-prompt.txt" > "$TMP/codex-output.txt" 2>&1
+codex exec --model gpt-5.5 --full-auto < "$TMP/codex-prompt.txt" > "$TMP/codex-output.txt" 2>&1
 echo "EXIT_CODE=$?" >> "$TMP/codex-output.txt"
 ```
 
@@ -224,11 +226,11 @@ Get-Content "$env:TEMP\codex-output.txt" -Wait | Select-String -Pattern '## Stat
 
 ```bash
 # Bash / Git Bash / WSL with GNU coreutils
-timeout 600 codex exec --model gpt-5.4 --full-auto < "$TMP/codex-prompt.txt" > "$TMP/codex-output.txt" 2>&1
+timeout 600 codex exec --model gpt-5.5 --full-auto < "$TMP/codex-prompt.txt" > "$TMP/codex-output.txt" 2>&1
 echo "EXIT_CODE=$?" >> "$TMP/codex-output.txt"
 
 # Bash / Git Bash / WSL without timeout — rely on Monitor
-codex exec --model gpt-5.4 --full-auto < "$TMP/codex-prompt.txt" > "$TMP/codex-output.txt" 2>&1
+codex exec --model gpt-5.5 --full-auto < "$TMP/codex-prompt.txt" > "$TMP/codex-output.txt" 2>&1
 echo "EXIT_CODE=$?" >> "$TMP/codex-output.txt"
 ```
 
@@ -236,7 +238,7 @@ echo "EXIT_CODE=$?" >> "$TMP/codex-output.txt"
 # Native Windows PowerShell — no timeout, rely on Monitor
 $prompt = Join-Path $env:TEMP 'codex-prompt.txt'
 $log    = Join-Path $env:TEMP 'codex-output.txt'
-Get-Content $prompt | codex exec --model gpt-5.4 --full-auto *> $log
+Get-Content $prompt | codex exec --model gpt-5.5 --full-auto *> $log
 "EXIT_CODE=$LASTEXITCODE" | Add-Content $log
 ```
 

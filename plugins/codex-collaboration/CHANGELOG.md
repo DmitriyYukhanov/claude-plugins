@@ -5,6 +5,12 @@ All notable changes to the **codex-collaboration** plugin will be documented in 
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.8.0] - 2026-04-24
+
+### Changed
+- Default Codex model updated from `gpt-5.4` to `gpt-5.5` (OpenAI's recommended Codex model, released 2026-04-23) in the config example and all Direct CLI Fallback commands
+- Added rollout note — `gpt-5.5` requires ChatGPT sign-in; users on API-key auth should stay on `gpt-5.4` until API availability ships
+
 ## [1.7.0] - 2026-04-21
 
 ### Fixed
