@@ -1,0 +1,8 @@
+{
+  "name": "humanizer",
+  "version": "1.0.0",
+  "description": "Remove AI-generation patterns from English or Russian text — auto-detects language and applies a matching MIT-licensed ruleset (29-pattern EN from blader/humanizer, 44-pattern RU from ilyautov/humanizer-ru) with explicit override and mixed-text handling",
+  "author": {
+    "name": "Dmitry Yuhanov"
+  }
+}

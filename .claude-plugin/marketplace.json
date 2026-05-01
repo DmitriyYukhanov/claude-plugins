@@ -73,6 +73,17 @@
       "homepage": "https://github.com/DmitriyYukhanov/claude-plugins"
     },
     {
+      "name": "learning-guide",
+      "description": "Generate a self-contained, offline-first, interactive HTML learning guide for any artifact — codebase, planning session, refactor plan, or generic input — via an analyze → render flow with a JSON tour-spec contract",
+      "version": "1.0.0",
+      "author": {
+        "name": "Dmitry Yuhanov"
+      },
+      "source": "./plugins/learning-guide",
+      "category": "development",
+      "homepage": "https://github.com/DmitriyYukhanov/claude-plugins"
+    },
+    {
       "name": "lsp-setup",
       "description": "Set up LSP (Language Server Protocol) for Claude Code projects with auto-detection, plugin installation, and validation",
       "version": "1.0.1",
@@ -103,6 +114,17 @@
       },
       "source": "./plugins/tg-voice",
       "category": "operations",
+      "homepage": "https://github.com/DmitriyYukhanov/claude-plugins"
+    },
+    {
+      "name": "humanizer",
+      "description": "Remove AI-generation patterns from English or Russian text — auto-detects language and applies a matching MIT-licensed ruleset (29-pattern EN from blader/humanizer, 44-pattern RU from ilyautov/humanizer-ru) with explicit override and mixed-text handling",
+      "version": "1.0.0",
+      "author": {
+        "name": "Dmitry Yuhanov"
+      },
+      "source": "./plugins/humanizer",
+      "category": "writing",
       "homepage": "https://github.com/DmitriyYukhanov/claude-plugins"
     }
   ]

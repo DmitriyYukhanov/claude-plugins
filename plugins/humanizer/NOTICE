@@ -1,0 +1,19 @@
+This plugin bundles two MIT-licensed humanizer skills as vendored references.
+Routing logic and plugin scaffolding are original work (c) 2026 Dmitry Yuhanov, MIT.
+
+================================================================================
+skills/humanizer/references/humanizer-en.md
+  Source : https://github.com/blader/humanizer
+  Author : blader (and contributors)
+  License: MIT
+  Pinned : 8b3a17889fbf12bedae20974a3c9f9de746ed754  (fetched 2026-04-30)
+
+skills/humanizer/references/humanizer-ru.md
+  Source : https://github.com/ilyautov/humanizer-ru
+  Author : ilyautov (and contributors)
+  License: MIT
+  Pinned : e48eddce202bd79a70a579323b34df6d6f5cf523  (fetched 2026-04-30)
+================================================================================
+
+Full license texts of upstream projects are reproduced in
+skills/humanizer/references/humanizer-en.LICENSE and humanizer-ru.LICENSE.

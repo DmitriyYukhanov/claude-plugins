@@ -1,0 +1,7 @@
+# Superpowers brainstorming/planning artifacts — local-only, never committed.
+# Specs and plans live on the developer's machine; the public repo contains
+# only plugins and their docs.
+docs/superpowers/
+
+# Serena MCP cache
+.serena/

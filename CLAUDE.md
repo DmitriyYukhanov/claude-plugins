@@ -2,6 +2,12 @@
 
 Collection of Claude Code plugins: skills, agents, hooks, commands, and scripts.
 
+## Repository Hygiene (MANDATORY)
+
+`docs/superpowers/` and `.serena/` are **local-only artifacts** — never commit them. They are excluded by `.gitignore`. The Superpowers brainstorming/planning workflow writes specs and plans into `docs/superpowers/specs/` and `docs/superpowers/plans/` for the developer's reference; those files stay on the local machine. Tool caches (`.serena/`, similar) also stay local.
+
+Before every commit, run `git diff --cached --name-only` and confirm no path under `docs/superpowers/` or `.serena/` appears. If one does, abort and unstage with `git restore --staged <path>`. Use targeted `git add <path>` rather than `git add -A` / `git add .` to avoid accidentally staging artifacts.
+
 ## Plugin Version Bumping (MANDATORY)
 
 When you modify ANY file inside `plugins/<name>/`, you MUST also bump the `"version"` in that plugin's `.claude-plugin/plugin.json` **and** update the matching version in `.claude-plugin/marketplace.json` before committing. A pre-commit hook enforces both — commits without a version bump or with mismatched marketplace versions will be rejected.

@@ -15,7 +15,9 @@ Then install the plugins you want to use:
 ```bash
 /plugin install agent-teams
 /plugin install codex-collaboration
+/plugin install humanizer
 /plugin install implementation-prd
+/plugin install learning-guide
 /plugin install lsp-setup
 /plugin install python-dev
 /plugin install tg-alerts
@@ -68,6 +70,19 @@ Cross-model collaboration between Claude and Codex with two workflows:
 
 [View skill documentation](./plugins/codex-collaboration/skills/collaborative-loop/SKILL.md)
 
+### humanizer
+
+Auto-routing EN + RU humanizer for Claude Code that removes signs of AI-generated writing:
+- Auto-detects language by Cyrillic ratio (≥60 % → RU, ≤10 % → EN, otherwise asks)
+- English ruleset — vendored from [blader/humanizer](https://github.com/blader/humanizer), 29 patterns from Wikipedia AI Cleanup
+- Russian ruleset — vendored from [ilyautov/humanizer-ru](https://github.com/ilyautov/humanizer-ru), 44 patterns with hard bans and triple-pass audit
+- Explicit overrides ("humanize as English" / "обработай как русский") and mixed-text handling
+- Optional voice calibration from a writing sample
+
+Distinct from the Claude.ai-only `humanizer.skill` listed below — this is a Claude Code plugin with auto-routing.
+
+[View documentation](./plugins/humanizer/README.md)
+
 ### implementation-prd
 
 Implementation-ready spec bundle authoring with:
@@ -78,6 +93,18 @@ Implementation-ready spec bundle authoring with:
 - Worked example from a real desktop app project
 
 [View documentation](./plugins/implementation-prd/README.md)
+
+### learning-guide
+
+Generate self-contained, offline-first, interactive HTML learning guides for any artifact:
+
+- **`analyze`** skill — reads input artifact(s) (codebase, planning session, refactor plan, generic doc), writes a `tour-spec.json` describing sections, embedded sources, cross-refs, quizzes, and external link maps. Hands off to render.
+- **`render`** skill — runs the bundled zero-dependency Node renderer to produce `index.html` plus launcher scripts. Idempotent for generated artifacts; re-runnable from the shell after hand-edits to the spec.
+- **`learning-guide`** entry-point skill — explains the flow and dispatches to the right step.
+
+**Requires** Node.js on PATH. No `npm install` step.
+
+[View documentation](./plugins/learning-guide/README.md)
 
 ### lsp-setup
 
