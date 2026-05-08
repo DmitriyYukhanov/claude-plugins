@@ -5,6 +5,29 @@ All notable changes to the **codex-collaboration** plugin will be documented in 
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.9.0] - 2026-05-08
+
+### Changed
+- Cross-review now auto-applies findings backed by reviewer agreement, cross-validation, or evidence; the user is consulted only for genuinely inconclusive disagreements (code-verified-only findings stay in the consultation bucket and never auto-apply)
+- Cross-review exits early on a stable round (zero auto-fixable, zero needs-decision)
+- Rollback uses `git restore --patch` for files with pre-existing changes; bare `git restore .` is never emitted
+- All-agreed and zero-disagreement-after-cross-validation paths now route through auto-apply before presentation (previously skipped the apply step)
+
+### Added
+- Helper scripts: `wait-for-codex` (poll with terminal phase enum) and `dirty-tree-probe` (per-file dirty/untracked/would-create probe), each in Bash and PowerShell; complementary `internals.md` reference doc covering schemas, response enums, branch tables, the auto-apply algorithm, and the test plan
+- Per-round delta-based dirty-tree gate (with pre-apply re-probe to catch mid-round manual edits) and lazy per-touched-file baseline map (with size guard for large files; tracks pre-existing untracked status) enabling safe rollback across four file partitions: clean-tracked, dirty-tracked, pre-existing-untracked, and newly-created
+- Partial-apply failure prompt (`retry` / `revert` / `skip` / `stop`); `revert` operates on a per-pass journal so earlier rounds' fixes are not touched; `stop` halts the run while preserving earlier successful fixes
+- Per-round progress status with explicit final-round wording (no false "moving to round N+1" on the last allowed round)
+- "Dirty-tree decline" exit condition; "Skipped (apply failed)" subsection in the summary
+- Canonical response enums for needs-decision (`fix` / `dismiss` / `fix with changes:` / `stop`, with `stop` overriding all other verbs in a batched response), partial-apply (`retry [N]:` / `revert` / `skip` / `stop`), and dirty-tree gate (`proceed` / `stop`); all parsing rules in `internals.md`
+- `--max-rounds < 1` is now rejected at parse time with a clear error
+
+### Fixed
+- Round numbering off-by-one (`ROUND` starts at 1 before first review; increment moves to before next-dispatch)
+- "Applied This Round" and "Resolved by Evidence" are now mutually exclusive
+- README.md, Overview, and Core principle reflect the autonomous default
+- Polling guidance no longer references the non-existent `completed` phase
+
 ## [1.8.0] - 2026-04-24
 
 ### Changed

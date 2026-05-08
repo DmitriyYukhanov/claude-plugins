@@ -61,7 +61,7 @@ Set up and orchestrate Claude Code agent teams with:
 Cross-model collaboration between Claude and Codex with two workflows:
 
 - **collaborative-loop** — Sequential drive/validate/act cycles. Claude analyzes, Codex validates each finding, both models must agree before any action is taken. Iterates until approved or max rounds.
-- **cross-review** — Parallel dual review. Both Claude and Codex review independently, findings are cross-validated and triaged, disagreements surfaced for user decision.
+- **cross-review** — Parallel dual review. Both Claude and Codex review independently. Findings confirmed by reviewer agreement, cross-validation, or evidence research are auto-applied each round; only genuinely inconclusive disagreements surface for user decision.
 
 **Requires** the [Codex plugin for Claude Code](https://github.com/openai/codex-plugin-cc). Install it first:
 1. `/plugin marketplace add openai/codex-plugin-cc`
