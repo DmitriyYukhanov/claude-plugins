@@ -126,6 +126,17 @@
       "source": "./plugins/humanizer",
       "category": "writing",
       "homepage": "https://github.com/DmitriyYukhanov/claude-plugins"
+    },
+    {
+      "name": "issue-to-pr",
+      "description": "Drive a GitHub issue — bare or tracked on a Project board — from triage to a merge-ready PR through a gated pipeline (design cross-review, tests green, code-review loop). Auto-links the issue to close on merge and advances the board card's status as work progresses",
+      "version": "1.0.0",
+      "author": {
+        "name": "Dmitry Yuhanov"
+      },
+      "source": "./plugins/issue-to-pr",
+      "category": "workflow",
+      "homepage": "https://github.com/DmitriyYukhanov/claude-plugins"
     }
   ]
 }

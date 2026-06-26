@@ -1,0 +1,8 @@
+{
+  "name": "issue-to-pr",
+  "version": "1.0.0",
+  "description": "Drive a GitHub issue — bare or tracked on a Project board — from triage to a merge-ready PR through a gated pipeline (design cross-review, tests green, code-review loop). Auto-links the issue to close on merge and advances the board card's status as work progresses",
+  "author": {
+    "name": "Dmitry Yuhanov"
+  }
+}
