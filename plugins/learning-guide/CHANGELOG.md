@@ -5,6 +5,11 @@ All notable changes to the **learning-guide** plugin will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.0.9] - 2026-06-30
+
+### Fixed
+- A third review pass closed two cosmetic side-panel edge cases: a rare literal sentinel character in an embedded source no longer renders as the word "undefined", and `<SCRIPT>`/`</SCRIPT>` tags in an embedded source keep their original casing.
+
 ## [1.0.8] - 2026-06-30
 
 ### Fixed

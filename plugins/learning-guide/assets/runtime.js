@@ -242,10 +242,10 @@
   // Reverse render.cjs escapeForScriptTag's transport-only escaping so the side panel shows
   // the original <!--, <script, </script (esc() then makes them safe for display).
   function unescapeScriptTag(s) {
-    return String(s)
-      .replace(/<\\!--/g, '<!--')
-      .replace(/<\\\/script/gi, '</script')
-      .replace(/<\\script/gi, '<script');
+    // Remove only the backslash render.cjs inserted right after '<' (case-preserving).
+    // A source that literally contained '<\!--' / '<\script' (very rare) would also lose
+    // that backslash — an accepted cosmetic limitation of the backslash transport.
+    return String(s).replace(/<\\(\/?script|!--)/gi, '<$1');
   }
 
   // Tiny CommonMark-ish renderer for embedded sources.
@@ -315,7 +315,8 @@
   function inline(s) {
     var SENT = String.fromCharCode(0xFFFC);
     var codes = [];
-    s = String(s).replace(/`([^`]+)`/g, function (_, c) {
+    s = String(s).split(SENT).join(''); // drop any literal sentinel from the source (collision guard)
+    s = s.replace(/`([^`]+)`/g, function (_, c) {
       codes.push('<code>' + esc(c) + '</code>');
       return SENT + (codes.length - 1) + SENT;
     });
@@ -329,7 +330,10 @@
         var external = /^(https?:|mailto:)/i.test(safe);
         return '<a href="' + safe + '"' + (external ? ' target="_blank" rel="noopener"' : '') + '>' + lab + '</a>';
       });
-    return s.replace(new RegExp(SENT + '(\\d+)' + SENT, 'g'), function (_, n) { return codes[Number(n)]; });
+    return s.replace(new RegExp(SENT + '(\\d+)' + SENT, 'g'), function (m, n) {
+      var j = Number(n);
+      return j < codes.length ? codes[j] : m;
+    });
   }
   function esc(s) {
     return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
