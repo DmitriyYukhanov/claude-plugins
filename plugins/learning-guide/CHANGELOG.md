@@ -5,6 +5,11 @@ All notable changes to the **learning-guide** plugin will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.0.5] - 2026-06-30
+
+### Added
+- Sample inputs and golden tour-specs for the planning-session, refactor-plan, and codebase (synthesized companion) archetypes, plus an end-to-end smoke verifier (`scripts/verify.cjs`). The verifier renders each sample and checks linkify, callouts, companion embedding, cross-reference anchor resolution, the `</script>` escape, the external-link scheme allowlist, and CRLF-vs-LF parity.
+
 ## [1.0.4] - 2026-06-30
 
 ### Added

@@ -1,0 +1,40 @@
+{
+  "schema_version": "1.0",
+  "title": "Demo Planning Session — Interactive Guide",
+  "subtitle": "Synthetic sample (planning-session archetype)",
+  "lang": "en",
+  "archetype": "planning-session",
+  "embedded_sources": [],
+  "external_links": {
+    "TICKET-": "https://tracker.example.com/browse/TICKET-{id}",
+    "DOC-": "https://wiki.example.com/page/{id}"
+  },
+  "cross_ref_patterns": [],
+  "sections": [
+    { "id": "intro", "level": 1, "title": "Introduction", "estimated_minutes": 3,
+      "body_md": "This guide walks through the **2026-03-15** planning session for the synthetic Demo Project. It is a sample — adapt the archetype to your own session files.\n\n:::callout {type=info}\nReplace this content by re-running `learning-guide:analyze` against your real session file.\n:::" },
+    { "id": "decisions", "level": 1, "title": "Decisions", "estimated_minutes": 4,
+      "body_md": "- Adopt event-sourced reconciliation. Tracking ticket: TICKET-101.\n- Defer rate-limiter swap to phase 3.\n- Consumer migration kicked off as TICKET-102." },
+    { "id": "blockers", "level": 1, "title": "Open blockers", "estimated_minutes": 3,
+      "body_md": "1. SLA target — product owner pending decision.\n2. Retention window — data platform pending decision." },
+    { "id": "files", "level": 1, "title": "Files touched", "estimated_minutes": 2,
+      "body_md": "| File | Action |\n|---|---|\n| [Reconciler](services/orders/Reconciler.cs:1) | rewritten |\n| [EventStore](services/orders/EventStore.cs:1) | new |" },
+    { "id": "lessons", "level": 1, "title": "Lessons", "estimated_minutes": 3,
+      "body_md": "- Final-snapshot semantics scale poorly without discipline.\n- Memory-bank guides are authoritative when they exist." }
+  ],
+  "final_quiz": [
+    { "question": "Which decision was deferred to phase 3?",
+      "options": ["Event-sourced reconciliation", "Rate-limiter swap", "Consumer migration", "SLA target"],
+      "answer_index": 1,
+      "explanation": "The rate-limiter swap is deferred; reconciliation and migration are in scope now." }
+  ],
+  "glossary": [
+    { "term": "Event-sourced reconciliation", "definition": "A reconciliation strategy where state is rebuilt by replaying events from an append-only log." }
+  ],
+  "renderer": {
+    "include_mermaid": null,
+    "include_progress_tracker": true,
+    "include_pager": true,
+    "open_command": "open.cmd"
+  }
+}

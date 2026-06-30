@@ -1,0 +1,38 @@
+{
+  "schema_version": "1.0",
+  "title": "Demo Service — Interactive Guide",
+  "subtitle": "Synthetic sample (codebase archetype)",
+  "lang": "en",
+  "archetype": "codebase",
+  "embedded_sources": [
+    { "name": "companion", "path": "tour-companion.md", "label": "Companion" }
+  ],
+  "external_links": {},
+  "cross_ref_patterns": [
+    { "pattern": "\\[\\[companion(?::([^\\]]+))?\\]\\]", "source": "companion", "anchor_format": "{1}" }
+  ],
+  "sections": [
+    { "id": "overview", "level": 1, "title": "Overview", "estimated_minutes": 3,
+      "body_md": "Synthetic two-file C# project. The aim is to exercise the codebase archetype's synthesized companion path. See [[companion:overview]]." },
+    { "id": "map", "level": 1, "title": "Map", "estimated_minutes": 3,
+      "body_md": "- [Service](src/Service.cs:1)\n- [Provider](src/Provider.cs:1)" },
+    { "id": "control-flow", "level": 1, "title": "Control flow", "estimated_minutes": 4,
+      "body_md": "Constructor injection: `Service` receives an `IProvider` and forwards greeting wrapping to it. See [Service.Greet](src/Service.cs:7)." },
+    { "id": "extension", "level": 1, "title": "Extension points", "estimated_minutes": 3,
+      "body_md": "Implement `IProvider` to plug a new greeting transformation. See [DefaultProvider](src/Provider.cs:9)." }
+  ],
+  "final_quiz": [
+    { "question": "Which file is the public façade?",
+      "options": ["src/Service.cs", "src/Provider.cs", "README.md", "tour-companion.md"],
+      "answer_index": 0 }
+  ],
+  "glossary": [
+    { "term": "Façade", "definition": "An entry-point class that hides the details of underlying collaborators." }
+  ],
+  "renderer": {
+    "include_mermaid": null,
+    "include_progress_tracker": true,
+    "include_pager": true,
+    "open_command": "open.cmd"
+  }
+}
