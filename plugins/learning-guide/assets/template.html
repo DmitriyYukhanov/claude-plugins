@@ -1,0 +1,35 @@
+<!-- template_compatibility_version: 1 -->
+<!DOCTYPE html>
+<html lang="{{LANG}}">
+<head>
+<meta charset="UTF-8">
+<title>{{TITLE_HTML}}</title>
+<style id="lg-styles">{{STYLES}}</style>
+{{EXTRA_STYLES_BLOCK}}
+{{MERMAID_BLOCK}}
+</head>
+<body>
+<div class="layout">
+  <aside aria-label="{{I18N_NAV_LABEL}}">
+    <h1>{{TITLE_HTML}}</h1>
+    {{SUBTITLE_BLOCK}}
+    <nav aria-label="{{I18N_TOC_LABEL}}">
+      <ul id="toc">{{TOC_ITEMS}}</ul>
+    </nav>
+    {{PROGRESS_BLOCK}}
+  </aside>
+  <main id="content">{{SECTIONS}}</main>
+</div>
+
+{{SIDE_PANEL_BLOCK}}
+
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+{{EMBEDDED_SOURCES}}
+
+<script id="lg-i18n" type="application/json">{{I18N_JSON}}</script>
+<script id="lg-tour-meta" type="application/json">{{TOUR_META_JSON}}</script>
+
+<script>{{RUNTIME}}</script>
+</body>
+</html>

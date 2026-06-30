@@ -1,0 +1,42 @@
+{
+  "schema_version": "1.0",
+  "title": "Demo Refactor Plan — Interactive Guide",
+  "subtitle": "Synthetic sample (refactor-plan archetype)",
+  "lang": "en",
+  "archetype": "refactor-plan",
+  "embedded_sources": [],
+  "external_links": {
+    "TICKET-": "https://tracker.example.com/browse/TICKET-{id}",
+    "DOC-": "https://wiki.example.com/page/{id}"
+  },
+  "cross_ref_patterns": [],
+  "sections": [
+    { "id": "intro", "level": 1, "title": "Introduction", "estimated_minutes": 3,
+      "body_md": "Walkthrough of the synthetic Demo Refactor Plan: three phases, two open blockers (DOC-100, TICKET-101), and a halt criterion for the rollout." },
+    { "id": "phase-1", "level": 1, "title": "Phase 1 — Test harness", "estimated_minutes": 5,
+      "body_md": "Establish characterization tests before any rewrite.\n\n:::callout {type=warn}\nNothing in Phase 2 starts until Phase 1 is green on CI.\n:::" },
+    { "id": "phase-2", "level": 1, "title": "Phase 2 — Provider isolation", "estimated_minutes": 5,
+      "body_md": "Wrap the third-party SDK behind an internal contract." },
+    { "id": "phase-3", "level": 1, "title": "Phase 3 — Rollout", "estimated_minutes": 5,
+      "body_md": "Experiment configs at 5% → 25% → 100% with halt criterion: error rate > 0.5% over 1 hour." },
+    { "id": "blockers", "level": 1, "title": "Blockers", "estimated_minutes": 3,
+      "body_md": "- DOC-100 — onboarding wiki update pending docs team.\n- TICKET-101 — pipeline schema sign-off." },
+    { "id": "risks", "level": 1, "title": "Risks", "estimated_minutes": 3,
+      "body_md": "1. Provider rate limits during isolation.\n2. Experiment skew if user IDs are hashed inconsistently." }
+  ],
+  "final_quiz": [
+    { "question": "Which phase ships first?",
+      "options": ["Phase 1", "Phase 2", "Phase 3", "Whichever is unblocked first"],
+      "answer_index": 0,
+      "explanation": "Phase 1 (test harness) is mandatory before any rewrite." }
+  ],
+  "glossary": [
+    { "term": "Halt criterion", "definition": "An automatic threshold that pauses or rolls back a rollout when exceeded." }
+  ],
+  "renderer": {
+    "include_mermaid": null,
+    "include_progress_tracker": true,
+    "include_pager": true,
+    "open_command": "open.cmd"
+  }
+}
