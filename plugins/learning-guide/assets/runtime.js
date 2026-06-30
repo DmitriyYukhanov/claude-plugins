@@ -325,7 +325,9 @@
       .replace(/\*([^*]+)\*/g, '<em>$1</em>')
       // R3: escape attribute quotes and enforce a URL-scheme allowlist (untrusted source).
       .replace(/\[([^\]]+)\]\(([^)]+)\)/g, function (_, lab, href) {
-        var allowed = /^(https?:|mailto:|#|\/|\.\/|\.\.\/)/i.test(href);
+        // Self-contained offline contract: only external schemes + in-document anchors.
+        // Relative paths (/, ./, ../) would navigate the filesystem and break the bundle.
+        var allowed = /^(https?:|mailto:|#)/i.test(href);
         var safe = (allowed ? href : '#').replace(/"/g, '%22').replace(/'/g, '%27');
         var external = /^(https?:|mailto:)/i.test(safe);
         return '<a href="' + safe + '"' + (external ? ' target="_blank" rel="noopener"' : '') + '>' + lab + '</a>';

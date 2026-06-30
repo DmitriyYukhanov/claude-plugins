@@ -17,5 +17,5 @@ Synthetic two-file C# project. `Service` depends on `IProvider`. `DefaultProvide
 
 ## Where to look next
 
-- Follow the constructor chain in `src/Service.cs:5` to see how `IProvider` is injected.
+- Follow the constructor chain in `src/Service.cs:7` to see how `IProvider` is injected.
 - `src/Provider.cs:9` is the only behavioural seam to swap.

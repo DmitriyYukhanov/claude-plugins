@@ -5,6 +5,11 @@ All notable changes to the **learning-guide** plugin will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.0.11] - 2026-06-30
+
+### Fixed
+- Side-panel embedded docs no longer emit relative-path links (`/`, `./`, `../`) that would navigate the local filesystem and break the offline bundle; only external and in-document links are kept. Corrected a sample companion's source-line reference.
+
 ## [1.0.10] - 2026-06-30
 
 ### Fixed
