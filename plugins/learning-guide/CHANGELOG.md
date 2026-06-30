@@ -5,6 +5,11 @@ All notable changes to the **learning-guide** plugin will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.0.6] - 2026-06-30
+
+### Added
+- Skill bodies for `analyze`, `render`, and the entry-point, plus reference docs covering the four archetypes, spec authoring, cross-reference design, the companion synthesis contract, renderer CLI troubleshooting, and `file://` browser constraints. The plugin's three skills are now functional end to end.
+
 ## [1.0.5] - 2026-06-30
 
 ### Added
