@@ -12,6 +12,24 @@ const ASSETS = path.join(PLUGIN_ROOT, 'assets');
 function die(msg, code) { process.stderr.write(msg + '\n'); process.exit(code || 1); }
 function warn(msg) { process.stderr.write(msg + '\n'); }
 
+// Shape-agnostic ReDoS screen for an author-supplied cross_ref pattern: run the sticky
+// match against adversarial runs in a child process bounded by a hard wall-clock timeout.
+// A catastrophic pattern backtracks past the deadline and the child is killed (SIGTERM);
+// a safe pattern finishes in microseconds. This is the robust complement to markdown.cjs's
+// in-process structural/probe heuristics, which a fixed regex+probe cannot make complete.
+function crossRefPatternIsSafe(src) {
+  const probeCode =
+    'var re=new RegExp(process.argv[1],"y");' +
+    'var P=["a".repeat(80),"1".repeat(80),"Z".repeat(80),"aZ1".repeat(27),"1".repeat(60)+"."];' +
+    'for(var i=0;i<P.length;i++){re.lastIndex=0;try{re.exec(P[i]);}catch(e){}}';
+  let r;
+  try {
+    r = require('child_process').spawnSync(process.execPath, ['-e', probeCode, src],
+      { timeout: 800, stdio: 'ignore' });
+  } catch (e) { return true; } // spawn failure: do not block rendering
+  return r.signal !== 'SIGTERM' && !(r.error && r.error.code === 'ETIMEDOUT');
+}
+
 function parseArgs(argv) {
   const args = { spec: null, outputDir: null };
   for (let i = 2; i < argv.length; i++) {
@@ -307,6 +325,12 @@ function main() {
   for (const [sid, q] of allQuizzes)
     if (q.answer_index >= q.options.length)
       die(`quiz in "${sid}" has answer_index ${q.answer_index} but only ${q.options.length} options`);
+  for (const p of (spec.cross_ref_patterns || [])) {
+    try { new RegExp(p.pattern, 'y'); }
+    catch (e) { die(`cross_ref pattern ${JSON.stringify(p.pattern)} is not a valid regex: ${e.message}`); }
+    if (!crossRefPatternIsSafe(p.pattern))
+      die(`cross_ref pattern ${JSON.stringify(p.pattern)} is too slow (catastrophic backtracking); simplify it`);
+  }
 
   const overrides = resolveOverrides(specDir);
   const policy = readPolicy(overrides);

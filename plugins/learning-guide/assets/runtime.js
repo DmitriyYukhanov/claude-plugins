@@ -184,7 +184,7 @@
     if (!panel) return;
     var content = panel.querySelector('.md-viewer-content');
     if (!Object.prototype.hasOwnProperty.call(renderedCache, name))
-      renderedCache[name] = renderEmbeddedMarkdown(src.textContent || '');
+      renderedCache[name] = renderEmbeddedMarkdown(unescapeScriptTag(src.textContent || ''));
     content.innerHTML = renderedCache[name]; // always (re)set — fixes stale content when switching sources
     panel.classList.add('open');
     panel.setAttribute('aria-hidden', 'false'); // R12: reachable by assistive tech while open
@@ -237,6 +237,15 @@
       var p = panelEl();
       if (ev.key === 'Escape' && p && p.classList.contains('open')) closeSource();
     });
+  }
+
+  // Reverse render.cjs escapeForScriptTag's transport-only escaping so the side panel shows
+  // the original <!--, <script, </script (esc() then makes them safe for display).
+  function unescapeScriptTag(s) {
+    return String(s)
+      .replace(/<\\!--/g, '<!--')
+      .replace(/<\\\/script/gi, '</script')
+      .replace(/<\\script/gi, '<script');
   }
 
   // Tiny CommonMark-ish renderer for embedded sources.
@@ -300,26 +309,27 @@
     }
     return html.join('\n');
   }
-  // Split on code spans so emphasis/link rules never touch code-span content (CF7).
+  // CF7: pull code spans into a placeholder (U+FFFC, built at runtime so the source stays
+  // ASCII), then escape + format the whole string once — so emphasis/links may span across
+  // a code span (e.g. **a `b` c**) — and finally restore the pre-escaped <code> spans.
   function inline(s) {
-    var parts = String(s).split(/(`[^`]+`)/);
-    for (var i = 0; i < parts.length; i++) {
-      if (i % 2 === 1) {
-        parts[i] = '<code>' + esc(parts[i].slice(1, -1)) + '</code>';
-      } else {
-        parts[i] = esc(parts[i])
-          .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-          .replace(/\*([^*]+)\*/g, '<em>$1</em>')
-          // R3: escape attribute quotes and enforce a URL-scheme allowlist (untrusted source).
-          .replace(/\[([^\]]+)\]\(([^)]+)\)/g, function (_, lab, href) {
-            var allowed = /^(https?:|mailto:|#|\/|\.\/|\.\.\/)/i.test(href);
-            var safe = (allowed ? href : '#').replace(/"/g, '%22').replace(/'/g, '%27');
-            var external = /^(https?:|mailto:)/i.test(safe);
-            return '<a href="' + safe + '"' + (external ? ' target="_blank" rel="noopener"' : '') + '>' + lab + '</a>';
-          });
-      }
-    }
-    return parts.join('');
+    var SENT = String.fromCharCode(0xFFFC);
+    var codes = [];
+    s = String(s).replace(/`([^`]+)`/g, function (_, c) {
+      codes.push('<code>' + esc(c) + '</code>');
+      return SENT + (codes.length - 1) + SENT;
+    });
+    s = esc(s)
+      .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*([^*]+)\*/g, '<em>$1</em>')
+      // R3: escape attribute quotes and enforce a URL-scheme allowlist (untrusted source).
+      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, function (_, lab, href) {
+        var allowed = /^(https?:|mailto:|#|\/|\.\/|\.\.\/)/i.test(href);
+        var safe = (allowed ? href : '#').replace(/"/g, '%22').replace(/'/g, '%27');
+        var external = /^(https?:|mailto:)/i.test(safe);
+        return '<a href="' + safe + '"' + (external ? ' target="_blank" rel="noopener"' : '') + '>' + lab + '</a>';
+      });
+    return s.replace(new RegExp(SENT + '(\\d+)' + SENT, 'g'), function (_, n) { return codes[Number(n)]; });
   }
   function esc(s) {
     return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');

@@ -5,6 +5,11 @@ All notable changes to the **learning-guide** plugin will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.0.8] - 2026-06-30
+
+### Fixed
+- A second code-review pass caught three regressions/gaps in the first round of fixes. The cross-reference ReDoS screen now rejects multi-atom catastrophic patterns it previously missed (via a render-time timeout), the side-panel viewer again renders emphasis and links that wrap an inline code span (e.g. **a `b` c**), and embedded sources containing `<!--` or `<script` no longer show stray backslashes in the side panel.
+
 ## [1.0.7] - 2026-06-30
 
 ### Fixed

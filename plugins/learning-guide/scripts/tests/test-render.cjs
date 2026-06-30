@@ -317,5 +317,15 @@ module.exports = [
     const r = runRender([p]);
     assert.notStrictEqual(r.code, 0);
     assert.match(r.stderr, /must be a JSON object/);
+  }},
+  // CF3 (pass 2): a multi-atom catastrophic cross_ref pattern that evades the in-process
+  // heuristics is caught by the render-time spawn-with-timeout screen.
+  { name: 'multi-atom catastrophic cross_ref pattern is rejected (CF3)', fn: () => {
+    const dir = tmpdir('redos2');
+    const spec = minimalSpec({ cross_ref_patterns: [{ pattern: '(\\d\\d+)+x', source: 'd' }] });
+    const p = writeSpec(dir, spec);
+    const r = runRender([p]);
+    assert.notStrictEqual(r.code, 0);
+    assert.match(r.stderr, /catastrophic|too slow/i);
   }}
 ];
