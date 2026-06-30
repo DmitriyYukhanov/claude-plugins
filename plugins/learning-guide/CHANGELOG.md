@@ -5,6 +5,11 @@ All notable changes to the **learning-guide** plugin will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.0.4] - 2026-06-30
+
+### Added
+- Renderer (`scripts/render.cjs`) — turns a `tour-spec.json` into the self-contained `index.html` plus launcher scripts. Orchestrates schema validation, per-project override resolution, embedded-source inlining, conditional Mermaid, and section/quiz/glossary/final-quiz rendering. Final-quiz and glossary are navigable sections; Mermaid is detected by post-processing (not a raw-fence regex) and excluded from the payload-size warning; embedded-source containment now defeats symlink escapes; the launcher is skipped when `open_command` is `none`.
+
 ## [1.0.3] - 2026-06-30
 
 ### Added
