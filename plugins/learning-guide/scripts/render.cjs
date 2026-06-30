@@ -154,6 +154,10 @@ function attrEscape(s) { return htmlEscape(s); }
 function jsonForScript(obj) {
   return JSON.stringify(obj).replace(/</g, '\\u003c');
 }
+// Inline JS/CSS into <script>/<style> without letting a literal close-tag sequence end the
+// element early. `<\/script` / `<\/style` are equivalent inside JS strings/regexes and CSS.
+function inlineJs(s) { return String(s).replace(/<\/script/gi, '<\\/script'); }
+function inlineCss(s) { return String(s).replace(/<\/style/gi, '<\\/style'); }
 
 function buildToc(navItems) {
   return navItems.map(n => {
@@ -398,7 +402,7 @@ function main() {
 
   let mermaidLib = '';
   if (includeMermaid) mermaidLib = fs.readFileSync(path.join(ASSETS, 'mermaid.min.js'), 'utf8');
-  const mermaidBlock = includeMermaid ? `<script>${mermaidLib}</script>` : '';
+  const mermaidBlock = includeMermaid ? `<script>${inlineJs(mermaidLib)}</script>` : '';
 
   const tocItems = buildToc(navItems);
   const embeddedSourcesHtml = buildEmbeddedSources(sources);
@@ -414,8 +418,8 @@ function main() {
   const html = fillTemplate(template, {
     LANG: htmlEscape(spec.lang),
     TITLE_HTML: htmlEscape(spec.title),
-    STYLES: styles,
-    EXTRA_STYLES_BLOCK: extraStyles ? `<style>${extraStyles}</style>` : '',
+    STYLES: inlineCss(styles),
+    EXTRA_STYLES_BLOCK: extraStyles ? `<style>${inlineCss(extraStyles)}</style>` : '',
     MERMAID_BLOCK: mermaidBlock,
     I18N_NAV_LABEL: attrEscape(i18n.navLabel || 'Navigation'),
     I18N_TOC_LABEL: attrEscape(i18n.tocLabel || 'Table of contents'),
@@ -427,7 +431,7 @@ function main() {
     EMBEDDED_SOURCES: embeddedSourcesHtml,
     I18N_JSON: jsonForScript(i18n),
     TOUR_META_JSON: jsonForScript(tourMeta),
-    RUNTIME: runtime
+    RUNTIME: inlineJs(runtime)
   });
 
   fs.mkdirSync(outputDir, { recursive: true });

@@ -5,6 +5,14 @@ All notable changes to the **learning-guide** plugin will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.0.10] - 2026-06-30
+
+### Fixed
+- Critical: a `</script` sequence in an inlined comment truncated the runtime script, leaving every generated guide a dead page with no interactivity. The renderer now neutralizes close-tag sequences in every inlined script, style, and library block, so no embedded content can end its element early.
+
+### Added
+- Opt-in Playwright browser verification (`scripts/browser-verify.cjs`) that renders a fixture tour, opens it from `file://` in Chromium, and drives the real runtime: navigation, the side-panel source viewer with anchor scrolling, Mermaid rendering, quizzes, progress persistence, click-to-copy, and external links. It catches runtime regressions the string-level tests cannot.
+
 ## [1.0.9] - 2026-06-30
 
 ### Fixed

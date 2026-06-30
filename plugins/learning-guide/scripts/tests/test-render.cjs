@@ -327,5 +327,15 @@ module.exports = [
     const r = runRender([p]);
     assert.notStrictEqual(r.code, 0);
     assert.match(r.stderr, /catastrophic|too slow/i);
+  }},
+  // The inlined runtime must not be cut short by a literal close-tag sequence (its tail,
+  // which sets up DOMContentLoaded, must survive — otherwise the whole page is dead).
+  { name: 'inlined runtime survives close-tag neutralization', fn: () => {
+    const dir = tmpdir('inlinejs');
+    const p = writeSpec(dir, minimalSpec());
+    const r = runRender([p]);
+    if (r.code !== 0) throw new Error(r.stderr);
+    const html = fs.readFileSync(path.join(dir, 'index.html'), 'utf8');
+    assert.match(html, /addEventListener\('DOMContentLoaded', init\)/);
   }}
 ];

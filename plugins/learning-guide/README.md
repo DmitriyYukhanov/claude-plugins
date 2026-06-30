@@ -24,6 +24,12 @@ Generate self-contained, offline-first, interactive HTML learning guides for any
 
 Node.js on PATH. The renderer is zero-dependency — no `npm install`.
 
+## Verifying
+
+- `node scripts/tests/run-all.cjs` — zero-dependency unit tests (schema validator, markdown processor, renderer).
+- `node scripts/verify.cjs` — end-to-end smoke render across the sample archetypes.
+- `node scripts/browser-verify.cjs` — optional browser test that drives the real runtime in Chromium. Requires Playwright (`npm i -D playwright && npx playwright install chromium`); not a runtime dependency.
+
 ## Customization
 
 Drop overrides in `<output-dir>/.learning-guide/`:

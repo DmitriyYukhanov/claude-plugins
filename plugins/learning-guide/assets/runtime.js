@@ -240,7 +240,7 @@
   }
 
   // Reverse render.cjs escapeForScriptTag's transport-only escaping so the side panel shows
-  // the original <!--, <script, </script (esc() then makes them safe for display).
+  // the original comment-open and script open/close markers (esc() then makes them safe).
   function unescapeScriptTag(s) {
     // Remove only the backslash render.cjs inserted right after '<' (case-preserving).
     // A source that literally contained '<\!--' / '<\script' (very rare) would also lose
