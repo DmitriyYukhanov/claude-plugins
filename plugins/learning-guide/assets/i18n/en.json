@@ -1,0 +1,19 @@
+{
+  "navLabel": "Section navigation",
+  "tocLabel": "Table of contents",
+  "progressLabel": "Progress",
+  "resetProgress": "Reset progress",
+  "markRead": "Mark as read",
+  "alreadyRead": "✓ Read",
+  "next": "Next",
+  "prev": "Previous",
+  "copied": "Copied",
+  "copyFailed": "Copy failed — select and copy manually",
+  "panelClose": "Close",
+  "minutes": "min",
+  "openInIde": "Click to copy path",
+  "finalQuiz": "Self-check",
+  "glossary": "Glossary",
+  "correct": "Correct",
+  "incorrect": "Incorrect"
+}
