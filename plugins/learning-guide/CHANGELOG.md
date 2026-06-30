@@ -5,6 +5,11 @@ All notable changes to the **learning-guide** plugin will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.0.7] - 2026-06-30
+
+### Fixed
+- An adversarial code-review pass found and fixed 15 implementation defects. The renderer no longer hangs on empty-matchable or catastrophic cross-reference patterns, `render.cmd` re-renders correctly on Windows, and out-of-range quiz answers, reserved section-id collisions, directory source paths, and non-object specs now fail with a clear message instead of a silent break or a stack trace. Embedded sources can no longer break out of their `<script>` container, the progress tracker works with the pager disabled, and the side-panel viewer hardens inline code spans, special-character anchors, and assistive-tech reachability.
+
 ## [1.0.6] - 2026-06-30
 
 ### Added

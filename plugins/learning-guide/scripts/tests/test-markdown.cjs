@@ -140,5 +140,29 @@ module.exports = [
     const b = slugify('Раздел Два');
     assert.notStrictEqual(a, b);
     assert.ok(a.length > 0 && b.length > 0, JSON.stringify([a, b]));
+  }},
+  // CF1: an empty-matchable cross-ref pattern must not cause a non-advancing infinite loop.
+  { name: 'empty-matchable cross-ref pattern does not hang (CF1)', fn: () => {
+    const spec = { cross_ref_patterns: [{ pattern: 'X*', source: 'd' }] };
+    const start = Date.now();
+    const html = renderBody('hello world here', spec);
+    assert.ok(Date.now() - start < 2000, 'render hung on empty-matchable pattern');
+    assert.doesNotMatch(html, /class="xref"/);
+    assert.match(html, /hello world here/);
+  }},
+  // CF3: a catastrophic pattern keyed on uppercase (probe-evading) is structurally rejected.
+  { name: 'uppercase nested-quantifier pattern is guarded (CF3)', fn: () => {
+    const spec = { cross_ref_patterns: [{ pattern: '([A-Z]+)+#', source: 'd' }] };
+    const start = Date.now();
+    const html = renderBody('A'.repeat(4000), spec);
+    assert.ok(Date.now() - start < 3000, 'render hung on uppercase ReDoS pattern');
+    assert.doesNotMatch(html, /class="xref"/);
+  }},
+  // CF5: escapeForScriptTag must defeat the script-data-double-escape breakout too.
+  { name: 'escapeForScriptTag neutralises <!-- and <script (CF5)', fn: () => {
+    const out = escapeForScriptTag('x <!-- y <script> z </script>');
+    assert.match(out, /<\\!--/);
+    assert.match(out, /<\\script>/);
+    assert.match(out, /<\\\/script>/);
   }}
 ];

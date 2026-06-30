@@ -259,5 +259,63 @@ module.exports = [
     const r = runRender([p]);
     if (r.code !== 0) throw new Error(r.stderr);
     assert.match(r.stderr, /payload|max_inline_payload_kb/i);
+  }},
+  // CF2: render.cmd output-dir must be quote-safe (no trailing-backslash escape).
+  { name: 'render.cmd output-dir is quote-safe (CF2)', fn: () => {
+    const dir = tmpdir('rcmd');
+    const p = writeSpec(dir, minimalSpec());
+    const r = runRender([p]);
+    if (r.code !== 0) throw new Error(r.stderr);
+    const rc = fs.readFileSync(path.join(dir, 'render.cmd'), 'utf8');
+    assert.match(rc, /--output-dir "%~dp0\."/);
+  }},
+  // CF4: answer_index beyond options length is rejected.
+  { name: 'answer_index out of range is rejected (CF4)', fn: () => {
+    const dir = tmpdir('ans');
+    const spec = minimalSpec({ final_quiz: [{ question: 'Q', options: ['a', 'b'], answer_index: 5 }] });
+    const p = writeSpec(dir, spec);
+    const r = runRender([p]);
+    assert.notStrictEqual(r.code, 0);
+    assert.match(r.stderr, /answer_index/);
+  }},
+  // CF6: an author section id colliding with a reserved injected id is rejected.
+  { name: 'section id colliding with glossary is rejected (CF6)', fn: () => {
+    const dir = tmpdir('resv');
+    const spec = minimalSpec({ glossary: [{ term: 'T', definition: 'D' }] });
+    spec.sections.push({ id: 'glossary', level: 1, title: 'My Glossary', body_md: 'x' });
+    const p = writeSpec(dir, spec);
+    const r = runRender([p]);
+    assert.notStrictEqual(r.code, 0);
+    assert.match(r.stderr, /reserved/);
+  }},
+  // CF10: mark-read follows the progress tracker, not the pager.
+  { name: 'mark-read present when pager off but progress on (CF10)', fn: () => {
+    const dir = tmpdir('nopager');
+    const spec = minimalSpec({ renderer: { include_pager: false, include_progress_tracker: true } });
+    const p = writeSpec(dir, spec);
+    const r = runRender([p]);
+    if (r.code !== 0) throw new Error(r.stderr);
+    const html = fs.readFileSync(path.join(dir, 'index.html'), 'utf8');
+    assert.match(html, /class="mark-read"/);
+    assert.doesNotMatch(html, /class="next"/);
+  }},
+  // CF11: an embedded source path pointing at a directory dies cleanly (no EISDIR crash).
+  { name: 'embedded source pointing at a directory is rejected (CF11)', fn: () => {
+    const dir = tmpdir('isdir');
+    fs.mkdirSync(path.join(dir, 'docs'));
+    const spec = minimalSpec({ embedded_sources: [{ name: 'docs', path: 'docs', label: 'Docs' }] });
+    const p = writeSpec(dir, spec);
+    const r = runRender([p]);
+    assert.notStrictEqual(r.code, 0);
+    assert.match(r.stderr, /not a regular file/);
+  }},
+  // CF12: a non-object spec (literal null) dies cleanly instead of throwing a TypeError.
+  { name: 'non-object spec dies cleanly (CF12)', fn: () => {
+    const dir = tmpdir('nullspec');
+    const p = path.join(dir, 'tour-spec.json');
+    fs.writeFileSync(p, 'null');
+    const r = runRender([p]);
+    assert.notStrictEqual(r.code, 0);
+    assert.match(r.stderr, /must be a JSON object/);
   }}
 ];

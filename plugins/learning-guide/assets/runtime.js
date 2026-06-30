@@ -15,7 +15,7 @@
   }
 
   // Slug for embedded-source heading ids — must match scripts/markdown.cjs slugify
-  // (R9: Unicode-aware so Cyrillic etc. survive). Falls back to a broad non-ASCII range
+  // (R9: Unicode-aware so Cyrillic etc. survive). Falls back to a Latin/Cyrillic range
   // on the rare engine without Unicode property escapes.
   var slugify = (function () {
     try {
@@ -25,10 +25,17 @@
       };
     } catch (e) {
       return function (s) {
-        return String(s).toLowerCase().replace(/[^0-9a-zÀ-￿]+/g, '-').replace(/^-+|-+$/g, '');
+        return String(s).toLowerCase()
+          .replace(/[^0-9a-zß-öø-ÿĀ-ſа-яё]+/g, '-')
+          .replace(/^-+|-+$/g, '');
       };
     }
   })();
+
+  function cssEsc(s) {
+    if (window.CSS && CSS.escape) return CSS.escape(String(s));
+    return String(s).replace(/["\\\][]/g, '\\$&');
+  }
 
   function loadProgress() {
     try { return JSON.parse(localStorage.getItem(STORAGE_KEYS.progress) || '{}') || {}; }
@@ -44,7 +51,7 @@
     document.querySelectorAll('aside nav a').forEach(function (a) { a.classList.remove('active'); });
     var sec = document.getElementById(id);
     if (sec) sec.classList.add('active');
-    var link = document.querySelector('aside nav a[data-id="' + id + '"]');
+    var link = document.querySelector('aside nav a[data-id="' + cssEsc(id) + '"]');
     if (link) link.classList.add('active');
     try { localStorage.setItem(STORAGE_KEYS.active, id); } catch (e) {}
     window.scrollTo(0, 0);
@@ -171,12 +178,13 @@
   function panelEl() { return document.getElementById('md-viewer'); }
   function backdropEl() { return document.getElementById('md-viewer-backdrop'); }
   function openSource(name, anchor, trigger) {
-    var src = document.querySelector('script[type="text/markdown"][data-name="' + name + '"]');
+    var src = document.querySelector('script[type="text/markdown"][data-name="' + cssEsc(name) + '"]');
     if (!src) return;
     var panel = panelEl();
     if (!panel) return;
     var content = panel.querySelector('.md-viewer-content');
-    if (!(name in renderedCache)) renderedCache[name] = renderEmbeddedMarkdown(src.textContent || '');
+    if (!Object.prototype.hasOwnProperty.call(renderedCache, name))
+      renderedCache[name] = renderEmbeddedMarkdown(src.textContent || '');
     content.innerHTML = renderedCache[name]; // always (re)set — fixes stale content when switching sources
     panel.classList.add('open');
     panel.setAttribute('aria-hidden', 'false'); // R12: reachable by assistive tech while open
@@ -184,7 +192,7 @@
     if (bd) bd.classList.add('open');
     lastTrigger = trigger || (document.activeElement && document.activeElement.focus ? document.activeElement : null);
     if (anchor) {
-      var target = content.querySelector('[id="' + anchor + '"]');
+      var target = content.querySelector('[id="' + cssEsc(anchor) + '"]');
       if (target) {
         target.scrollIntoView({ behavior: 'smooth', block: 'start' });
         target.classList.remove('anchor-flash'); void target.offsetWidth;
@@ -292,19 +300,29 @@
     }
     return html.join('\n');
   }
+  // Split on code spans so emphasis/link rules never touch code-span content (CF7).
   function inline(s) {
-    return s
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-      .replace(/`([^`]+)`/g, '<code>$1</code>')
-      .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-      .replace(/\*([^*]+)\*/g, '<em>$1</em>')
-      // R3: escape attribute quotes and enforce a URL-scheme allowlist (the source is untrusted).
-      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, function (_, lab, href) {
-        var allowed = /^(https?:|mailto:|#|\/|\.\/|\.\.\/)/i.test(href);
-        var safe = (allowed ? href : '#').replace(/"/g, '%22').replace(/'/g, '%27');
-        var external = /^(https?:|mailto:)/i.test(safe);
-        return '<a href="' + safe + '"' + (external ? ' target="_blank" rel="noopener"' : '') + '>' + lab + '</a>';
-      });
+    var parts = String(s).split(/(`[^`]+`)/);
+    for (var i = 0; i < parts.length; i++) {
+      if (i % 2 === 1) {
+        parts[i] = '<code>' + esc(parts[i].slice(1, -1)) + '</code>';
+      } else {
+        parts[i] = esc(parts[i])
+          .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+          .replace(/\*([^*]+)\*/g, '<em>$1</em>')
+          // R3: escape attribute quotes and enforce a URL-scheme allowlist (untrusted source).
+          .replace(/\[([^\]]+)\]\(([^)]+)\)/g, function (_, lab, href) {
+            var allowed = /^(https?:|mailto:|#|\/|\.\/|\.\.\/)/i.test(href);
+            var safe = (allowed ? href : '#').replace(/"/g, '%22').replace(/'/g, '%27');
+            var external = /^(https?:|mailto:)/i.test(safe);
+            return '<a href="' + safe + '"' + (external ? ' target="_blank" rel="noopener"' : '') + '>' + lab + '</a>';
+          });
+      }
+    }
+    return parts.join('');
+  }
+  function esc(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
 
   function init() {

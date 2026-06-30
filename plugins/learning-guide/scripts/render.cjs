@@ -117,6 +117,8 @@ function loadEmbeddedSources(spec, specDir, embeddedRoot) {
     try { realRoot = fs.realpathSync.native(embeddedRoot); } catch (e) { realRoot = embeddedRoot; }
     if (!isInside(realRoot, realResolved) && realResolved !== realRoot)
       die(`embedded source "${src.name}" resolves via symlink outside project root ${realRoot}`);
+    if (!fs.statSync(resolved).isFile())
+      die(`embedded source "${src.name}" path "${src.path}" is not a regular file: ${resolved}`);
     const raw = md.normalizeLineEndings(fs.readFileSync(resolved, 'utf8'));
     out.push({ name: src.name, label: src.label, content: raw });
   }
@@ -164,14 +166,19 @@ function renderQuiz(quiz, idPrefix) {
   return out.join('\n');
 }
 
-// R13 — pager prev/next are <button> (keyboard-operable, Enter/Space).
-function pagerHtml(prevId, nextId, sectionId, i18n, includePager) {
-  if (!includePager) return '';
+// R13 — pager prev/next are <button> (keyboard-operable, Enter/Space). The mark-read
+// control follows the progress tracker, not the pager (CF10), so disabling the pager does
+// not strand the tracker with no way to mark sections read.
+function sectionFooter(prevId, nextId, sectionId, i18n, includePager, includeProgress) {
+  const markRead = includeProgress
+    ? `<button type="button" class="mark-read" data-section="${attrEscape(sectionId)}" aria-pressed="false">${htmlEscape(i18n.markRead || 'Mark as read')}</button>`
+    : '';
+  if (!includePager) return markRead ? `<div class="pager">${markRead}</div>` : '';
   return `<div class="pager">` +
     (prevId
       ? `<button type="button" class="prev" data-target="${attrEscape(prevId)}">${htmlEscape(i18n.prev || 'Previous')}</button>`
       : `<span class="disabled"></span>`) +
-    `<button type="button" class="mark-read" data-section="${attrEscape(sectionId)}" aria-pressed="false">${htmlEscape(i18n.markRead || 'Mark as read')}</button>` +
+    (markRead || `<span class="disabled"></span>`) +
     (nextId
       ? `<button type="button" class="next" data-target="${attrEscape(nextId)}">${htmlEscape(i18n.next || 'Next')}</button>`
       : `<span class="disabled"></span>`) +
@@ -225,7 +232,10 @@ function buildOpenCmd() {
 function buildRenderCmd() {
   const renderScript = path.resolve(__dirname, 'render.cjs');
   const winScript = renderScript.replace(/\//g, '\\');
-  return `@echo off\r\nnode "${winScript}" "%~dp0tour-spec.json" --output-dir "%~dp0"\r\n`;
+  // "%~dp0" ends in a backslash, so a bare "%~dp0" would escape the closing quote and the
+  // arg would arrive with a trailing ". "%~dp0." absorbs the backslash; path.resolve
+  // normalises the trailing ".".
+  return `@echo off\r\nnode "${winScript}" "%~dp0tour-spec.json" --output-dir "%~dp0."\r\n`;
 }
 
 function buildReadme(spec, lang) {
@@ -276,6 +286,8 @@ function main() {
   const outputDir = path.resolve(args.outputDir || specDir);
 
   const spec = readJson(specPath, 'spec');
+  if (!spec || typeof spec !== 'object' || Array.isArray(spec))
+    die(`spec must be a JSON object: ${specPath}`);
   checkSchemaVersion(spec);
 
   const schema = loadSchema();
@@ -285,9 +297,16 @@ function main() {
     die(`spec validation failed (${errs.length} error${errs.length > 1 ? 's' : ''})`);
   }
 
+  // Cross-field checks the per-node JSON Schema validator cannot express.
   for (const s of spec.sections)
     if (s.level >= 2 && !s.parent)
       die(`section "${s.id}" has level ${s.level} but no parent`);
+  const allQuizzes = [];
+  for (const s of spec.sections) for (const q of (s.quiz || [])) allQuizzes.push([s.id, q]);
+  for (const q of (spec.final_quiz || [])) allQuizzes.push(['final_quiz', q]);
+  for (const [sid, q] of allQuizzes)
+    if (q.answer_index >= q.options.length)
+      die(`quiz in "${sid}" has answer_index ${q.answer_index} but only ${q.options.length} options`);
 
   const overrides = resolveOverrides(specDir);
   const policy = readPolicy(overrides);
@@ -301,8 +320,16 @@ function main() {
   const sources = loadEmbeddedSources(spec, specDir, embeddedRoot);
 
   const includePager = !spec.renderer || spec.renderer.include_pager !== false;
+  const includeProgress = !spec.renderer || spec.renderer.include_progress_tracker !== false;
   const hasFinalQuiz = !!(spec.final_quiz && spec.final_quiz.length);
   const hasGlossary = !!(spec.glossary && spec.glossary.length);
+
+  // The renderer injects reserved 'final-quiz'/'glossary' sections; an author section using
+  // the same id would collide (duplicate DOM ids, mis-wired nav). Reject it.
+  for (const s of spec.sections) {
+    if (hasFinalQuiz && s.id === 'final-quiz') die(`section id "final-quiz" is reserved when final_quiz is present; rename the section`);
+    if (hasGlossary && s.id === 'glossary') die(`section id "glossary" is reserved when glossary is present; rename the section`);
+  }
 
   // R4/R5 — final_quiz and glossary are real, navigable sections in the nav order.
   const navItems = spec.sections.map(s => ({ id: s.id, title: s.title, level: s.level }));
@@ -317,7 +344,7 @@ function main() {
       ? `<p class="meta">${s.estimated_minutes} ${htmlEscape(i18n.minutes || 'min')}</p>` : '';
     const body = md.renderBody(s.body_md, spec);
     const quiz = renderQuiz(s.quiz, s.id);
-    const pager = pagerHtml(navIds[idx - 1], navIds[idx + 1], s.id, i18n, includePager);
+    const pager = sectionFooter(navIds[idx - 1], navIds[idx + 1], s.id, i18n, includePager, includeProgress);
     sectionsHtml.push(
       `<section class="section" id="${attrEscape(s.id)}"><h1>${htmlEscape(s.title)}</h1>${meta}${body}${quiz}${pager}</section>`
     );
@@ -325,14 +352,14 @@ function main() {
   if (hasFinalQuiz) {
     const i = navIds.indexOf('final-quiz');
     const fq = renderQuiz(spec.final_quiz, 'final');
-    const pager = pagerHtml(navIds[i - 1], navIds[i + 1], 'final-quiz', i18n, includePager);
+    const pager = sectionFooter(navIds[i - 1], navIds[i + 1], 'final-quiz', i18n, includePager, includeProgress);
     sectionsHtml.push(
       `<section class="section" id="final-quiz"><h1>${htmlEscape(i18n.finalQuiz || 'Self-check')}</h1>${fq}${pager}</section>`
     );
   }
   if (hasGlossary) {
     const i = navIds.indexOf('glossary');
-    const pager = pagerHtml(navIds[i - 1], navIds[i + 1], 'glossary', i18n, includePager);
+    const pager = sectionFooter(navIds[i - 1], navIds[i + 1], 'glossary', i18n, includePager, includeProgress);
     sectionsHtml.push(buildGlossary(spec.glossary, i18n, pager));
   }
   const sectionsJoined = sectionsHtml.join('\n');

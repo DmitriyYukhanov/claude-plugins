@@ -15,7 +15,13 @@ function slugify(s) {
 }
 
 function escapeForScriptTag(s) {
-  return s.replace(/<\/script/gi, m => '<\\/' + m.slice(2));
+  // Neutralise every sequence that could break out of a <script> raw-text element:
+  // a literal </script (closes early) AND <!-- + <script (enters script-data-double-
+  // escaped state, where the transport's own </script> no longer closes the element).
+  return String(s)
+    .replace(/<!--/g, '<\\!--')
+    .replace(/<\/script/gi, m => '<\\/' + m.slice(2))
+    .replace(/<script/gi, m => '<\\' + m.slice(1));
 }
 
 function applyAnchorFormat(format, captures) {
@@ -147,12 +153,20 @@ const ALLOWED_SCHEME = /^(https?:|mailto:)/i;
 // ReDoS pattern blows up on a run of a's/digits with a failing tail. Shape-agnostic, so it
 // doesn't false-reject legitimate nested quantifiers like `§(\d+(?:\.\d+)*)`.
 const MAX_XREF_PATTERN_LEN = 300;
+// Probe alphabet covers lowercase, UPPERCASE, digits, mixed alphanumerics, and dotted
+// digits, so a catastrophic pattern keyed on any of those engages and is rejected.
 const PROBE_STRINGS = [
   'a'.repeat(24) + '!',
+  'A'.repeat(24) + '!',
   '1'.repeat(24) + '!',
+  'Aa1Bb2Cc3Dd4Ee5Ff6Gg7Hh8' + '!',
   '1.1.1.1.1.1.1.1.1.1.1.1.1.1.1!'
 ];
 const PROBE_BUDGET_MS = 50;
+// Classic nested-quantifier ReDoS: a single quantified atom/class inside a group that is
+// itself quantified — (a+)+, (\d+)*, ([A-Z]+)+. Does NOT match safe nested patterns like
+// (?:\.\d+)* (the inner atom carries a mandatory leading separator).
+const REDOS_SHAPE = /\((?:\?[:!=])?(?:\\?.|\[[^\]]*\])[*+]\)[*+]/;
 
 function patternIsSafe(re) {
   for (const s of PROBE_STRINGS) {
@@ -167,8 +181,14 @@ function patternIsSafe(re) {
 function safeCompileXref(p) {
   const src = p && p.pattern;
   if (typeof src !== 'string' || src.length === 0 || src.length > MAX_XREF_PATTERN_LEN) return null;
+  if (REDOS_SHAPE.test(src)) return null;            // structural ReDoS reject
   let re;
   try { re = new RegExp(src, 'y'); } catch (e) { return null; }
+  // Reject empty-matchable patterns (X*, \d?, (...)?) — a zero-width match would not
+  // advance the cursor in splitText and would loop forever.
+  re.lastIndex = 0;
+  const em = re.exec('');
+  if (em && em.index === 0) return null;
   if (!patternIsSafe(re)) return null;
   return { re, source: p.source, anchor_format: p.anchor_format || null };
 }
@@ -218,7 +238,7 @@ function splitText(text, xrefs, extPrefixes, extTemplates) {
     for (const x of xrefs) {
       x.re.lastIndex = i;            // sticky: matches only at i, no forward scan / no recompile
       const m = x.re.exec(text);
-      if (m) {
+      if (m && m[0].length > 0) {    // a zero-width match must NOT be consumed (infinite-loop guard)
         matched = { kind: 'xref', text: m[0], source: x.source, anchor_format: x.anchor_format, captures: m.slice() };
         i += m[0].length;
         break;

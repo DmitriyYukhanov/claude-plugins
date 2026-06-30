@@ -93,5 +93,12 @@ module.exports = [
       external_links: { 'MAIL-': 'mailto:team@x.example?subject={id}' }
     }), schema);
     assert.deepStrictEqual(errs, []);
+  }},
+  // CF8 — cross_ref source must be a valid embedded-source name (no selector-injection chars).
+  { name: 'cross_ref source must be a valid name', fn: () => {
+    const errs = validate(minSpec({
+      cross_ref_patterns: [{ pattern: 'X', source: 'a"b' }]
+    }), schema);
+    assert.ok(errs.some(e => e.path === '/cross_ref_patterns/0/source'), JSON.stringify(errs));
   }}
 ];

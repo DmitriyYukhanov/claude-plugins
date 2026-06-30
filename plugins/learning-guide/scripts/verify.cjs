@@ -113,6 +113,36 @@ function verifyXssAllowlist(tmp) {
   ok('external-link scheme allowlist (R3): javascript: template rejected');
 }
 
+function verifyRenderCmdExec(tmp) {
+  if (process.platform !== 'win32') { ok('render.cmd exec (skipped: not Windows)'); return; }
+  const dir = path.join(tmp, 'rcmd');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.copyFileSync(path.join(EXPECTED, 'planning-session.tour-spec.json'), path.join(dir, 'tour-spec.json'));
+  run(path.join(dir, 'tour-spec.json'), dir);          // initial render generates render.cmd
+  fs.rmSync(path.join(dir, 'index.html'));             // delete to prove the .cmd regenerates it
+  const r = cp.spawnSync('cmd.exe', ['/c', path.join(dir, 'render.cmd')], { encoding: 'utf8' });
+  if (r.status !== 0) fail(`render.cmd exited ${r.status}: ${r.stderr || r.stdout}`);
+  if (!fs.existsSync(path.join(dir, 'index.html'))) fail('render.cmd did not regenerate index.html');
+  ok('render.cmd re-render via cmd.exe (CF2)');
+}
+
+function verifyScriptDataEscape(tmp) {
+  const dir = path.join(tmp, 'sde');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'design.md'), 'Open comment then tag: <!-- and a <script> with no close.\n');
+  fs.writeFileSync(path.join(dir, 'tour-spec.json'), JSON.stringify({
+    schema_version: '1.0', title: 'SDE', lang: 'en', archetype: 'generic',
+    embedded_sources: [{ name: 'design', path: 'design.md', label: 'D' }],
+    sections: [{ id: 'i', level: 1, title: 'I', body_md: 'x' }]
+  }));
+  run(path.join(dir, 'tour-spec.json'), dir);
+  const html = fs.readFileSync(path.join(dir, 'index.html'), 'utf8');
+  if (!html.includes('<\\!--')) fail('embedded <!-- not neutralised (script-data escape)');
+  if (!html.includes('<\\script')) fail('embedded <script not neutralised (script-data escape)');
+  if (!html.includes('id="lg-i18n"')) fail('runtime/meta swallowed by embedded source');
+  ok('script-data double-escape neutralised (CF5)');
+}
+
 function verifyCRLF(tmp) {
   const dirA = path.join(tmp, 'crlf-a'); fs.mkdirSync(dirA, { recursive: true });
   const dirB = path.join(tmp, 'crlf-b'); fs.mkdirSync(dirB, { recursive: true });
@@ -139,7 +169,9 @@ function main() {
   verifyRefactorPlan(tmpDir);
   verifyCodebase(tmpDir);
   verifyScriptEscape(tmpDir);
+  verifyScriptDataEscape(tmpDir);
   verifyXssAllowlist(tmpDir);
+  verifyRenderCmdExec(tmpDir);
   verifyCRLF(tmpDir);
   process.stdout.write('\nAll verifications passed.\n');
 }

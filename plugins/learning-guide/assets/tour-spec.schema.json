@@ -55,7 +55,7 @@
       "additionalProperties": false,
       "properties": {
         "pattern":       { "type": "string", "minLength": 1 },
-        "source":        { "type": "string", "minLength": 1 },
+        "source":        { "type": "string", "pattern": "^[a-z][a-z0-9_-]*$" },
         "anchor_format": { "type": ["string", "null"] }
       }
     },

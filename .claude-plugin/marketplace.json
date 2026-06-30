@@ -75,7 +75,7 @@
     {
       "name": "learning-guide",
       "description": "Generate a self-contained, offline-first, interactive HTML learning guide for any artifact — codebase, planning session, refactor plan, or generic input — via an analyze → render flow with a JSON tour-spec contract",
-      "version": "1.0.6",
+      "version": "1.0.7",
       "author": {
         "name": "Dmitry Yuhanov"
       },
