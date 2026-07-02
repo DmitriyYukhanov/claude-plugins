@@ -5,6 +5,14 @@ All notable changes to the **learning-guide** plugin will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.1.0] - 2026-07-02
+
+### Added
+- The left sidebar can be collapsed (and reopened with a floating button) and resized by dragging its right edge or with the keyboard; the width and collapsed state persist per guide.
+
+### Changed
+- The "Next" button now also marks the current section as read — advancing counts as having read it.
+
 ## [1.0.11] - 2026-06-30
 
 ### Fixed

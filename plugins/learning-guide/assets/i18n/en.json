@@ -16,5 +16,8 @@
   "finalQuiz": "Self-check",
   "glossary": "Glossary",
   "correct": "Correct",
-  "incorrect": "Incorrect"
+  "incorrect": "Incorrect",
+  "collapseSidebar": "Collapse sidebar",
+  "expandSidebar": "Show sidebar",
+  "resizeSidebar": "Resize sidebar"
 }
