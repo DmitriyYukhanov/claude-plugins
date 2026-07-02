@@ -144,6 +144,41 @@ function renderFixture() {
   const progReload = ((await page.locator('#progress-text').textContent()) || '').trim();
   check('progress persists across reload (localStorage)', /^[1-9]/.test(progReload), 'progress="' + progReload + '"');
 
+  // sidebar collapse / expand
+  await page.locator('#lg-sidebar-collapse').click();
+  await page.waitForTimeout(150);
+  check('sidebar collapses (aside hidden, show button visible)',
+    (await page.evaluate(() => document.body.classList.contains('lg-collapsed')))
+    && await page.locator('#lg-sidebar-show').isVisible());
+  const mainW = (await page.locator('#content').boundingBox()).width;
+  check('collapsed: main content stays wide (does not squeeze to min-content)', mainW > 600, 'main=' + Math.round(mainW));
+  await page.locator('#lg-sidebar-show').click();
+  check('sidebar expands again',
+    await page.evaluate(() => !document.body.classList.contains('lg-collapsed')));
+
+  // sidebar resize (keyboard on the separator) + persistence
+  const readW = () => page.evaluate(() => parseInt(getComputedStyle(document.documentElement).getPropertyValue('--lg-sidebar-w')) || 300);
+  const w0 = await readW();
+  await page.locator('#lg-sidebar-resize').focus();
+  for (let k = 0; k < 5; k++) await page.keyboard.press('ArrowRight');
+  const w1 = await readW();
+  check('sidebar resize widens the panel', w1 > w0, 'w0=' + w0 + ' w1=' + w1);
+  await page.reload({ waitUntil: 'load' });
+  await page.waitForTimeout(200);
+  const w2 = await readW();
+  check('sidebar width persists across reload', w2 === w1, 'w1=' + w1 + ' w2=' + w2);
+
+  // "Next" also marks the current section as read
+  await page.evaluate(() => { try { localStorage.clear(); } catch (e) {} });
+  await page.reload({ waitUntil: 'load' });
+  await page.waitForTimeout(200);
+  const preNext = parseInt(((await page.locator('#progress-text').textContent()) || '0').trim()) || 0;
+  await page.locator('#intro button.next').click();
+  await page.waitForTimeout(100);
+  check('Next activates the target section', await page.locator('#architecture.active').count() === 1);
+  const postNext = parseInt(((await page.locator('#progress-text').textContent()) || '0').trim()) || 0;
+  check('Next also marks the current section read', preNext === 0 && postNext >= 1, 'before=' + preNext + ' after=' + postNext);
+
   check('no uncaught JS errors during the session', errors.length === 0, errors.join(' | '));
 
   await browser.close();

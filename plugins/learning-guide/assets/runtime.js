@@ -7,7 +7,8 @@
 
   var STORAGE_KEYS = {
     progress: 'lg.' + tourId + '.progress',
-    active: 'lg.' + tourId + '.active'
+    active: 'lg.' + tourId + '.active',
+    sidebar: 'lg.' + tourId + '.sidebar'
   };
 
   function t(key, fallback) {
@@ -103,7 +104,18 @@
     document.querySelectorAll('.pager [data-target]').forEach(function (el) {
       el.addEventListener('click', function (ev) {
         var target = el.getAttribute('data-target');
-        if (target) { ev.preventDefault(); activate(target); }
+        if (!target) return;
+        ev.preventDefault();
+        // "Next" also marks the current section as read — advancing implies you read it.
+        if (el.classList && el.classList.contains('next')) {
+          var sec = el.closest ? el.closest('.section') : null;
+          if (sec && sec.id) {
+            var p = loadProgress();
+            if (!p[sec.id]) { p[sec.id] = true; saveProgress(p); }
+          }
+        }
+        activate(target);
+        updateProgressDisplay();
       });
     });
   }
@@ -341,11 +353,91 @@
     return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
 
+  // Collapsible + resizable left sidebar. Controls are injected here (so a user template
+  // override gets the feature too), positioned via the --lg-sidebar-w CSS variable, and the
+  // width/collapsed state persists in localStorage.
+  function bindSidebar() {
+    var layout = document.querySelector('.layout');
+    var aside = layout && layout.querySelector('aside');
+    if (!layout || !aside) return;
+    var root = document.documentElement;
+    var MINW = 180, MAXW = 640;
+
+    function ensure(id, make) {
+      var el = document.getElementById(id);
+      if (!el) { el = make(); el.id = id; document.body.appendChild(el); }
+      return el;
+    }
+    var collapseBtn = ensure('lg-sidebar-collapse', function () {
+      var b = document.createElement('button'); b.type = 'button'; b.className = 'lg-collapse-btn'; return b;
+    });
+    collapseBtn.textContent = String.fromCharCode(0x2039); // left-pointing angle "‹"
+    collapseBtn.setAttribute('aria-label', t('collapseSidebar', 'Collapse sidebar'));
+    var showBtn = ensure('lg-sidebar-show', function () {
+      var b = document.createElement('button'); b.type = 'button'; b.className = 'lg-sidebar-show'; return b;
+    });
+    showBtn.textContent = String.fromCharCode(0x2630); // trigram/menu "☰"
+    showBtn.setAttribute('aria-label', t('expandSidebar', 'Show sidebar'));
+    var handle = ensure('lg-sidebar-resize', function () {
+      var d = document.createElement('div'); d.className = 'lg-resize';
+      d.setAttribute('role', 'separator'); d.setAttribute('aria-orientation', 'vertical'); d.setAttribute('tabindex', '0');
+      return d;
+    });
+    handle.setAttribute('aria-label', t('resizeSidebar', 'Resize sidebar'));
+    handle.setAttribute('aria-valuemin', String(MINW));
+    handle.setAttribute('aria-valuemax', String(MAXW));
+
+    var state = { w: 300, collapsed: false };
+    try { var s = JSON.parse(localStorage.getItem(STORAGE_KEYS.sidebar) || 'null'); if (s) state = { w: s.w || 300, collapsed: !!s.collapsed }; } catch (e) {}
+    function save() { try { localStorage.setItem(STORAGE_KEYS.sidebar, JSON.stringify(state)); } catch (e) {} }
+    function clampW(w) { return Math.max(MINW, Math.min(MAXW, w)); }
+    function applyWidth() { root.style.setProperty('--lg-sidebar-w', state.w + 'px'); handle.setAttribute('aria-valuenow', String(state.w)); }
+    function applyCollapsed() {
+      document.body.classList.toggle('lg-collapsed', state.collapsed);
+      collapseBtn.setAttribute('aria-expanded', state.collapsed ? 'false' : 'true');
+      aside.setAttribute('aria-hidden', state.collapsed ? 'true' : 'false');
+    }
+    state.w = clampW(state.w);
+    applyWidth(); applyCollapsed();
+
+    function setCollapsed(v, focusEl) {
+      state.collapsed = v; applyCollapsed(); save();
+      if (focusEl && focusEl.focus) { try { focusEl.focus(); } catch (e) {} }
+    }
+    collapseBtn.addEventListener('click', function () { setCollapsed(true, showBtn); });
+    showBtn.addEventListener('click', function () { setCollapsed(false, collapseBtn); });
+
+    var dragging = false, startX = 0, startW = 0;
+    handle.addEventListener('pointerdown', function (ev) {
+      if (state.collapsed) return;
+      dragging = true; startX = ev.clientX; startW = state.w;
+      document.body.classList.add('lg-resizing');
+      try { handle.setPointerCapture(ev.pointerId); } catch (e) {}
+      ev.preventDefault();
+    });
+    handle.addEventListener('pointermove', function (ev) {
+      if (!dragging) return;
+      state.w = clampW(startW + (ev.clientX - startX));
+      applyWidth();
+    });
+    function endDrag() { if (dragging) { dragging = false; document.body.classList.remove('lg-resizing'); save(); } }
+    handle.addEventListener('pointerup', endDrag);
+    handle.addEventListener('pointercancel', endDrag);
+    handle.addEventListener('lostpointercapture', endDrag);
+    handle.addEventListener('keydown', function (ev) {
+      if (ev.key === 'ArrowLeft' || ev.key === 'ArrowRight') {
+        state.w = clampW(state.w + (ev.key === 'ArrowLeft' ? -16 : 16));
+        applyWidth(); save(); ev.preventDefault();
+      }
+    });
+  }
+
   function init() {
     bindNav();
     bindFilepathButtons();
     bindQuizzes();
     bindXrefs();
+    bindSidebar();
     var saved = null;
     try { saved = localStorage.getItem(STORAGE_KEYS.active); } catch (e) {}
     activate(saved && document.getElementById(saved) ? saved : (sections[0] || 'intro'));

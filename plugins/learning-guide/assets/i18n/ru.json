@@ -16,5 +16,8 @@
   "finalQuiz": "Проверка знаний",
   "glossary": "Глоссарий",
   "correct": "Верно",
-  "incorrect": "Неверно"
+  "incorrect": "Неверно",
+  "collapseSidebar": "Свернуть панель",
+  "expandSidebar": "Показать панель",
+  "resizeSidebar": "Изменить ширину панели"
 }
