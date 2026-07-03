@@ -4,8 +4,10 @@ description: >-
   Drive a GitHub issue — bare or tracked on a Project board — from triage to a
   merge-ready PR through a gated pipeline (design cross-review, tests green,
   code-review loop). Auto-links the issue to close on merge and advances the
-  board card's status as work progresses. Triggers: "take task N",
-  "work on issue #N", "do the next task", "start issue 7".
+  board card's status as work progresses, then merges and cleans up once you
+  approve the PR in-session. Triggers: "take task N", "work on issue #N",
+  "do the next task", "start issue 7", and — for the merge gate on a follow-up
+  turn — "merge it", "approve the PR", "ship it", "lgtm merge".
 user-invocable: true
 argument-hint: "[issue-number | next]"
 ---
@@ -18,12 +20,16 @@ pull request. The shape is the same every time so nothing gets skipped. The **ga
 todo per step.
 
 The input can be a **bare issue** or a **card on a GitHub Projects (v2) board** — the
-pipeline is identical. The PR always links the issue so it auto-closes on merge; when the
-issue is tracked on a board, the card's status is advanced as work progresses (Step 0
-decides which mode applies).
+pipeline is identical. The PR always links the issue (`Closes #N`) so it auto-closes when the
+PR merges into the default branch; when the issue is tracked on a board, the card's status is
+advanced as work progresses (Step 0 decides which mode applies).
 
-This skill authorizes branching, committing, and opening a PR. It does **not** merge,
-deploy, or push to a protected base branch — those are separate, explicit actions.
+This skill authorizes branching, committing, and opening a PR — all inside an isolated
+worktree so concurrent local runs never clash. It **merges only after you approve the PR in
+this session** (squash), then cleans up the branch, worktree, and temp artifacts. The squash
+writes to the base branch, so that merge is the one irreversible step — it happens on nothing
+less than an explicit, unambiguous go-ahead (Step 11), and even then never force-pushes or
+bypasses branch protection.
 
 ## Configuration (optional)
 
@@ -32,6 +38,11 @@ URL, base branch, and the typecheck/test/visual commands. Everything is optional
 file the skill auto-detects commands and runs by issue argument. Schema and auto-detect
 rules: `${CLAUDE_PLUGIN_ROOT}/skills/issue-to-pr/references/configuration.md`. This guide
 refers to the resolved commands as `<typecheck_cmd>`, `<test_cmd>`, `<visual_cmd>`.
+
+**Resolve config in the main checkout, up front.** This file is gitignored, so it does not
+exist inside the worktree — read it (and the resolved commands + base) in `<original-root>`
+before entering the worktree, and carry the resolved values; never re-read config from inside
+the worktree, or the pinned commands are silently lost to auto-detect.
 
 ## Companion skills (optional, graceful)
 
@@ -45,11 +56,18 @@ otherwise the inline equivalent.
 
 ## Hard rules (never violate)
 
-- **New task = new branch.** Determine the integration base FIRST (from config
-  `base_branch`; `auto` = `dev` if it exists, else `main`), then cut the branch from THAT
-  same ref: `feat/<slug>` or `fix/<slug>`. The branch you start from and the PR target must
-  be the same base, or commits living only on `dev` go missing and surface as conflicts at
-  merge.
+- **New task = new branch, in its own worktree.** Determine the integration base FIRST (from
+  config `base_branch`; `auto` = `dev` if a `dev` branch exists locally or on the remote, else
+  `main`), then cut the branch from THAT same ref: `feat/issue-<N>-<slug>` or
+  `fix/issue-<N>-<slug>` (the issue number is baked in so the branch can't collide across
+  issues), inside a dedicated `../<repo>-worktrees/issue-<N>` worktree (see
+  `${CLAUDE_PLUGIN_ROOT}/skills/issue-to-pr/references/worktree-and-merge.md`). All work
+  happens there; never run two tasks in the same working tree. The branch you start from and
+  the PR target must be the same base, or commits living only on `dev` go missing and surface
+  as conflicts at merge.
+- **Merge is gated on explicit in-session approval.** Open the PR and stop. Only merge
+  (squash) after the user approves *this* PR in the session — never on the same turn the PR
+  opens. After a successful merge, clean up (Step 12).
 - Stage with **explicit paths** (`git add path1 path2`). Never `git add -A` / `git add .`.
 - Human-facing text (UI strings >1–2 words, the report, the PR body) passes through
   `humanizer` if installed. Code identifiers, dev comments, log lines, and
@@ -86,6 +104,13 @@ mechanics (verified `gh` commands, token scope, draft handling):
 - Open the files the issue points at; map the real code (functions, wiring, existing tests,
   any visual harness).
 - Confirm the base branch (Hard rules + `git branch -a`).
+- **Cut the branch inside an isolated worktree.** Create (or resume) the
+  `../<repo>-worktrees/issue-<N>` worktree, `cd` into it, and **install the project's
+  dependencies** there (a fresh worktree has only tracked files — no `node_modules`/`.venv`/etc,
+  so the Step 6 gates would fail without a setup pass) before touching any file. Full mechanics
+  (resume check, base start-point, deps, exact commands, sandbox fallback):
+  `${CLAUDE_PLUGIN_ROOT}/skills/issue-to-pr/references/worktree-and-merge.md` → "Create or
+  resume the worktree". Everything downstream runs there.
 - **Board-mode:** once the branch is cut and work begins, set the card's status to
   `in_progress` (see board-sync). A failed status write is logged and never blocks progress.
 
@@ -102,12 +127,16 @@ When in doubt, treat it as one level harder.
 
 ## Step 2.5 — Decide on state tracking
 
-- If the task is complex+ and will likely outlive a context compaction, keep a short
-  progress file in a **gitignored** location (`tmp/task-<N>/progress.md` or the session
-  scratchpad): branch, decisions, plan checklist, current step.
-- Put the **design doc there too** (`tmp/task-<N>/design.md`) unless your project commits
-  design docs under `docs/`. Treat it as a working artifact.
-- **Delete `tmp/task-<N>/` when the task is done.** It never lands in git.
+- If the task is complex+ and will likely outlive a context compaction, keep a short progress
+  file at **`tmp/task-<N>/progress.md` inside the worktree** (gitignored): branch,
+  `<original-root>`, decisions, plan checklist, current step.
+- Put the **design doc there too** (`tmp/task-<N>/design.md`) unless your project commits design
+  docs under `docs/`. Treat it as a working artifact.
+- Keep these *inside* the worktree so a resume restores them and Step 12 removes them for free
+  when the worktree is torn down. Write with an absolute path (or `cd` into the worktree first) —
+  don't assume a bare relative path lands there. Only in the sandbox-fallback (in-place) case is
+  there no worktree; then use the session scratchpad, and Step 12 sweeps it explicitly (see its
+  keep-list).
 
 ## Step 3 — Brainstorm (complex+ only)
 
@@ -169,12 +198,14 @@ a dedicated browser test — not eyeballing alone. Logic gets unit/integration t
 ## Step 9 — Commit + PR
 
 - `git add <explicit paths>`, conventional-commit subjects (separate unrelated concerns).
-- Push the branch; open a PR against the base from Step 1 with `gh pr create`. Link the
-  issue (`Closes #<N>`) so it auto-closes on merge. PR body is human-facing → humanize it.
+- Push the branch **with upstream tracking** — `git push -u origin <branch>` (Step 11's merge
+  precondition relies on it). Open a PR against the base from Step 1 with `gh pr create`. Link the
+  issue (`Closes #<N>`) so it auto-closes when the PR merges into the default branch. PR body is
+  human-facing → humanize it.
 - **Board-mode:** set the card's status to `in_review` (see board-sync). `Done` is left to
-  merge-time — GitHub's built-in project automation moves the card when the issue closes;
-  this skill does not merge.
-- Do **not** merge or deploy unless the user asks.
+  merge-time — GitHub's automation moves the card when the issue closes (on a default-branch merge).
+- The PR opens here and the skill **stops**. Merging is Step 11, gated on the user's approval
+  — do **not** merge or deploy on this turn.
 
 ## Step 10 — Report (plain language)
 
@@ -183,8 +214,52 @@ Short, human, no jargon — understandable by a 3rd-year student:
 - Test status (with the green proof) and anything the user must do by hand (manual setup,
   secrets, follow-up).
 - The PR link.
+- End with a clear hand-back: the PR is up and waiting — ask the user to reply when they want
+  it merged. Then **stop**; the skill's turn ends here.
 
-## Step 11 — Improve this skill
+## Step 11 — Merge on approval (GATE)
+
+On a later turn your CWD may have reset to the main checkout, so **return to your working tree
+first**: in worktree mode `cd` into `../<repo>-worktrees/issue-<N>`; in the sandbox in-place
+fallback there's no worktree, so stay in the main checkout on `<branch>` (the reference's "Merge on
+approval" covers both). Then read the user's reply against *this* PR. **Merge only on an unambiguous go-ahead to merge THIS PR — the burden is on a
+clear approval. If the reply is anything else, do not merge.**
+- **Go-ahead** — an unmistakable instruction to merge this PR ("merge it", "lgtm, ship it",
+  "approved", "go ahead and merge") → merge.
+- **Change requests** → treat as review feedback: implement in the worktree, then **re-run the
+  gates** — Step 6 (typecheck + tests, + visual for UI) and Step 7 (code-review) on the new diff,
+  fixing until clean — before pushing to the same branch, re-reporting, and waiting for approval
+  again. A change-request edit must clear the same gates as the original work; never merge
+  unverified changes.
+- **Anything else** → do **not** merge. If the reply is a vague acknowledgment ("ok", "cool",
+  "looks fine") or a question about the PR, ask them to confirm the merge explicitly. If the user
+  will merge it themselves later or has abandoned the task, ask whether to tear down the local
+  worktree now — via the **"Teardown without merging"** section, which removes only the local
+  worktree and **keeps the PR and its remote branch intact** (never the section-3 cleanup, which
+  deletes the remote branch and would close the open PR). Don't silently leave a stale worktree a
+  later run would resume from. There is no timeout; approval is purely explicit — never inferred.
+
+Merge mechanics and failure handling (be-in-worktree, `git push` precondition, squash by head
+branch, the single retry for pending checks, when to stop):
+`${CLAUDE_PLUGIN_ROOT}/skills/issue-to-pr/references/worktree-and-merge.md` → "Merge on
+approval". If the merge does not succeed, **skip cleanup** — the worktree and branch stay put
+so nothing is lost.
+
+## Step 12 — Cleanup (after a successful merge)
+
+Only after Step 11 merges. First confirm the outcome honestly: GitHub auto-closes the linked
+issue (and moves the board card to Done) **only on a merge into the default branch** — if the
+base was a non-default branch like `dev`, the issue stays open on purpose; say so rather than
+reporting it closed (see the reference's "Merge on approval" outcome check). Then clean up: order
+matters — you can't remove a worktree from inside it. **Salvage any lasting design doc first**
+(`git worktree remove` silently deletes gitignored files), then return to the original checkout,
+remove the worktree, delete the now-merged local + remote branch, and sweep temp artifacts outside
+the worktree — honoring the keep-list (committed `docs/`, anything already in the PR, anything the
+user asked to keep). Full sequence, in-place variant, and keep-list:
+`${CLAUDE_PLUGIN_ROOT}/skills/issue-to-pr/references/worktree-and-merge.md` → "Post-merge
+cleanup". Finish with one line naming what was merged, what was removed, and anything kept.
+
+## Step 13 — Improve this skill
 
 After shipping, reflect: did any step bite, stay unclear, or get skipped? If so, refine this
 SKILL.md. Leave it sharper than you found it.

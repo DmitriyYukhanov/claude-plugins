@@ -19,14 +19,20 @@ work progresses.
 Invoked by the model or by you (`/issue-to-pr [issue-number | next]`) — a pipeline with hard
 gates that block forward progress:
 
+- **Isolated per task.** Each run cuts its branch inside a dedicated
+  `../<repo>-worktrees/issue-<N>` git worktree, so several local agents can drive different
+  issues in the same clone without clashing.
 - **Triage → design → implement → review → PR**, scaled to complexity (simple edits skip
   straight to TDD; complex work goes through brainstorming and a design cross-review gate).
 - **Gates:** design hardening (cross-review or a multi-agent fallback), tests green
   (typecheck + tests, plus visual checks for UI), and a code-review loop that runs until
   clean or five passes.
+- **Approval-gated merge + cleanup.** The PR opens and the skill stops. Once you approve it in
+  the session, the skill squash-merges, deletes the branch, tears down the worktree, and
+  removes the run's temp artifacts (keeping anything important or that you asked to keep).
 - **Issue ↔ board, one pipeline.** Step 0 resolves the input to an issue and decides whether
   board-status sync applies. Board cards advance to *in-progress* at branch cut and
-  *in-review* at PR open; `Done` is left to merge-time automation.
+  *in-review* at PR open; `Done` is left to GitHub's merge-time automation.
 - **Graceful by default.** Missing the `project` token scope degrades to link-only with a
   one-line fix hint; a failed status write never blocks the PR.
 
