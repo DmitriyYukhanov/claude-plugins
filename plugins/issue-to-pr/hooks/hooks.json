@@ -1,0 +1,17 @@
+{
+  "description": "issue-to-pr merge-approval gate. A PreToolUse hook on Bash routes every command through merge-guard.sh, which allows `gh pr merge` / `worktree.sh merge` only when a fresh, unused, head-matching approval marker exists (written by approve.sh after the model judges the user's reply an unambiguous go-ahead), denies `gh pr merge --admin`, asks on force-push, and passes every other command through to the normal permission flow. Plugin agents ignore hooks, so this protects the main session only -- merges must run there.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/merge-guard.sh\"",
+            "timeout": 20
+          }
+        ]
+      }
+    ]
+  }
+}

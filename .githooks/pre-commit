@@ -176,6 +176,30 @@ done
 
 # ── Report errors ──────────────────────────────────────────────────────
 
+# ── Check 5: shellcheck staged plugin scripts (skip gracefully if unavailable) ─
+# Lints plugins/*/scripts/*.sh and the extension-less fake-gh test shim. Harness
+# files (test_*.sh, assert.sh) are intentionally excluded: they reference vars
+# the runner injects, which would trip SC2154. If shellcheck is not installed
+# (common on Windows), we skip with a notice - CI enforces it on both OSes.
+shellcheck_errors=()
+if command -v shellcheck >/dev/null 2>&1; then
+  sc_files=()
+  while IFS= read -r f; do
+    case "$f" in
+      plugins/*/scripts/*.sh | plugins/*/tests/fake-gh/gh)
+        [ -f "$f" ] && sc_files+=("$f")
+        ;;
+    esac
+  done <<< "$staged_files"
+  if [ ${#sc_files[@]} -gt 0 ]; then
+    if ! sc_out=$(shellcheck -x -e SC1091 "${sc_files[@]}" 2>&1); then
+      shellcheck_errors+=("$sc_out")
+    fi
+  fi
+else
+  echo "note: shellcheck not installed - skipping shell-script lint (CI enforces it)" >&2
+fi
+
 has_errors=false
 
 if [ ${#version_errors[@]} -gt 0 ]; then
@@ -266,6 +290,20 @@ if [ ${#readme_errors[@]} -gt 0 ]; then
   done
   echo ""
   echo "Fix: add an install command and a ### <plugin-name> section to README.md, then re-stage and commit."
+fi
+
+if [ ${#shellcheck_errors[@]} -gt 0 ]; then
+  has_errors=true
+  echo ""
+  echo "ERROR: shellcheck reported problems"
+  echo "========================================"
+  echo ""
+  for err in "${shellcheck_errors[@]}"; do
+    echo "$err"
+  done
+  echo ""
+  echo "Fix: address the shellcheck findings above (or add a justified"
+  echo "     # shellcheck disable=SCXXXX directive), then re-stage and commit."
 fi
 
 if [ "$has_errors" = true ]; then

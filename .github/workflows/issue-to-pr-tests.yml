@@ -1,0 +1,39 @@
+name: issue-to-pr tests
+
+# Contract tests for the issue-to-pr scripts. Runs on both Linux and Windows
+# (Git Bash) so the bash mechanics are exercised on the author's actual platform.
+# run-tests.sh runs shellcheck as a gate when it is present (enforced on Linux)
+# and skips it with a notice otherwise (Windows) - the point of the Windows job
+# is that the scripts run under Git Bash with LF endings (see .gitattributes).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'plugins/issue-to-pr/**'
+      - '.githooks/pre-commit'
+      - '.github/workflows/issue-to-pr-tests.yml'
+  pull_request:
+    paths:
+      - 'plugins/issue-to-pr/**'
+      - '.github/workflows/issue-to-pr-tests.yml'
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Ensure shellcheck (Linux)
+        if: runner.os == 'Linux'
+        run: shellcheck --version || { sudo apt-get update && sudo apt-get install -y shellcheck; }
+
+      - name: Run issue-to-pr contract tests
+        run: bash plugins/issue-to-pr/tests/run-tests.sh
