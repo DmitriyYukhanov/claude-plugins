@@ -41,7 +41,7 @@ You can also install individual plugins directly, for example:
 | [codex-collaboration](#codex-collaboration) | Cross-model Claude + Codex collaboration — sequential drive/validate loops and parallel dual review |
 | [implementation-prd](#implementation-prd) | Turn feature requests into build-ready spec bundles with PRDs, contracts, schemas, and test plans |
 | [agent-teams](#agent-teams) | Orchestrate multiple Claude Code instances working in parallel with shared tasks and messaging |
-| [issue-to-pr](#issue-to-pr) | Drive a GitHub issue or Project board card from triage to a merge-ready PR through a gated pipeline |
+| [issue-to-pr](#issue-to-pr) | Drive a GitHub issue or Project board card through a worktree-isolated, gated pipeline to an approved, merged PR |
 | [tg-alerts](#tg-alerts) | Add Telegram error/alert notifications to any project — guided setup with reference implementations |
 | [tg-voice](#tg-voice) | Auto-transcribe Telegram voice messages using local Whisper via PostToolUse hook |
 
@@ -101,8 +101,10 @@ Implementation-ready spec bundle authoring with:
 Drive a single GitHub issue from triage to a merge-ready pull request through a gated pipeline:
 
 - One flow for a **bare issue** or a **card on a GitHub Projects (v2) board** — Step 0 resolves the input and decides whether board-status sync applies.
+- Each run works in its own `../<repo>-worktrees/issue-<N>` git worktree, so concurrent local agents on different issues never clash.
 - Hard gates that block forward progress: design hardening (cross-review or a multi-agent fallback), tests green (typecheck + tests, plus visual checks for UI), and a code-review loop that runs until clean or five passes.
-- The PR auto-links the issue (`Closes #N`) to close on merge; board cards advance to *in-progress* at branch cut and *in-review* at PR open, with `Done` left to merge-time automation.
+- Opens the PR and stops; once you approve it in-session it squash-merges, then deletes the branch, tears down the worktree, and clears the run's temp artifacts (keeping anything important).
+- The PR auto-links the issue (`Closes #N`) to close on merge; board cards advance to *in-progress* at branch cut and *in-review* at PR open, with `Done` left to GitHub's merge-time automation.
 - Graceful by default — missing the `project` token scope degrades to link-only, and a failed status write never blocks the PR.
 - Optional `.claude/issue-to-pr.local.md` for board URL, base branch, and test commands (auto-detected when unset); companion skills (`superpowers:*`, `/deep-research`, `/cross-review`, `humanizer`, `/code-review`) used if installed, with inline fallbacks otherwise.
 
