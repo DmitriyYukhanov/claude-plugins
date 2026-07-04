@@ -266,11 +266,15 @@ Only after Step 11 merges. First confirm the outcome honestly: GitHub auto-close
 issue (and moves the board card to Done) **only on a merge into the default branch** — if the
 base was a non-default branch like `dev`, the issue stays open on purpose; say so rather than
 reporting it closed (see the reference's "Merge on approval" outcome check). Then clean up: order
-matters — you can't remove a worktree from inside it. **Salvage any lasting design doc first**
+matters — you can't remove a worktree from inside it. **`cd` your shell into `<original-root>`
+first** (not just the subprocess — a shell whose current directory is the worktree locks it on
+Windows and the removal fails). **Salvage any lasting design doc first**
 (`git worktree remove` silently deletes gitignored files), then, from the main checkout, run
 `${CLAUDE_PLUGIN_ROOT}/scripts/worktree.sh cleanup <N> --branch <branch> --salvage-to <dir>` (it
 salvages design/progress/state, removes the worktree, deletes the merged local + remote branch,
-and refuses on tracked dirtiness `STOP_REASON=dirty-tracked-files`), and sweep temp artifacts outside
+and refuses on tracked dirtiness `STOP_REASON=dirty-tracked-files`). Report from its keys, not from
+assumption — if `DELETED_LOCAL=false` or it emits `LEFTOVER_DIR`, a locked directory remains; say so
+and remove it by hand once the lock clears. Then sweep temp artifacts outside
 the worktree — honoring the keep-list (committed `docs/`, anything already in the PR, anything the
 user asked to keep). Keys, the in-place variant, and the teardown (self-merge/abandon) path:
 `${CLAUDE_PLUGIN_ROOT}/skills/issue-to-pr/references/contracts.md` → "worktree.sh".

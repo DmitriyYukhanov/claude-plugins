@@ -46,8 +46,11 @@ compute_wt_path() { # root issue
   printf '%s/%s-worktrees/issue-%s' "$(dirname "$1")" "$(basename "$1")" "$2"
 }
 
-registered_wt() { # issue -> registered worktree path ending in /issue-<N>, or empty
-  git worktree list --porcelain 2>/dev/null | sed -n 's/^worktree //p' | grep -E "/issue-$1\$" | head -1
+registered_wt() { # issue [root] -> registered worktree path ending in /issue-<N>, or empty
+  (
+    if [ -n "${2:-}" ]; then cd "$2" || exit 0; fi
+    git worktree list --porcelain 2>/dev/null | sed -n 's/^worktree //p' | grep -E "/issue-$1\$" | head -1
+  )
 }
 
 branch_exists() { git show-ref --verify --quiet "refs/heads/$1"; }
@@ -81,13 +84,39 @@ salvage_artifacts() { # wt salvage_dir issue -> sets SALVAGED
   SALVAGED=$dst
 }
 
-# remove_worktree wt root issue -> sets REMOVED; STOPs on tracked dirtiness.
-# Never uses --force: a refused removal is classified from `git status --porcelain`.
+# remove_worktree wt root issue -> sets REMOVED and (on a stubborn dir) LEFTOVER.
+# Never uses --force, never STOPs on a merely-locked dir, and never auto-deletes an
+# UNREGISTERED directory (same protection as ensure's stale-unregistered-dir): git
+# only ever unregisters a clean worktree, but an unregistered path could also be a
+# stale remnant or something the user parked there, so we report it instead of
+# deleting it. STOPs only on tracked/unexpected changes in a still-registered tree.
 remove_worktree() {
   local wt=$1 root=$2 n=$3
   REMOVED=false
+  LEFTOVER=""
+
+  # Nothing on disk: just tidy git's records.
+  if [ ! -e "$wt" ]; then
+    git -C "$root" worktree prune 2>/dev/null || true
+    REMOVED=true
+    return 0
+  fi
+
   if git -C "$root" worktree remove "$wt" 2>/dev/null; then REMOVED=true; return 0; fi
 
+  # Removal refused. If the worktree is NO LONGER registered, git partially
+  # succeeded (unregistered it on Windows but a lock left the directory) or it was
+  # never a worktree. Either way, do not delete it - prune git's records and report
+  # the leftover so the model/user can inspect and remove it deliberately.
+  local still_reg
+  still_reg=$(registered_wt "$n" "$root")
+  if [ -z "$still_reg" ]; then
+    git -C "$root" worktree prune 2>/dev/null || true
+    LEFTOVER="$wt"
+    return 0
+  fi
+
+  # Still registered: refused because the tree is dirty. Classify.
   local status line p tracked_dirty=0
   # --untracked-files=all so an untracked tmp/ is listed as individual files
   # (tmp/task-N/foo), not collapsed to a bare "?? tmp/" that would misclassify.
@@ -116,7 +145,11 @@ EOF
   # Only our tmp working dir was in the way: remove it explicitly, retry once.
   rm -rf "${wt:?}/tmp/task-$n" 2>/dev/null || true
   if git -C "$root" worktree remove "$wt" 2>/dev/null; then REMOVED=true; return 0; fi
-  stop worktree-remove-failed "could not remove $wt cleanly (no --force is ever used)"
+  # Clean but still un-removable (a lock persists): report, do not STOP - the branch
+  # and marker can still be cleaned up. Run cleanup from the main checkout to avoid
+  # this (a shell whose cwd is the worktree locks it on Windows).
+  LEFTOVER="$wt"
+  return 0
 }
 
 # -- subcommands --------------------------------------------------------------
@@ -301,9 +334,10 @@ cmd_cleanup() {
   cd "$root" 2>/dev/null || true
 
   REMOVED=false
-  if [ -n "$reg" ]; then
-    remove_worktree "$wt_path" "$root" "$issue"
-  fi
+  LEFTOVER=""
+  # remove_worktree also handles an unregistered leftover dir (reports it via
+  # LEFTOVER, never deletes it), so call it unconditionally from the main checkout.
+  remove_worktree "$wt_path" "$root" "$issue"
 
   local deleted_local=false deleted_remote=false
   # In-place mode (no worktree): the branch may be checked out in root, and a
@@ -335,6 +369,7 @@ cmd_cleanup() {
   emit DELETED_LOCAL "$deleted_local"
   emit DELETED_REMOTE "$deleted_remote"
   emit SALVAGED "${SALVAGED:-}"
+  [ -n "$LEFTOVER" ] && emit LEFTOVER_DIR "$LEFTOVER"
   done_ok
 }
 
@@ -358,11 +393,11 @@ cmd_teardown() {
   cd "$root" 2>/dev/null || true
 
   REMOVED=false
-  if [ -n "$reg" ]; then
-    remove_worktree "$wt_path" "$root" "$issue"
-  fi
+  LEFTOVER=""
+  remove_worktree "$wt_path" "$root" "$issue"
   emit REMOVED "$REMOVED"
   emit SALVAGED "${SALVAGED:-}"
+  [ -n "$LEFTOVER" ] && emit LEFTOVER_DIR "$LEFTOVER"
   emit KEPT "branch-and-pr" # teardown never touches the branch or PR
   done_ok
 }
