@@ -1,0 +1,258 @@
+#!/usr/bin/env bash
+# tests/fake-gh/gh - a PATH shim standing in for the real `gh`.
+#
+# Behaviour is chosen by FAKE_GH_SCENARIO. Every invocation is appended to
+# FAKE_GH_LOG so tests can assert what the script called. Production scripts read
+# gh through gh's own `--jq`, so this shim returns the ALREADY-FILTERED value for
+# a given `--json <field> --jq <filter>` request - it does not run jq itself.
+#
+# Extend by adding cases; keep each scenario's data obvious. No jq, no network.
+set -uo pipefail
+
+# Log the full invocation (space-joined; good enough for substring asserts).
+if [ -n "${FAKE_GH_LOG:-}" ]; then
+  printf 'gh %s\n' "$*" >>"$FAKE_GH_LOG"
+fi
+
+scenario=${FAKE_GH_SCENARIO:-happy}
+sub=${1:-}
+
+# Canned identities.
+ME="me-login"
+HEAD_SHA_CURRENT="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+HEAD_SHA_MOVED="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+
+# Extract the value following a flag, e.g. flag_val --jq "$@".
+flag_val() {
+  local want=$1
+  shift
+  while [ "$#" -gt 0 ]; do
+    if [ "$1" = "$want" ]; then
+      printf '%s' "${2:-}"
+      return 0
+    fi
+    shift
+  done
+  printf ''
+}
+
+jqf=$(flag_val --jq "$@")
+
+die() { # message exitcode
+  printf '%s\n' "$1" >&2
+  exit "${2:-1}"
+}
+
+case "$sub" in
+  auth)
+    # `gh auth status`
+    case "$scenario" in
+      auth-fail)
+        die "You are not logged into any GitHub hosts. Run gh auth login to authenticate." 1
+        ;;
+      scope-missing)
+        cat >&2 <<'EOF'
+github.com
+  + Logged in to github.com account me-login
+  - Token scopes: 'gist', 'read:org', 'repo', 'workflow'
+EOF
+        exit 0
+        ;;
+      *)
+        cat >&2 <<'EOF'
+github.com
+  + Logged in to github.com account me-login
+  - Token scopes: 'gist', 'project', 'read:org', 'repo', 'workflow'
+EOF
+        exit 0
+        ;;
+    esac
+    ;;
+
+  api)
+    # `gh api user --jq .login` and graphql. board-sync reads each call through
+    # gh's own --jq, so return the ALREADY-FILTERED value keyed off the query.
+    allargs="$*"
+    if printf '%s' "$allargs" | grep -q 'graphql'; then
+      if printf '%s' "$allargs" | grep -q 'projectItems'; then
+        case "$scenario" in
+          board-not-member) printf '' ;;
+          *) printf 'ITEM_ID\tPROJ_ID\n' ;;
+        esac
+      elif printf '%s' "$allargs" | grep -q 'ProjectV2SingleSelectField'; then
+        case "$scenario" in
+          board-no-field) printf '' ;;
+          *) printf 'FIELD_ID\tIn Progress\tOPT_INPROG\nFIELD_ID\tIn Review\tOPT_INREVIEW\nFIELD_ID\tDone\tOPT_DONE\n' ;;
+        esac
+      elif printf '%s' "$allargs" | grep -q 'updateProjectV2ItemFieldValue'; then
+        case "$scenario" in
+          board-mutation-fail) printf '' ;;
+          *) printf 'UPDATED_ITEM_ID\n' ;;
+        esac
+      else
+        printf '{}\n'
+      fi
+      exit 0
+    fi
+    case "$jqf" in
+      .login) printf '%s\n' "$ME" ;;
+      *) printf '{"login":"%s"}\n' "$ME" ;;
+    esac
+    ;;
+
+  repo)
+    # `gh repo view --json <f> --jq <filter>`
+    case "$jqf" in
+      .owner.login) printf 'octo-owner\n' ;;
+      .name) printf 'demo-repo\n' ;;
+      .nameWithOwner) printf 'octo-owner/demo-repo\n' ;;
+      .defaultBranchRef.name) printf 'main\n' ;;
+      *) printf '{"owner":{"login":"octo-owner"},"name":"demo-repo","defaultBranchRef":{"name":"main"}}\n' ;;
+    esac
+    ;;
+
+  issue)
+    action=${2:-}
+    case "$action" in
+      edit)
+        # `gh issue edit N --add-assignee @me`
+        case "$scenario" in
+          assign-fail) die "could not assign" 1 ;;
+          *) exit 0 ;;
+        esac
+        ;;
+      view)
+        [ "$scenario" = issue-unreachable ] && die "issue not found" 1
+        case "$jqf" in
+          .state)
+            case "$scenario" in
+              issue-closed) printf 'CLOSED\n' ;;
+              *) printf 'OPEN\n' ;;
+            esac
+            ;;
+          .title)
+            case "$scenario" in
+              triage-rich) printf 'Create a new widget service\n' ;;
+              *) printf 'Demo issue\n' ;;
+            esac
+            ;;
+          '.assignees | length' | '.assignees|length')
+            case "$scenario" in
+              assigned-me | assigned-other) printf '1\n' ;;
+              *) printf '0\n' ;;
+            esac
+            ;;
+          '.assignees[].login' | '.assignees[]?.login')
+            case "$scenario" in
+              assigned-me) printf '%s\n' "$ME" ;;
+              assigned-other) printf 'someone-else\n' ;;
+              *) printf '' ;;
+            esac
+            ;;
+          '.projectItems | length' | '.projectItems|length')
+            case "$scenario" in
+              board-member | board-not-member) printf '1\n' ;;
+              *) printf '0\n' ;;
+            esac
+            ;;
+          .body)
+            case "$scenario" in
+              triage-rich)
+                cat <<'EOF'
+We need to create a new service from scratch.
+- [ ] first task
+- [x] second task
+See src/app.ts and docs/missing-file.md. Related to #12 and #34.
+EOF
+                ;;
+              *) printf 'Issue body text with a reference to src/app.ts and a checklist.\n' ;;
+            esac
+            ;;
+          '.labels[].name' | '.labels[]?.name')
+            case "$scenario" in
+              labeled | triage-rich) printf 'bug\nsecurity\n' ;;
+              *) printf '' ;;
+            esac
+            ;;
+          *) printf '{"state":"OPEN","title":"Demo issue"}\n' ;;
+        esac
+        ;;
+      *) exit 0 ;;
+    esac
+    ;;
+
+  pr)
+    action=${2:-}
+    case "$action" in
+      list)
+        # `gh pr list --head BRANCH --json state --jq ...`
+        case "$scenario" in
+          pr-open) printf 'OPEN\n' ;;
+          pr-merged) printf 'MERGED\n' ;;
+          *) printf '' ;; # pr-none: empty
+        esac
+        ;;
+      view)
+        case "$jqf" in
+          .state)
+            case "$scenario" in
+              pr-merged) printf 'MERGED\n' ;;
+              pr-open) printf 'OPEN\n' ;;
+              pr-closed) printf 'CLOSED\n' ;;
+              *) printf 'OPEN\n' ;;
+            esac
+            ;;
+          .headRefOid)
+            case "$scenario" in
+              head-moved) printf '%s\n' "$HEAD_SHA_MOVED" ;;
+              head-empty) printf '' ;;
+              *) printf '%s\n' "$HEAD_SHA_CURRENT" ;;
+            esac
+            ;;
+          .url) printf 'https://github.com/octo-owner/demo-repo/pull/123\n' ;;
+          *) printf '{"state":"OPEN","headRefOid":"%s"}\n' "$HEAD_SHA_CURRENT" ;;
+        esac
+        ;;
+      merge)
+        case "$scenario" in
+          pending-checks) die "Pull request is not mergeable: the base branch policy prohibits the merge; required checks are still pending." 1 ;;
+          squash-disallowed)
+            if printf '%s ' "$@" | grep -q -- '--squash'; then
+              die "Squash merging is not allowed on this repository" 1
+            fi
+            exit 0
+            ;;
+          rebase-only)
+            # Only --rebase succeeds; --squash and --merge are both disallowed.
+            if printf '%s ' "$@" | grep -qE -- '--squash|--merge'; then
+              die "Squash merging is not allowed on this repository" 1
+            fi
+            exit 0
+            ;;
+          merge-conflict) die "Pull request is not mergeable: merge conflict between base and head." 1 ;;
+          protected) die "Protected branch update failed: required status checks have not passed." 1 ;;
+          *) exit 0 ;;
+        esac
+        ;;
+      create)
+        printf 'https://github.com/octo-owner/demo-repo/pull/123\n'
+        ;;
+      checks)
+        case "$scenario" in
+          checks-red) die "some checks failing" 1 ;;
+          *) exit 0 ;;
+        esac
+        ;;
+      *) exit 0 ;;
+    esac
+    ;;
+
+  version)
+    printf 'gh version 2.92.0 (fake)\n'
+    ;;
+
+  *)
+    # Unknown subcommand: succeed quietly so unrelated calls do not break tests.
+    exit 0
+    ;;
+esac

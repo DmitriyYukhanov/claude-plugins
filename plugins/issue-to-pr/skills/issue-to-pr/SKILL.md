@@ -35,9 +35,10 @@ bypasses branch protection.
 
 Per-project settings live in `.claude/issue-to-pr.local.md` (YAML frontmatter): the board
 URL, base branch, and the typecheck/test/visual commands. Everything is optional — with no
-file the skill auto-detects commands and runs by issue argument. Schema and auto-detect
-rules: `${CLAUDE_PLUGIN_ROOT}/skills/issue-to-pr/references/configuration.md`. This guide
-refers to the resolved commands as `<typecheck_cmd>`, `<test_cmd>`, `<visual_cmd>`.
+file the skill auto-detects commands and runs by issue argument. `preflight.sh` (Step 0) parses
+this file and resolves the commands + base for you (`CMD_TEST`, `CMD_TYPECHECK`, `BASE`, ...).
+Schema: `${CLAUDE_PLUGIN_ROOT}/skills/issue-to-pr/references/configuration.md`. This guide refers
+to the resolved commands as `<typecheck_cmd>`, `<test_cmd>`, `<visual_cmd>`.
 
 **Resolve config in the main checkout, up front.** This file is gitignored, so it does not
 exist inside the worktree — read it (and the resolved commands + base) in `<original-root>`
@@ -61,7 +62,7 @@ otherwise the inline equivalent.
   `main`), then cut the branch from THAT same ref: `feat/issue-<N>-<slug>` or
   `fix/issue-<N>-<slug>` (the issue number is baked in so the branch can't collide across
   issues), inside a dedicated `../<repo>-worktrees/issue-<N>` worktree (see
-  `${CLAUDE_PLUGIN_ROOT}/skills/issue-to-pr/references/worktree-and-merge.md`). All work
+  `${CLAUDE_PLUGIN_ROOT}/skills/issue-to-pr/references/contracts.md`). All work
   happens there; never run two tasks in the same working tree. The branch you start from and
   the PR target must be the same base, or commits living only on `dev` go missing and surface
   as conflicts at merge.
@@ -79,9 +80,11 @@ otherwise the inline equivalent.
 
 ## Step 0 — Resolve the input + detect mode
 
-Turn the request into a concrete issue and decide whether board-status sync applies. Full
-mechanics (verified `gh` commands, token scope, draft handling):
-`${CLAUDE_PLUGIN_ROOT}/skills/issue-to-pr/references/board-sync.md`.
+Turn the request into a concrete issue and decide whether board-status sync applies. **Run
+`${CLAUDE_PLUGIN_ROOT}/scripts/preflight.sh <N>` first** (from the main checkout) — one call
+returns auth/scopes, repo owner/name, resolved `BASE`/`START_POINT`, auto-detected gate commands,
+issue state, `WORKTREE_STATE`, and `BOARD_CONFIGURED`/`BOARD_MEMBER`. Then apply the mode table.
+Script keys and exit codes: `${CLAUDE_PLUGIN_ROOT}/skills/issue-to-pr/references/contracts.md`.
 
 | Input | Mode |
 |---|---|
@@ -104,17 +107,24 @@ mechanics (verified `gh` commands, token scope, draft handling):
 - Open the files the issue points at; map the real code (functions, wiring, existing tests,
   any visual harness).
 - Confirm the base branch (Hard rules + `git branch -a`).
-- **Cut the branch inside an isolated worktree.** Create (or resume) the
-  `../<repo>-worktrees/issue-<N>` worktree, `cd` into it, and **install the project's
-  dependencies** there (a fresh worktree has only tracked files — no `node_modules`/`.venv`/etc,
-  so the Step 6 gates would fail without a setup pass) before touching any file. Full mechanics
-  (resume check, base start-point, deps, exact commands, sandbox fallback):
-  `${CLAUDE_PLUGIN_ROOT}/skills/issue-to-pr/references/worktree-and-merge.md` → "Create or
-  resume the worktree". Everything downstream runs there.
-- **Board-mode:** once the branch is cut and work begins, set the card's status to
-  `in_progress` (see board-sync). A failed status write is logged and never blocks progress.
+- **Cut the branch inside an isolated worktree** with `${CLAUDE_PLUGIN_ROOT}/scripts/worktree.sh
+  ensure <N> --branch <branch> --start-point <START_POINT>` (from the main checkout). It
+  creates / resumes / reattaches and reports `WT_PATH`, `STATE`, and `INSTALL_HINT`. `cd` into
+  `WT_PATH`, then **install dependencies** — a fresh worktree has only tracked files (no
+  `node_modules`/`.venv`/etc), so run `INSTALL_HINT` through `run-gates.sh` (keeps output out of
+  context) before touching any file. Exit-code handling (bad-checkout, stale dir, invalid
+  start-point, permission → in-place fallback) is in
+  `${CLAUDE_PLUGIN_ROOT}/skills/issue-to-pr/references/contracts.md` → "worktree.sh". Everything
+  downstream runs there.
+- **Board-mode:** once work begins, `${CLAUDE_PLUGIN_ROOT}/scripts/board-sync.sh <owner/repo> <N>
+  in_progress` (run it in the background; it always exits 0 and never blocks progress). If
+  preflight reported `STATUS_MAP_IN_PROGRESS`, append `--option "<that value>"`.
 
 ## Step 2 — Triage complexity (decides the path)
+
+Run `${CLAUDE_PLUGIN_ROOT}/scripts/triage-evidence.sh <N>` for objective signals (labels,
+checklist items, referenced-paths-that-exist, new-thing keywords, linked issues), then map them
+to a level yourself:
 
 - **Simple** (one obvious edit, no design choices): skip to Step 5, implement directly with
   TDD.
@@ -175,8 +185,10 @@ a dedicated browser test — not eyeballing alone. Logic gets unit/integration t
 
 ## Step 6 — Tests green (GATE)
 
-- `<typecheck_cmd>` (clean) AND `<test_cmd>` (all green). For UI work also run `<visual_cmd>`
-  and inspect its output.
+- Run `${CLAUDE_PLUGIN_ROOT}/scripts/run-gates.sh --log-dir tmp/task-<N>/logs --gate
+  typecheck='<typecheck_cmd>' --gate test='<test_cmd>'` (add `--gate visual='<visual_cmd>'` for
+  UI). The printed `GATES_OK=true` + `GATE_*_EXIT` block is the green proof; a failing gate
+  surfaces only its last 40 lines.
 - Anything red ⇒ STOP and fix (`superpowers:systematic-debugging` or a disciplined inline
   pass). Never proceed red.
 
@@ -192,8 +204,8 @@ a dedicated browser test — not eyeballing alone. Logic gets unit/integration t
 
 ## Step 8 — Re-run all tests
 
-- `<typecheck_cmd>` + `<test_cmd>` (+ `<visual_cmd>` for UI) once more after the review
-  edits. All green before the PR.
+- Re-run the same `run-gates.sh` invocation (typecheck + test, + visual for UI) once more after
+  the review edits. All green before the PR.
 
 ## Step 9 — Commit + PR
 
@@ -202,8 +214,9 @@ a dedicated browser test — not eyeballing alone. Logic gets unit/integration t
   precondition relies on it). Open a PR against the base from Step 1 with `gh pr create`. Link the
   issue (`Closes #<N>`) so it auto-closes when the PR merges into the default branch. PR body is
   human-facing → humanize it.
-- **Board-mode:** set the card's status to `in_review` (see board-sync). `Done` is left to
-  merge-time — GitHub's automation moves the card when the issue closes (on a default-branch merge).
+- **Board-mode:** `${CLAUDE_PLUGIN_ROOT}/scripts/board-sync.sh <owner/repo> <N> in_review`
+  (background, best-effort). `Done` is left to merge-time — GitHub's automation moves the card
+  when the issue closes (on a default-branch merge).
 - The PR opens here and the skill **stops**. Merging is Step 11, gated on the user's approval
   — do **not** merge or deploy on this turn.
 
@@ -221,11 +234,14 @@ Short, human, no jargon — understandable by a 3rd-year student:
 
 On a later turn your CWD may have reset to the main checkout, so **return to your working tree
 first**: in worktree mode `cd` into `../<repo>-worktrees/issue-<N>`; in the sandbox in-place
-fallback there's no worktree, so stay in the main checkout on `<branch>` (the reference's "Merge on
-approval" covers both). Then read the user's reply against *this* PR. **Merge only on an unambiguous go-ahead to merge THIS PR — the burden is on a
+fallback there's no worktree, so stay in the main checkout on `<branch>` (contracts.md →
+"worktree.sh" covers both). Then read the user's reply against *this* PR. **Merge only on an unambiguous go-ahead to merge THIS PR — the burden is on a
 clear approval. If the reply is anything else, do not merge.**
 - **Go-ahead** — an unmistakable instruction to merge this PR ("merge it", "lgtm, ship it",
-  "approved", "go ahead and merge") → merge.
+  "approved", "go ahead and merge") → run `${CLAUDE_PLUGIN_ROOT}/scripts/approve.sh <branch>
+  --quote "<verbatim reply>"`, then `${CLAUDE_PLUGIN_ROOT}/scripts/worktree.sh merge <N> --branch
+  <branch>`. That script is the only sanctioned merge path; the PreToolUse hook and the script
+  both validate the single-use approval marker before `gh pr merge` runs.
 - **Change requests** → treat as review feedback: implement in the worktree, then **re-run the
   gates** — Step 6 (typecheck + tests, + visual for UI) and Step 7 (code-review) on the new diff,
   fixing until clean — before pushing to the same branch, re-reporting, and waiting for approval
@@ -239,11 +255,10 @@ clear approval. If the reply is anything else, do not merge.**
   deletes the remote branch and would close the open PR). Don't silently leave a stale worktree a
   later run would resume from. There is no timeout; approval is purely explicit — never inferred.
 
-Merge mechanics and failure handling (be-in-worktree, `git push` precondition, squash by head
+Merge mechanics and failure handling (marker validation, `git push` precondition, squash by head
 branch, the single retry for pending checks, when to stop):
-`${CLAUDE_PLUGIN_ROOT}/skills/issue-to-pr/references/worktree-and-merge.md` → "Merge on
-approval". If the merge does not succeed, **skip cleanup** — the worktree and branch stay put
-so nothing is lost.
+`${CLAUDE_PLUGIN_ROOT}/skills/issue-to-pr/references/contracts.md` → "worktree.sh". If `merge`
+exits 2 (`STOP_REASON=`), **skip cleanup** — the worktree and branch stay put so nothing is lost.
 
 ## Step 12 — Cleanup (after a successful merge)
 
@@ -252,12 +267,14 @@ issue (and moves the board card to Done) **only on a merge into the default bran
 base was a non-default branch like `dev`, the issue stays open on purpose; say so rather than
 reporting it closed (see the reference's "Merge on approval" outcome check). Then clean up: order
 matters — you can't remove a worktree from inside it. **Salvage any lasting design doc first**
-(`git worktree remove` silently deletes gitignored files), then return to the original checkout,
-remove the worktree, delete the now-merged local + remote branch, and sweep temp artifacts outside
+(`git worktree remove` silently deletes gitignored files), then, from the main checkout, run
+`${CLAUDE_PLUGIN_ROOT}/scripts/worktree.sh cleanup <N> --branch <branch> --salvage-to <dir>` (it
+salvages design/progress/state, removes the worktree, deletes the merged local + remote branch,
+and refuses on tracked dirtiness `STOP_REASON=dirty-tracked-files`), and sweep temp artifacts outside
 the worktree — honoring the keep-list (committed `docs/`, anything already in the PR, anything the
-user asked to keep). Full sequence, in-place variant, and keep-list:
-`${CLAUDE_PLUGIN_ROOT}/skills/issue-to-pr/references/worktree-and-merge.md` → "Post-merge
-cleanup". Finish with one line naming what was merged, what was removed, and anything kept.
+user asked to keep). Keys, the in-place variant, and the teardown (self-merge/abandon) path:
+`${CLAUDE_PLUGIN_ROOT}/skills/issue-to-pr/references/contracts.md` → "worktree.sh".
+Finish with one line naming what was merged, what was removed, and anything kept.
 
 ## Step 13 — Improve this skill
 

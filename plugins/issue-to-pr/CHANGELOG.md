@@ -5,6 +5,15 @@ All notable changes to the **issue-to-pr** plugin will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.2.0] - 2026-07-03
+
+### Added
+- Enforced merge gate — a hook allows a merge only with a fresh, single-use, head-matching in-session approval, always denies `gh pr merge --admin` protection bypass, and asks before a force-push
+- Contract-tested bash scripts run the pipeline's git/gh mechanics, with a fake-gh test harness verified under Git Bash on Windows and in CI on Linux and Windows
+
+### Changed
+- Preflight, worktree, gate, board-sync, and triage mechanics moved from prose into deterministic scripts sharing one exit-code contract — same pipeline behavior, mechanically enforced gates
+
 ## [1.1.0] - 2026-07-03
 
 ### Added

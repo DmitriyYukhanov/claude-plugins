@@ -1,2 +1,9 @@
 # Ensure shell scripts always use LF line endings
 *.sh text eol=lf
+
+# issue-to-pr ships bash scripts that must run under Git Bash on Windows and in
+# Linux CI. Force LF on the whole tree, including the extension-less fake-gh
+# shim (CRLF is the number-one way these break on the author's own machine).
+plugins/issue-to-pr/scripts/** text eol=lf
+plugins/issue-to-pr/tests/** text eol=lf
+plugins/issue-to-pr/tests/fake-gh/gh text eol=lf
