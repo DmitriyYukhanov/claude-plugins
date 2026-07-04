@@ -5,6 +5,11 @@ All notable changes to the **issue-to-pr** plugin will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.2.1] - 2026-07-04
+
+### Fixed
+- Post-merge cleanup no longer stalls on Windows and leaves the merged branch behind
+
 ## [1.2.0] - 2026-07-03
 
 ### Added

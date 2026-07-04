@@ -62,11 +62,17 @@ push-rejected · checks-pending · merge-failed`. On any stop, nothing is cleane
 Hard precondition: the PR is `MERGED` (else stop `pr-not-merged` — deleting an open PR's branch is
 mechanically impossible). Salvages `tmp/task-<N>/{design,progress,state}` first, removes the
 worktree (never `--force`; tracked dirtiness → stop `dirty-tracked-files`), deletes the local +
-remote branch, removes the marker. Keys: `REMOVED DELETED_LOCAL DELETED_REMOTE SALVAGED`.
+remote branch, removes the marker. Keys: `REMOVED DELETED_LOCAL DELETED_REMOTE SALVAGED`, plus
+`LEFTOVER_DIR` if a directory could not be removed. **Run it with your shell's cwd in
+`<original-root>`, not the worktree** — a shell sitting inside the worktree locks it on Windows so
+`git worktree remove` only partially succeeds. Cleanup never auto-deletes an unregistered
+directory (same protection as `ensure`): it reports the path as `LEFTOVER_DIR` and still removes
+the marker + remote branch. Check `DELETED_LOCAL` — if a still-registered locked worktree remains
+it stays `false`; delete that branch and the leftover yourself once whatever holds it is gone.
 
 `worktree.sh teardown <N> [--salvage-to <dir>]` — user self-merges / abandons. Removes the
 worktree only; **never touches the branch or PR**. Keys: `REMOVED SALVAGED KEPT`
-(`branch-and-pr | in-place`).
+(`branch-and-pr | in-place`), plus `LEFTOVER_DIR` if a directory could not be removed.
 
 ## Merge-approval gate — the physics
 

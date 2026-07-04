@@ -252,6 +252,24 @@ test_wt_cleanup_in_place_deletes_checked_out_branch() {
   fi
 }
 
+test_wt_cleanup_reports_unregistered_leftover_dir() {
+  # A directory at the worktree path that git no longer tracks (a prior
+  # partial-success remnant on Windows, or a folder parked there) must be REPORTED,
+  # not silently deleted, while branch + marker cleanup still proceeds.
+  local repo wt; repo=$(mk_repo); wt=$(mk_worktree "$repo" feat/issue-6-x); cd "$repo"
+  git -C "$repo" worktree remove "$wt"
+  mkdir -p "$wt"
+  printf 'stale\n' >"$wt/leftover"
+  use_fake_gh pr-merged
+  run_script worktree.sh cleanup 6 --branch feat/issue-6-x
+  assert_rc 0
+  # LEFTOVER_DIR is emitted (exact path format is git's, not the test's cygwin form).
+  assert_key_present "$OUT" LEFTOVER_DIR
+  assert_contains "$OUT" "issue-6"
+  assert_key "$OUT" DELETED_LOCAL true # branch cleanup still runs
+  if [ ! -d "$wt" ]; then fail "unregistered dir must be reported, not deleted"; fi
+}
+
 # ── teardown ────────────────────────────────────────────────────────────────
 test_wt_teardown_removes_but_keeps_branch() {
   local repo wt; repo=$(mk_repo); wt=$(mk_worktree "$repo" feat/issue-6-x); cd "$repo"
