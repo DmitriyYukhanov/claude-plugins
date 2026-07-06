@@ -71,46 +71,12 @@ set_cfg() { # top sub value
   esac
 }
 
-trim_quotes() { # strip surrounding whitespace and matching quotes
-  local v=$1
-  v=${v#"${v%%[![:space:]]*}"} # ltrim
-  v=${v%"${v##*[![:space:]]}"} # rtrim
-  case "$v" in
-    \"*\") v=${v#\"}; v=${v%\"} ;;
-    \'*\') v=${v#\'}; v=${v%\'} ;;
-  esac
-  printf '%s' "$v"
-}
-
-parse_config() { # path -> 0 ok / 1 parse failure
-  local file=$1 in_fm=0 cur_top="" line
-  while IFS= read -r line || [ -n "$line" ]; do
-    line=${line%$'\r'} # tolerate CRLF configs (this file lives in the target repo)
-    if [ "$in_fm" = 0 ]; then
-      [ "$line" = "---" ] && in_fm=1
-      continue
-    fi
-    [ "$line" = "---" ] && return 0
-    case "$line" in '' | '#'*) continue ;; esac
-    if [[ "$line" =~ ^([A-Za-z_][A-Za-z0-9_]*):[[:space:]]*(.*)$ ]]; then
-      cur_top=${BASH_REMATCH[1]}
-      local val
-      val=$(trim_quotes "${BASH_REMATCH[2]}")
-      [ -n "$val" ] && set_cfg "$cur_top" "" "$val"
-    elif [[ "$line" =~ ^[[:space:]]+([A-Za-z_][A-Za-z0-9_]*):[[:space:]]*(.*)$ ]]; then
-      [ -n "$cur_top" ] || return 1
-      set_cfg "$cur_top" "${BASH_REMATCH[1]}" "$(trim_quotes "${BASH_REMATCH[2]}")"
-    else
-      return 1 # unrecognized frontmatter line
-    fi
-  done <"$file"
-  return 0
-}
+# trim_quotes + parse_frontmatter now live in lib/common.sh (shared with pin-config.sh).
 
 config_present=false
 if [ -f "$config_path" ]; then
   config_present=true
-  if ! parse_config "$config_path"; then
+  if ! parse_frontmatter "$config_path" set_cfg; then
     degrade config-parse-failed "preflight: could not parse $config_path - read it yourself"
   fi
 fi

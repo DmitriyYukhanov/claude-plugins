@@ -152,6 +152,48 @@ gh_field() {
   gh "$@" 2>/dev/null || printf ''
 }
 
+# -- Frontmatter parser (shared by preflight.sh + pin-config.sh) --------------
+# trim_quotes STRING - strip surrounding whitespace and one layer of matching quotes.
+trim_quotes() {
+  local v=$1
+  v=${v#"${v%%[![:space:]]*}"}
+  v=${v%"${v##*[![:space:]]}"}
+  case "$v" in
+    \"*\") v=${v#\"}; v=${v%\"} ;;
+    \'*\') v=${v#\'}; v=${v%\'} ;;
+  esac
+  printf '%s' "$v"
+}
+
+# parse_frontmatter FILE CALLBACK - read a `.local.md` YAML-frontmatter subset
+# (top-level scalars + one nesting level; CRLF-tolerant) and invoke
+# `CALLBACK <top> <sub> <value>` per key (sub="" for a top-level scalar). Returns
+# 1 on a structurally-invalid frontmatter line, 0 otherwise. Sharing this keeps
+# preflight (read config) and pin-config (idempotent append) from diverging.
+parse_frontmatter() {
+  local file=$1 cb=$2 in_fm=0 cur_top="" line val
+  while IFS= read -r line || [ -n "$line" ]; do
+    line=${line%$'\r'}
+    if [ "$in_fm" = 0 ]; then
+      [ "$line" = "---" ] && in_fm=1
+      continue
+    fi
+    [ "$line" = "---" ] && return 0
+    case "$line" in '' | '#'*) continue ;; esac
+    if [[ "$line" =~ ^([A-Za-z_][A-Za-z0-9_]*):[[:space:]]*(.*)$ ]]; then
+      cur_top=${BASH_REMATCH[1]}
+      val=$(trim_quotes "${BASH_REMATCH[2]}")
+      [ -n "$val" ] && "$cb" "$cur_top" "" "$val"
+    elif [[ "$line" =~ ^[[:space:]]+([A-Za-z_][A-Za-z0-9_]*):[[:space:]]*(.*)$ ]]; then
+      [ -n "$cur_top" ] || return 1
+      "$cb" "$cur_top" "${BASH_REMATCH[1]}" "$(trim_quotes "${BASH_REMATCH[2]}")"
+    else
+      return 1
+    fi
+  done <"$file"
+  return 0
+}
+
 # repo_root - the main working tree (first `git worktree list` entry), falling
 # back to the toplevel of cwd. Empty string if not inside a git repository. The
 # approval marker lives under this root, so it is shared across worktrees.
@@ -198,4 +240,53 @@ marker_used() {
 marker_set_used() {
   local file=$1 tmp="$1.tmp"
   sed 's/"used":false/"used":true/' "$file" >"$tmp" && mv "$tmp" "$file"
+}
+
+# -- PreToolUse hook helpers (shared by merge-guard.sh + stage-guard.sh) -------
+# hook_decision DECISION REASON - emit a PreToolUse permission decision.
+hook_decision() {
+  local r
+  r=$(json_escape "$2")
+  printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"%s","permissionDecisionReason":"%s"},"systemMessage":"%s"}\n' \
+    "$1" "$r" "$r"
+}
+hook_allow() { hook_decision allow "$1"; exit 0; }
+hook_deny() { hook_decision deny "$1"; exit 0; }
+hook_ask() { hook_decision ask "$1"; exit 0; }
+# hook_passthrough - NOT a guarded command; emit no permissionDecision so Claude
+# Code's normal permission flow handles it (returning "allow" would auto-approve
+# every Bash command the hook sees, since it matches the whole Bash tool).
+hook_passthrough() { printf '{"continue":true,"suppressOutput":true}\n'; exit 0; }
+
+# hook_extract_command JSON -> the tool_input.command value, JSON-unescaped. A
+# pure-bash scanner (no jq/perl) that honours backslash escapes, so a quoted path
+# ("D:/Code Stage/...") or an embedded quote can't truncate the command the way a
+# naive "[^"]*" match would.
+hook_extract_command() {
+  local s=$1 after out="" i n c esc=0 key='"command"'
+  case "$s" in *"$key"*) : ;; *) printf ''; return ;; esac
+  after=${s#*"$key"}
+  after=${after#*:}
+  after=${after#"${after%%[![:space:]]*}"}
+  case "$after" in \"*) after=${after#\"} ;; *) printf ''; return ;; esac
+  n=${#after}
+  for ((i = 0; i < n; i++)); do
+    c=${after:i:1}
+    if [ "$esc" = 1 ]; then
+      case "$c" in
+        n) out+=$'\n' ;;
+        t) out+=$'\t' ;;
+        r) out+=$'\r' ;;
+        *) out+=$c ;;
+      esac
+      esc=0
+    elif [ "$c" = "\\" ]; then
+      esc=1
+    elif [ "$c" = '"' ]; then
+      break
+    else
+      out+=$c
+    fi
+  done
+  printf '%s' "$out"
 }
