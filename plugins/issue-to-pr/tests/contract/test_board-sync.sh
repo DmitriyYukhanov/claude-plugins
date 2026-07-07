@@ -71,9 +71,35 @@ test_board_mutation_failure_reports_and_exits_zero() {
   assert_contains "$OUT" '"ERROR":"mutation-failed"'
 }
 
-test_board_create_card_mode_deferred() {
+test_board_create_card_ok() {
   use_fake_gh happy
-  run_script board-sync.sh octo-owner/demo-repo --create-card "New card title"
+  run_script board-sync.sh octo-owner/demo-repo --create-card "Child A" --board-url https://github.com/users/octo/projects/3
   assert_rc 0
-  assert_contains "$OUT" '"SKIPPED_REASON":"mode-deferred"'
+  assert_contains "$OUT" '"OK":"true"'
+  assert_contains "$OUT" '"CARD_ID":"DRAFT_ITEM_ID"'
+  assert_gh_called "addProjectV2DraftIssue"
+}
+
+test_board_create_card_needs_board_url() {
+  use_fake_gh happy
+  run_script board-sync.sh octo-owner/demo-repo --create-card "Child A"
+  assert_rc 0 # best-effort: never hard-stops
+  assert_contains "$OUT" '"SKIPPED_REASON":"missing-board-url"'
+}
+
+test_board_create_card_api_failure_is_best_effort() {
+  use_fake_gh create-card-fail
+  run_script board-sync.sh octo-owner/demo-repo --create-card "Child A" --board-url https://github.com/users/octo/projects/3
+  assert_rc 0
+  assert_contains "$OUT" '"OK":"false"'
+  assert_contains "$OUT" '"ERROR":"create-failed"'
+}
+
+test_board_convert_draft_ok() {
+  use_fake_gh happy
+  run_script board-sync.sh octo-owner/demo-repo --convert-draft PVTI_DRAFT_XYZ
+  assert_rc 0
+  assert_contains "$OUT" '"OK":"true"'
+  assert_contains "$OUT" '"ISSUE_URL":"https://github.com/octo-owner/demo-repo/issues/99"'
+  assert_gh_called "issue create"
 }

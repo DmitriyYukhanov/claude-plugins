@@ -5,6 +5,18 @@ All notable changes to the **issue-to-pr** plugin will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.0.0] - 2026-07-07
+
+### Added
+- Epic tier — decompose a from-scratch request into dependency-ordered child issues, each shipped through its own gated pipeline, gated on one approval of the breakdown
+- Start from a plain request with no issue number: the pipeline drafts the issue and proceeds, asking only when the scope is ambiguous
+- Merge-failure ladder — a behind-base PR is updated, re-checked, and re-approved automatically only when the base merge leaves the PR's own diff untouched; a conflict or a failed check stops and hands back
+- GitHub review ingestion — a changes-requested review or an unresolved thread routes through the change-request path instead of a silent merge
+- Post-merge smoke check that opens a draft revert PR (never auto-reverts) when the merged change breaks the base
+
+### Changed
+- Major release: the pipeline now accepts free-text and epic entry points alongside a single issue number, and the merge gate gained the failure ladder and review ingestion
+
 ## [1.3.0] - 2026-07-06
 
 ### Added

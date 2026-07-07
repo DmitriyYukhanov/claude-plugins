@@ -290,3 +290,132 @@ test_wt_teardown_in_place_when_no_worktree() {
   assert_rc 0
   assert_key "$OUT" KEPT in-place
 }
+
+# -- merge-failure ladder (sec 6.3) ------------------------------------------
+fresh_iso() { date -u +%Y-%m-%dT%H:%M:%SZ; }
+
+test_wt_merge_ladder_exhausted_caps_before_anything() {
+  # The cap check is first: no marker, no gh needed - just the counter.
+  local repo wt; repo=$(mk_repo); wt=$(mk_worktree "$repo" feat/issue-6-x); cd "$wt"
+  use_fake_gh happy
+  run_script worktree.sh merge 6 --branch feat/issue-6-x --ladder-attempt 4
+  assert_rc 2
+  assert_key "$OUT" STOP_REASON merge-ladder-exhausted
+  assert_gh_not_called "pr" # the cap must fire before ANY GitHub interaction
+}
+
+test_wt_merge_checks_failed_stops_before_merge() {
+  local repo wt; repo=$(mk_repo); wt=$(mk_worktree "$repo" feat/issue-6-x); cd "$wt"
+  write_marker "$repo" feat/issue-6-x "$SHA_OK" false "$(fresh_iso)"
+  use_fake_gh checks-failing
+  run_script worktree.sh merge 6 --branch feat/issue-6-x
+  assert_rc 2
+  assert_key "$OUT" STOP_REASON checks-failed
+  assert_key_present "$OUT" FAILING_CHECKS
+  assert_gh_not_called "pr merge" # a doomed check must never blind-merge
+}
+
+test_wt_merge_conflict_stops_without_update() {
+  local repo wt; repo=$(mk_repo); wt=$(mk_worktree "$repo" feat/issue-6-x); cd "$wt"
+  write_marker "$repo" feat/issue-6-x "$SHA_OK" false "$(fresh_iso)"
+  use_fake_gh merge-conflict-state
+  run_script worktree.sh merge 6 --branch feat/issue-6-x
+  assert_rc 2
+  assert_key "$OUT" STOP_REASON merge-conflict
+  assert_gh_not_called "pr update-branch"
+  assert_gh_not_called "pr merge"
+}
+
+test_wt_merge_update_branch_failure_is_distinct() {
+  local repo wt; repo=$(mk_repo); wt=$(mk_worktree "$repo" feat/issue-6-x); cd "$wt"
+  write_marker "$repo" feat/issue-6-x "$SHA_OK" false "$(fresh_iso)"
+  use_fake_gh behind-update-fail
+  run_script worktree.sh merge 6 --branch feat/issue-6-x
+  assert_rc 2
+  assert_key "$OUT" STOP_REASON update-branch-failed
+  assert_gh_called "pr update-branch"
+  assert_gh_not_called "pr merge"
+}
+
+test_wt_merge_behind_clean_autorefreshes_and_merges() {
+  # Base advances with an UNRELATED file; the update (simulated by fake-gh) merges
+  # it into the branch. is_pure_base_merge must see the PR's own diff unchanged
+  # (this FAILS if the unsound two-dot check is used) -> refresh marker + merge.
+  local repo wt; repo=$(mk_repo); wt=$(mk_worktree "$repo" feat/issue-6-x); cd "$wt"
+  printf 'unrelated\n' >"$repo/unrelated.txt"
+  git -C "$repo" add unrelated.txt
+  git -C "$repo" commit -qm base-advance
+  git -C "$repo" push -q origin main
+  write_marker "$repo" feat/issue-6-x "$SHA_OK" false "$(fresh_iso)"
+  use_fake_gh behind-clean
+  run_script worktree.sh merge 6 --branch feat/issue-6-x
+  assert_rc 0
+  assert_key "$OUT" MERGED true
+  assert_key "$OUT" LADDER_STEP base-merged-refreshed
+  assert_gh_called "pr update-branch"
+  assert_gh_called "pr merge feat/issue-6-x --squash"
+}
+
+test_wt_merge_behind_unverified_stops() {
+  # update-branch succeeds but the branch head could not be observed to advance
+  # (stale/failed fetch) — never assume the base merge is pure; stop for re-approval.
+  local repo wt; repo=$(mk_repo); wt=$(mk_worktree "$repo" feat/issue-6-x); cd "$wt"
+  write_marker "$repo" feat/issue-6-x "$SHA_OK" false "$(fresh_iso)"
+  use_fake_gh behind-noadvance
+  run_script worktree.sh merge 6 --branch feat/issue-6-x
+  assert_rc 2
+  assert_key "$OUT" STOP_REASON base-update-unverified
+  assert_gh_called "pr update-branch"
+  assert_gh_not_called "pr merge"
+}
+
+test_wt_merge_behind_content_changed_needs_reapproval() {
+  # The update also touches the PR's own file -> the PR's diff changed -> the old
+  # approval no longer covers it. Never merges; asks for fresh approval.
+  local repo wt; repo=$(mk_repo); wt=$(mk_worktree "$repo" feat/issue-6-x); cd "$wt"
+  printf 'unrelated\n' >"$repo/unrelated.txt"
+  git -C "$repo" add unrelated.txt
+  git -C "$repo" commit -qm base-advance
+  git -C "$repo" push -q origin main
+  write_marker "$repo" feat/issue-6-x "$SHA_OK" false "$(fresh_iso)"
+  use_fake_gh behind-content
+  run_script worktree.sh merge 6 --branch feat/issue-6-x
+  assert_rc 2
+  assert_key "$OUT" STOP_REASON content-changed-needs-reapproval
+  assert_gh_not_called "pr merge"
+}
+
+test_wt_merge_clean_passes_precheck() {
+  # Regression: a CLEAN mergeability read must not disturb the normal merge.
+  local repo wt; repo=$(mk_repo); wt=$(mk_worktree "$repo" feat/issue-6-x); cd "$wt"
+  write_marker "$repo" feat/issue-6-x "$SHA_OK" false "$(fresh_iso)"
+  use_fake_gh happy
+  run_script worktree.sh merge 6 --branch feat/issue-6-x
+  assert_rc 0
+  assert_key "$OUT" MERGED true
+}
+
+# -- draft revert (sec 6.5) --------------------------------------------------
+test_wt_revert_opens_draft_pr_never_merges() {
+  local repo wt; repo=$(mk_repo); wt=$(mk_worktree "$repo" feat/issue-6-x); cd "$repo"
+  # Land the PR's change as a SQUASH (single-parent) commit on main so there is a
+  # normal commit to revert (a real squash-merge is never a 2-parent merge commit).
+  git -C "$repo" merge -q --squash feat/issue-6-x
+  git -C "$repo" commit -qm 'squash: feat/issue-6-x'
+  git -C "$repo" push -q origin main
+  use_fake_gh happy
+  run_script worktree.sh revert 6 --branch feat/issue-6-x
+  assert_rc 0
+  assert_key_present "$OUT" REVERT_PR_URL
+  assert_key_present "$OUT" REVERT_BRANCH
+  assert_gh_called "pr create --draft"
+  assert_gh_not_called "pr merge"
+}
+
+test_wt_revert_no_merge_commit_degrades() {
+  local repo wt; repo=$(mk_repo); wt=$(mk_worktree "$repo" feat/issue-6-x); cd "$repo"
+  use_fake_gh revert-no-merge-commit
+  run_script worktree.sh revert 6 --branch feat/issue-6-x
+  assert_rc 4
+  assert_key "$OUT" DEGRADED_REASON no-merge-commit
+}

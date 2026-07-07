@@ -6,8 +6,8 @@ description: >-
   code-review clean), scaling the machinery to the task's tier and asking at most one
   batched question. Auto-links the issue to close on merge, advances the board card,
   then merges and cleans up once you approve the PR in-session. Triggers: "take task
-  N", "work on issue #N", "do the next task", and — for the merge gate on a later
-  turn — "merge it", "approve the PR", "ship it", "lgtm merge".
+  N", "work on issue #N", "do the next task", "build/fix X" when no issue exists yet, and —
+  for the merge gate later — "merge it", "approve the PR", "ship it", "lgtm merge".
 user-invocable: true
 argument-hint: "[issue-number | next | \"free text\"] [--tier trivial|standard|complex|epic]"
 ---
@@ -52,8 +52,8 @@ own judgment. One todo per step.
 
 ## Steps
 
-**0. Resolve + preflight.** Turn the request into an issue (free text → draft one if scope is
-clear; a draft board card → convert it to an issue first; `next` → the board's top card).
+**0. Resolve + preflight.** Turn the request into an issue (free text → draft one, ask only if
+ambiguous — `R/entry.md`; a draft card → `S/board-sync.sh --convert-draft`; `next` → top card).
 `S/preflight.sh <N> [--claim]` → auth/scopes, repo, `BASE`/`START_POINT`, gate
 cmds, issue state, `WORKTREE_STATE`, board membership. **`WARN_CLAIMED_BY` → hard stop and
 ask before any further work** (never run an opus design on someone else's issue).
@@ -66,6 +66,7 @@ Exit-code dispatch (bad-checkout, stale dir, invalid start-point, exit-3 in-plac
 background (add `--option "$STATUS_MAP_IN_PROGRESS"` if preflight reported one).
 
 **2. Triage.** `S/triage-evidence.sh <N> | S/tier-select.sh [--tier …]` → `TIER`; record it.
+`epic` → decompose into child issues first (`R/epic.md`); each child is a full 0–12 run.
 
 **3. Research** (tier routes it, complex+ with unknowns): the forked `research` sub-skill (or
 `/deep-research`) returns a ≤150-line cited summary; raw exploration stays out of context.
@@ -108,13 +109,15 @@ review passes/level, which machinery fired). Hand back: ask when to merge, and *
 ## Step 11 — Merge on approval (GATE)
 
 Return to your working tree first: `cd` into `../<repo>-worktrees/issue-<N>` (worktree
-mode); in the in-place fallback stay in the main checkout on `<branch>`. Then read the reply
-against *this* PR. **Merge only on an unambiguous go-ahead to merge THIS PR — the burden is
-on a clear approval. If the reply is anything else, do not merge.**
+mode); in the in-place fallback stay in the main checkout on `<branch>`. Read the reply against
+*this* PR and run `S/review-check.sh <branch>` — a `changes_requested`/`unresolved_threads`
+result routes through change-requests, never a silent merge. **Merge only on an unambiguous
+go-ahead to merge THIS PR; if the reply (or GitHub review) is anything else, do not merge.**
 - **Go-ahead** ("merge it", "lgtm, ship it", "approved", "go ahead and merge") → `S/approve.sh
   <branch> --quote "<verbatim reply>"`, then `S/worktree.sh merge <N> --branch <branch>`. That
   script is the only sanctioned merge path; the hook + the script both validate the single-use
-  marker before `gh pr merge` runs. If `merge` exits 2 (`STOP_REASON=`), **skip cleanup**.
+  marker before `gh pr merge` runs. On a `STOP_REASON` rung (checks/behind/conflict) follow
+  `R/merge-ladder.md`; on exit 2, **skip cleanup**.
 - **Change requests** → implement in the worktree, **re-run the tier gates** (Steps 6–7 on the
   new diff) until clean, push, re-report, wait again. Never merge unverified changes.
 - **Anything else** → do **not** merge. A vague ack ("ok", "looks fine") or a question → ask for
@@ -132,7 +135,10 @@ marker). Report from its keys — `DELETED_LOCAL=false` or a `LEFTOVER_DIR` mean
 remains; say so, remove it by hand once the lock clears. In-place fallback (no worktree):
 switch off `<branch>`, delete it local+remote, sweep the scratchpad temp (keep committed
 `docs/`, PR content, anything you were asked to keep). Details: `R/contracts.md` →
-"worktree.sh". Finish with one line: what merged, what was removed, what was kept.
+"worktree.sh". **Post-merge smoke:** if `smoke_cmd` is set, run it on the updated base
+(`S/run-gates.sh --gate smoke='<smoke_cmd>'` in the main checkout); red → `S/worktree.sh revert
+<N> --branch <branch>` opens a **draft** revert PR (never auto-reverts) — report it loudly.
+Finish with one line: what merged, what was removed, what was kept.
 
 ## Friction log (replaces the old improve-this-skill step)
 

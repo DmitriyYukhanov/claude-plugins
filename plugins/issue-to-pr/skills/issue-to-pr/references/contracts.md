@@ -52,11 +52,17 @@ PR_STATE`. You run the install (`INSTALL_HINT`) visibly, piping it through `run-
 Stops: `bad-checkout-state · stale-unregistered-dir · invalid-start-point · pr-already-merged`;
 exit `3` → cut the branch in place with `git switch -c <b> <ref>`.
 
-`worktree.sh merge <N> --branch <b>` — Step 11. The **only** path that runs `gh pr merge`. Self-
-validates the approval marker (present · unused · fresh <30m · head-SHA matches), pushes, squash-
-merges (falls back to the repo's allowed method), consumes the marker, then reports the honest
-outcome. Keys: `MERGED MERGE_METHOD ISSUE_STATE PR_URL`. Stops: `no-valid-approval ·
-push-rejected · checks-pending · merge-failed`. On any stop, nothing is cleaned up.
+`worktree.sh merge <N> --branch <b> [--ladder-attempt <n>]` — Step 11. The **only** path that
+runs `gh pr merge`. Self-validates the approval marker (present · unused · fresh <30m · head-SHA
+matches), pushes, then runs the merge-failure ladder (sec 6.3): a structured pre-check classifies
+the PR and emits a typed stop per rung; a clean base merge auto-updates + refreshes the marker +
+merges in one call (`LADDER_STEP=base-merged-refreshed`). On success consumes the marker and
+reports the honest outcome. Keys: `MERGED MERGE_METHOD ISSUE_STATE PR_URL` (+ `FAILING_CHECKS`,
+`LADDER_STEP`). Stops: `no-valid-approval · push-rejected · checks-failed · merge-conflict ·
+update-branch-failed · base-update-unverified · content-changed-needs-reapproval ·
+marker-refresh-failed · checks-pending · merge-ladder-exhausted · merge-failed` — the model's response to each rung is in `merge-ladder.md`.
+`--ladder-attempt` (the model increments it each loop; caps at 3) backstops a livelock. On any
+stop, nothing is cleaned up.
 
 `worktree.sh cleanup <N> --branch <b> [--salvage-to <dir>]` — Step 12, after a successful merge.
 Hard precondition: the PR is `MERGED` (else stop `pr-not-merged` — deleting an open PR's branch is
@@ -73,6 +79,12 @@ it stays `false`; delete that branch and the leftover yourself once whatever hol
 `worktree.sh teardown <N> [--salvage-to <dir>]` — user self-merges / abandons. Removes the
 worktree only; **never touches the branch or PR**. Keys: `REMOVED SALVAGED KEPT`
 (`branch-and-pr | in-place`), plus `LEFTOVER_DIR` if a directory could not be removed.
+
+`worktree.sh revert <N> --branch <b>` — Step 12 post-merge safety net (sec 6.5). When the smoke
+gate fails on the updated base, opens a **draft** revert PR of the squash commit on a fresh
+`revert/issue-<N>-<slug>` branch off the refreshed base. NEVER merges — the human decides. Keys:
+`REVERT_BRANCH REVERT_PR_URL REVERT_COMMIT`. Stops: `revert-branch-failed · revert-conflict ·
+revert-push-failed · revert-pr-failed`; degrade `no-merge-commit` if the PR is not merged.
 
 ## Merge-approval gate — the physics
 
@@ -99,7 +111,18 @@ Wraps the whole GraphQL chain (membership → field/option match via an alias ta
 **Always exits 0**, always JSON: `OK` plus `SKIPPED_REASON` / `ERROR` / `HINT` (the hint carries
 `gh auth refresh -s project` when the scope is missing). Run it with `run_in_background: true`;
 board writes never block the pipeline. Step 1 → `in_progress`, Step 9 → `in_review`; `Done` is
-left to GitHub's automation on the default-branch merge.
+left to GitHub's automation on the default-branch merge. Epic mode (sec 6.1) adds two best-effort
+forms (still always exit 0): `board-sync.sh <owner/repo> --create-card "<title>" --board-url U`
+(adds a draft card → `CARD_ID`) and `board-sync.sh <owner/repo> --convert-draft <itemId>`
+(draft → real issue → `ISSUE_URL`).
+
+## review-check.sh — GitHub review ingestion (v2.0)
+
+`review-check.sh <b> [--json]` — Step 11 entry. Emits `REVIEW_STATE=clear | changes_requested |
+unresolved_threads` (from GitHub's own `reviewDecision` plus a best-effort unresolved-thread
+count), `UNRESOLVED_THREADS`, `READ_OK`. `changes_requested` / `unresolved_threads` routes through
+the change-request path, so an in-session go-ahead never merges over unaddressed GitHub review.
+Best-effort: a failed read reports `clear` + `READ_OK=false` and still exits 0.
 
 ## triage-evidence.sh — objective triage signals (no tier decision)
 

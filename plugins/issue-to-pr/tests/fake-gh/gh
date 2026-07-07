@@ -89,6 +89,21 @@ EOF
           board-mutation-fail) printf '' ;;
           *) printf 'UPDATED_ITEM_ID\n' ;;
         esac
+      elif printf '%s' "$allargs" | grep -q 'addProjectV2DraftIssue'; then
+        case "$scenario" in
+          create-card-fail) printf '' ;;
+          *) printf 'DRAFT_ITEM_ID\n' ;;
+        esac
+      elif printf '%s' "$allargs" | grep -q 'DraftIssue'; then
+        case "$scenario" in
+          convert-draft-missing) printf '' ;;
+          *) printf 'Draft card title\tDraft card body\n' ;;
+        esac
+      elif printf '%s' "$allargs" | grep -q 'reviewThreads'; then
+        case "$scenario" in
+          review-unresolved) printf '2\n' ;;
+          *) printf '0\n' ;;
+        esac
       else
         printf '{}\n'
       fi
@@ -114,6 +129,10 @@ EOF
   issue)
     action=${2:-}
     case "$action" in
+      create)
+        # `gh issue create --title ... --body ...`
+        printf 'https://github.com/octo-owner/demo-repo/issues/99\n'
+        ;;
       edit)
         # `gh issue edit N --add-assignee @me`
         case "$scenario" in
@@ -193,6 +212,30 @@ EOF
         esac
         ;;
       view)
+        # Review-ingestion read (sec 6.4): "<reviewDecision>\t<changes-requested-count>\t<number>".
+        if printf '%s' "$*" | grep -q 'reviewDecision'; then
+          case "$scenario" in
+            # Null reviewDecision (no branch protection) but a latest review requested
+            # changes - the exact case reviewDecision-alone would miss.
+            review-changes-requested) printf '\t1\t123\n' ;;
+            review-read-fail) printf '' ;;
+            *) printf '\t0\t123\n' ;;
+          esac
+          exit 0
+        fi
+        # Merge-ladder structured read (sec 6.3): production reads it through gh's
+        # own --jq, so return the ALREADY-FILTERED TSV "<mergeable>\t<state>\t<failing-csv>".
+        if printf '%s' "$*" | grep -q 'statusCheckRollup'; then
+          case "$scenario" in
+            checks-failing) printf 'MERGEABLE\tBLOCKED\tCI / build\n' ;;
+            merge-conflict-state) printf 'CONFLICTING\tDIRTY\t\n' ;;
+            behind-clean | behind-content | behind-update-fail | behind-noadvance) printf 'MERGEABLE\tBEHIND\t\n' ;;
+            pending-checks) printf 'MERGEABLE\tUNSTABLE\t\n' ;;
+            mergeability-unavailable) printf '' ;;
+            *) printf 'MERGEABLE\tCLEAN\t\n' ;;
+          esac
+          exit 0
+        fi
         case "$jqf" in
           .state)
             case "$scenario" in
@@ -210,7 +253,45 @@ EOF
             esac
             ;;
           .url) printf 'https://github.com/octo-owner/demo-repo/pull/123\n' ;;
+          .baseRefName) printf 'main\n' ;;
+          .title) printf 'Demo PR title\n' ;;
+          '.mergeCommit.oid')
+            # Return a REAL commit (the current checkout's HEAD) so a test's revert
+            # actually applies; revert-no-merge-commit models an unmerged PR.
+            case "$scenario" in
+              revert-no-merge-commit) printf '' ;;
+              *) git rev-parse HEAD 2>/dev/null || printf 'cccccccccccccccccccccccccccccccccccccccc\n' ;;
+            esac
+            ;;
           *) printf '{"state":"OPEN","headRefOid":"%s"}\n' "$HEAD_SHA_CURRENT" ;;
+        esac
+        ;;
+      update-branch)
+        # Real gh merges the base into the PR branch on the server. For the two
+        # behind-base scenarios we reproduce that server-side move with a throwaway
+        # clone so is_pure_base_merge is exercised against genuine divergence
+        # (behind-clean: base adds an unrelated file only; behind-content: the
+        # update also touches the PR's own file, which must fail the pure check).
+        br=${3:-}
+        case "$scenario" in
+          behind-update-fail) die "could not update the branch" 1 ;;
+          behind-clean | behind-content)
+            url=$(git remote get-url origin 2>/dev/null)
+            tmp="${TMPDIR:-/tmp}/upd.$$"
+            (
+              git clone -q "$url" "$tmp" >/dev/null 2>&1 || exit 0
+              git -C "$tmp" checkout -q "$br" >/dev/null 2>&1 || exit 0
+              git -C "$tmp" -c user.email=t@e.com -c user.name=T merge -q --no-edit origin/main >/dev/null 2>&1 || exit 0
+              if [ "$scenario" = behind-content ]; then
+                printf 'changed by base owner\n' >>"$tmp/work.txt"
+                git -C "$tmp" -c user.email=t@e.com -c user.name=T commit -q -am content >/dev/null 2>&1 || exit 0
+              fi
+              git -C "$tmp" push -q origin "$br" >/dev/null 2>&1 || exit 0
+            )
+            rm -rf "$tmp" 2>/dev/null || true
+            exit 0
+            ;;
+          *) exit 0 ;;
         esac
         ;;
       merge)
@@ -244,6 +325,14 @@ EOF
         esac
         ;;
       *) exit 0 ;;
+    esac
+    ;;
+
+  project)
+    # `gh project view <num> --owner <login> --format json --jq .id`
+    case "$scenario" in
+      project-missing) printf '' ;;
+      *) printf 'PVT_PROJECT_ID\n' ;;
     esac
     ;;
 

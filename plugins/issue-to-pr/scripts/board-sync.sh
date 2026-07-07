@@ -34,6 +34,8 @@ board_url=""
 status_field="Status"
 explicit_option="" # explicit column name (restores the board.status_map escape hatch)
 mode="transition"
+card_title="" # --create-card value (epic mode, sec 6.1)
+draft_item=""  # --convert-draft value
 
 positionals=()
 while [ "$#" -gt 0 ]; do
@@ -42,8 +44,8 @@ while [ "$#" -gt 0 ]; do
     --status-field) status_field=${2:-}; shift 2 2>/dev/null || shift "$#" ;;
     --option) explicit_option=${2:-}; shift 2 2>/dev/null || shift "$#" ;;
     --state) shift 2 2>/dev/null || shift "$#" ;; # state.json caching lands in v1.3.0 (sec 5.5)
-    --create-card) mode="create-card"; shift 2 2>/dev/null || shift "$#" ;;
-    --convert-draft) mode="convert-draft"; shift 2 2>/dev/null || shift "$#" ;;
+    --create-card) mode="create-card"; card_title=${2:-}; shift 2 2>/dev/null || shift "$#" ;;
+    --convert-draft) mode="convert-draft"; draft_item=${2:-}; shift 2 2>/dev/null || shift "$#" ;;
     --json) shift ;; # already JSON
     -*) warn "board-sync: ignoring unknown flag: $1"; shift ;;
     *) positionals+=("$1"); shift ;;
@@ -55,10 +57,42 @@ repo_slug=${positionals[0]:-}
 owner=${repo_slug%%/*}
 repo=${repo_slug#*/}
 
-if [ "$mode" != "transition" ]; then
-  emit OK false
-  emit SKIPPED_REASON mode-deferred
-  emit HINT "create-card/convert-draft land with epic mode in v2.0"
+has_project_scope() {
+  local scopes
+  scopes=$(gh auth status 2>&1 | grep -i 'token scopes' | grep -oE "'[^']+'" | tr -d "'" | paste -sd, - || printf '')
+  case ",$scopes," in *,project,*) return 0 ;; *) return 1 ;; esac
+}
+
+# -- epic-mode card ops (sec 6.1). Board-mode only and best-effort: any missing
+# piece reports a SKIPPED_REASON and still exits 0, so materialize never hard-stops.
+if [ "$mode" = "create-card" ]; then
+  [ -n "$card_title" ] || { emit OK false; emit SKIPPED_REASON missing-title; done_ok; }
+  [ -n "$board_url" ] || { emit OK false; emit SKIPPED_REASON missing-board-url; emit HINT "epic --create-card needs --board-url"; done_ok; }
+  has_project_scope || { emit OK false; emit SKIPPED_REASON missing-scope; emit HINT "gh auth refresh -s project"; done_ok; }
+  board_num=${board_url##*/projects/}; board_num=${board_num%%/*}
+  board_rest=${board_url%/projects/*}; board_login=${board_rest##*/}
+  proj_id=$(gh project view "$board_num" --owner "$board_login" --format json --jq '.id' 2>/dev/null || printf '')
+  [ -n "$proj_id" ] || { emit OK false; emit SKIPPED_REASON project-not-found; done_ok; }
+  card_id=$(gh api graphql \
+    -f query='mutation($p:ID!,$t:String!){addProjectV2DraftIssue(input:{projectId:$p,title:$t}){projectItem{id}}}' \
+    -F p="$proj_id" -F t="$card_title" \
+    --jq '.data.addProjectV2DraftIssue.projectItem.id' 2>/dev/null || printf '')
+  if [ -n "$card_id" ]; then emit OK true; emit CARD_ID "$card_id"; else emit OK false; emit ERROR create-failed; fi
+  done_ok
+fi
+
+if [ "$mode" = "convert-draft" ]; then
+  [ -n "$draft_item" ] || { emit OK false; emit SKIPPED_REASON missing-item; done_ok; }
+  has_project_scope || { emit OK false; emit SKIPPED_REASON missing-scope; emit HINT "gh auth refresh -s project"; done_ok; }
+  draft=$(gh api graphql \
+    -f query='query($item:ID!){node(id:$item){... on ProjectV2Item{content{... on DraftIssue{title body}}}}}' \
+    -F item="$draft_item" \
+    --jq '.data.node.content | "\(.title)\t\(.body // "")"' 2>/dev/null || printf '')
+  d_title=${draft%%$'\t'*}
+  d_body=${draft#*$'\t'}
+  [ -n "$d_title" ] || { emit OK false; emit SKIPPED_REASON draft-not-found; done_ok; }
+  new_url=$(gh issue create --title "$d_title" --body "$d_body" 2>/dev/null || printf '')
+  if [ -n "$new_url" ]; then emit OK true; emit ISSUE_URL "$new_url"; else emit OK false; emit ERROR convert-failed; fi
   done_ok
 fi
 
