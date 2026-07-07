@@ -106,3 +106,28 @@ left to GitHub's automation on the default-branch merge.
 `triage-evidence.sh <N> [--json]` — Step 2. Emits `LABELS BODY_LENGTH CHECKLIST_ITEMS
 REF_PATHS_EXIST REF_PATHS_MISSING NEW_THING_HITS LINKED_ISSUES TITLE` from the issue. You map the
 signals to a tier yourself. Exit `4` if the issue cannot be read.
+
+## tier-select.sh - map triage signals to a tier (v1.3.0)
+
+`triage-evidence.sh <N> | tier-select.sh [--tier trivial|standard|complex|epic] [--json]`
+Emits `TIER` + `TIER_REASON`. Deterministic rubric (full table + boundaries in
+`tier-matrix.md`); `--tier` overrides; borderline picks higher. Always exit 0.
+
+## sensitive-paths.sh - security overlay trigger (v1.3.0)
+
+`git diff --name-only "$BASE"...HEAD | sensitive-paths.sh [--json]` -> `SENSITIVE=true|false`
++ `MATCHED=`. Segment/stem-exact matching (auth, crypto, secrets, payment, migrations, plus
+`.env*`/`*.sql`/key material), so `authors.py` / `payment_ui_copy.md` do not false-trip.
+`SENSITIVE=true` -> add one `/security-review` pass. Always exit 0.
+
+## pin-config.sh - self-writing config (v1.3.0)
+
+`pin-config.sh --config <path> [--test <cmd>] [--typecheck <cmd>] [--visual <cmd>] [--smoke <cmd>]`
+Appends a gate command to the config's frontmatter only if unset (checked with preflight's
+shared parser, so a nested `commands:` value counts as set - NEVER overwrites a human value).
+Emits `PINNED=<keys>`. Exit 0; 4 if an existing config cannot be parsed (never corrupts it).
+
+## stage-guard.sh - explicit-path staging hook (v1.3.0)
+
+PreToolUse hook (in `hooks/hooks.json`, alongside merge-guard): denies `git add -A` / `--all`
+/ `.` and passes everything else through, so staging stays explicit. You never call it directly.

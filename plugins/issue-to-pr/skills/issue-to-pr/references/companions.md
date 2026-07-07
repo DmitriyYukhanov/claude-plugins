@@ -11,8 +11,8 @@ companion silently degrade quality without saying so.
 | Test-first discipline (Step 5–6) | `superpowers:test-driven-development` | Write the failing test, watch it fail, implement, watch it pass. |
 | Debugging red tests (Step 6) | `superpowers:systematic-debugging` | Reproduce, isolate, hypothesize, fix one cause at a time; re-run. |
 | Done-claims (throughout) | `superpowers:verification-before-completion` | Never claim green without pasting the command output. |
-| Context gathering (Step 2, very complex) | `/deep-research` | A focused web-search + source-read pass. |
-| Design gate critique (Step 4) | `/cross-review` (from `codex-collaboration`) | A multi-agent `Workflow`: several independent reviewers with distinct lenses → adversarial synthesis. |
+| Codebase research (Step 3, complex+) | forked `research` sub-skill (isolated subagent → ≤150-line cited summary); `/deep-research` for external topics | A focused inline exploration distilled to a short summary. |
+| Design generation (Step 4, complex+) | `workflows/design-panel.js` (3 proposers → 2 adversarial critics → opus judge), with `/cross-review` critiquing the produced `design_md` | Inline self-review chain: draft, adversarially self-critique against the code, revise. |
 | Humanizing human-facing text (Step 9–10) | `humanizer` | Self-edit the PR body / report to drop AI-tell phrasing; flag that a humanizer pass would help. |
 | Diff review loop (Step 7) | `/code-review` | A manual diff read for correctness, reuse, and regressions; iterate. |
 

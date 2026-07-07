@@ -5,6 +5,19 @@ All notable changes to the **issue-to-pr** plugin will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.3.0] - 2026-07-06
+
+### Added
+- Tier scaling — the pipeline sizes research, design, review depth, and the report to the task's tier (trivial through epic), chosen deterministically from the issue's signals
+- Ask contract — at most one batched question per run; every other decision is made autonomously and surfaced in the report and the PR body
+- Autonomous design panel (three proposers, two adversarial critics, a judge) replaces the one-question-at-a-time brainstorming interview for complex work
+- Forked research that keeps raw exploration out of context, plus a security-review overlay that triggers on sensitive paths
+- Self-writing config that pins verified gate commands, and a `/issue-to-pr:tune` skill that turns a friction log into batched improvements
+- A hook that denies `git add -A` / `.`, keeping staging explicit
+
+### Changed
+- SKILL trimmed to a lean ~140-line spine now that tested scripts own the mechanics; per-task state enables deterministic resume after a context compaction
+
 ## [1.2.1] - 2026-07-04
 
 ### Fixed
