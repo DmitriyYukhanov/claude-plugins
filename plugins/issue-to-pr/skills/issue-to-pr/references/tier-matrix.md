@@ -12,7 +12,7 @@ SKILL reads `TIER` and routes each step accordingly.
 | Examples | typo, copy change, config value | bugfix, small feature in known code | new behavior / multi-file / design choices | new service or product, "from scratch" |
 | Session effort | suggest `low` | default | `high` | `high` |
 | Research (`skills/research`) | - | - | if unknowns | per child |
-| Design | - | mini-design in the PR body | **design-panel** or `/cross-review` | decompose first (v2.0) |
+| Design | - | mini-design in the PR body | **design-panel** or `/cross-review` | **decompose** into children (`epic.md`) |
 | Plan | - | inline checklist | writing-plans | per child |
 | Tests / gates | always | always | always | per child |
 | `/code-review` | `low --fix`, 1 pass | `medium --fix`, <=2 passes | `high --fix`, <=3 passes (may raise to `max` on escalation) | per child + `ultra` on integrator PRs |
@@ -25,8 +25,9 @@ Fed `triage-evidence.sh` output on stdin; `--tier <t>` always overrides; borderl
 picks the **higher** tier. Checked strongest-first:
 
 - **epic:** `NEW_THING_HITS >= 3` AND `REF_PATHS_EXIST = 0` (a new system referencing
-  no existing code). Epic *mode* (decompose into child issues) lands in v2.0; until
-  then the SKILL treats epic as complex and notes that decomposition is deferred.
+  no existing code). Epic *mode* is active (v2.0): the SKILL runs `epic-decompose.js`,
+  gets one approval on the child breakdown, then drives the children sequentially
+  in dependency order (full lifecycle in `epic.md`).
 - **complex:** `NEW_THING_HITS >= 1` OR `CHECKLIST_ITEMS >= 3` OR `REF_PATHS_EXIST >= 3`
   OR a `design` / `ux` / `breaking` label.
 - **trivial:** `NEW_THING_HITS = 0` AND `REF_PATHS_EXIST <= 1` AND `CHECKLIST_ITEMS <= 1`

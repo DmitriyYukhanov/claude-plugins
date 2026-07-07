@@ -5,13 +5,15 @@
 # human-judgment stop is an exit code (2), not a silent decision.
 #
 #   worktree.sh ensure   <N> --branch <b> --start-point <ref>
-#   worktree.sh merge    <N> --branch <b>
+#   worktree.sh merge    <N> --branch <b> [--ladder-attempt <n>]
 #   worktree.sh cleanup  <N> --branch <b> [--salvage-to <dir>]
 #   worktree.sh teardown <N>              [--salvage-to <dir>]
+#   worktree.sh revert   <N> --branch <b>            # draft revert PR (sec 6.5)
 #
 # Exit: 0 proceed | 2 stop-and-ask (STOP_REASON=) | 3 permission fallback
 # (cut/keep the branch in place) | 4 degraded. `merge` is the ONLY path that
-# runs `gh pr merge`; the model must never call it directly.
+# runs `gh pr merge`; the model must never call it directly. `revert` NEVER
+# merges - it only opens a draft PR for the human to decide on.
 set -uo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -25,11 +27,14 @@ issue=""
 branch=""
 start_point=""
 salvage_to=""
+ladder_attempt=1
+LADDER_CAP=3
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --branch) branch=${2:-}; shift 2 2>/dev/null || shift "$#" ;;
     --start-point) start_point=${2:-}; shift 2 2>/dev/null || shift "$#" ;;
     --salvage-to) salvage_to=${2:-}; shift 2 2>/dev/null || shift "$#" ;;
+    --ladder-attempt) ladder_attempt=${2:-1}; shift 2 2>/dev/null || shift "$#" ;;
     --json) enable_json; shift ;;
     -*) warn "worktree: ignoring unknown flag: $1"; shift ;;
     *) [ -z "$issue" ] && issue=$1; shift ;;
@@ -57,6 +62,32 @@ branch_exists() { git show-ref --verify --quiet "refs/heads/$1"; }
 
 is_base_branch() { # name -> true if it looks like an integration base
   case "$1" in main | master | dev | develop) return 0 ;; *) return 1 ;; esac
+}
+
+# pr_mergeability BRANCH -> one TSV line "<mergeable>\t<mergeStateStatus>\t<failing-csv>"
+# read structurally through gh's own --jq (no system jq). Empty output means the
+# structured read was unavailable (old gh / rate limit) and the caller must fall
+# back to the free-text merge classifier. `failing-csv` lists checks whose
+# conclusion/state already failed (a doomed PR must never be waited on or merged).
+pr_mergeability() {
+  # shellcheck disable=SC2016  # $c is a jq variable, not a shell expansion
+  gh pr view "$1" --json mergeable,mergeStateStatus,statusCheckRollup --jq \
+    '[ (.mergeable // ""), (.mergeStateStatus // ""), ([ .statusCheckRollup[]? | select( ((.conclusion // .state // "") | ascii_upcase) as $c | ($c=="FAILURE" or $c=="ERROR" or $c=="CANCELLED" or $c=="TIMED_OUT") ) | (.name // .context // "check") ] | join(",")) ] | @tsv' \
+    2>/dev/null
+}
+
+# is_pure_base_merge BASE OLD_HEAD NEW_HEAD -> 0 if merging the base into the branch
+# added no PR content of its own. Compares the PR's OWN proposed change before vs
+# after via merge-base three-dot diffs (git diff BASE...HEAD is "what the branch
+# adds since it forked"). Byte-identical => the base merge only pulled in the base,
+# so the existing approval still covers the diff. NOTE: the spec's literal two-dot
+# `git diff OLD NEW` is unsound - it includes every unrelated file the base carried
+# forward, so it rejects the safe common case; do not "simplify" back to it.
+is_pure_base_merge() {
+  local base=$1 old=$2 new=$3 d_old d_new
+  d_old=$(git diff "$base...$old" 2>/dev/null) || return 1
+  d_new=$(git diff "$base...$new" 2>/dev/null) || return 1
+  [ "$d_old" = "$d_new" ]
 }
 
 detect_deps() { # dir -> sets DEPS_MANIFEST, INSTALL_HINT
@@ -250,6 +281,7 @@ handle_add_error() {
 
 cmd_merge() {
   [ -n "$branch" ] || degrade missing-branch "worktree merge: --branch required"
+  [ "$ladder_attempt" -le "$LADDER_CAP" ] || stop merge-ladder-exhausted "the merge ladder retried $LADDER_CAP times without landing $branch. Resolve the PR state on GitHub by hand, then re-approve."
   local root marker used created created_epoch age marker_sha cur_sha
   root=$(main_worktree)
   [ -n "$root" ] || degrade not-a-git-repo "worktree merge: not inside a git repository"
@@ -276,7 +308,51 @@ cmd_merge() {
     stop push-rejected "git push was rejected - resolve remotely, then re-approve"
   fi
 
-  # -- 3. squash-merge, with fallbacks ------------------------------------------
+  # -- 3. merge-failure ladder pre-check (sec 6.3) ------------------------------
+  # A structured read classifies the PR BEFORE any gh pr merge, so a doomed or
+  # behind PR never blind-merges. Empty read (old gh / rate limit) falls through
+  # to the free-text classifier in step 4.
+  local mstat mergeable_v state_v failing_v
+  mstat=$(pr_mergeability "$branch")
+  if [ -n "$mstat" ]; then
+    mergeable_v=$(printf '%s' "$mstat" | cut -f1)
+    state_v=$(printf '%s' "$mstat" | cut -f2)
+    failing_v=$(printf '%s' "$mstat" | cut -f3)
+    if [ -n "$failing_v" ]; then
+      emit FAILING_CHECKS "$failing_v"
+      stop checks-failed "required checks failed on $branch ($failing_v). Fix them, push, re-run the gates, and re-approve; do not wait on a check that already failed."
+    fi
+    if [ "$mergeable_v" = CONFLICTING ]; then
+      stop merge-conflict "$branch conflicts with its base. Resolve the conflict locally, push, re-run the gates, and re-approve."
+    fi
+    if [ "$state_v" = BEHIND ]; then
+      local base_ref old_head new_head
+      base_ref=$(gh pr view "$branch" --json baseRefName --jq .baseRefName 2>/dev/null || printf '')
+      old_head=$(git rev-parse HEAD 2>/dev/null || printf '')
+      if ! gh pr update-branch "$branch" >/dev/null 2>&1; then
+        stop update-branch-failed "the base could not be merged into $branch automatically. Update the branch by hand, re-run the gates, and re-approve."
+      fi
+      git fetch --quiet origin "$branch" "$base_ref" 2>/dev/null || true
+      new_head=$(git rev-parse "origin/$branch" 2>/dev/null || printf '')
+      # A real update-branch ALWAYS advances the head. If we cannot OBSERVE an
+      # advanced head (fetch failed / stale tracking ref), we cannot prove the
+      # base merge is pure - so never assume it. Comparing old..old would read
+      # trivially "pure" and merge an unreviewed change; stop instead.
+      if [ -z "$new_head" ] || [ "$new_head" = "$old_head" ]; then
+        stop base-update-unverified "updated $branch to its base but could not confirm the new head (the fetch may have failed). Re-run merge once the branch is fetched, or re-approve."
+      fi
+      if is_pure_base_merge "origin/$base_ref" "$old_head" "$new_head"; then
+        if ! bash "$SCRIPT_DIR/approve.sh" --refresh "$branch" >/dev/null 2>&1; then
+          stop marker-refresh-failed "could not refresh the approval marker after updating $branch to its base. Re-approve."
+        fi
+        emit LADDER_STEP base-merged-refreshed
+      else
+        stop content-changed-needs-reapproval "merging the base into $branch changed the PR's own diff. Re-review the updated PR and re-approve - the earlier approval no longer covers it."
+      fi
+    fi
+  fi
+
+  # -- 4. squash-merge, with fallbacks ------------------------------------------
   local merge_method=squash merge_out
   if merge_out=$(gh pr merge "$branch" --squash 2>&1); then
     :
@@ -291,16 +367,18 @@ cmd_merge() {
       stop merge-failed "gh pr merge failed after --merge and --rebase fallbacks"
     fi
   elif printf '%s' "$merge_out" | grep -qiE 'pending|not mergeable.*check|checks are still'; then
-    # v1.2.0: one immediate retry, then hand back. The auto-watch ladder is v2.0 (sec 6.3).
+    # One immediate retry; if still pending, hand back. The bounded watch loop is
+    # session-owned (references/merge-ladder.md): the model waits with gh pr checks
+    # --watch up to CHECKS_TIMEOUT, then re-runs merge - the approval stays valid.
     if ! merge_out=$(gh pr merge "$branch" --squash 2>&1); then
-      stop checks-pending "required checks are still pending - wait for green, then re-run merge"
+      stop checks-pending "required checks are still pending on $branch. Watch them to green (references/merge-ladder.md), then re-run merge - the approval stays valid."
     fi
   else
     emit MERGE_ERROR "$(printf '%s' "$merge_out" | tr '\n' ' ')"
     stop merge-failed "gh pr merge failed - see MERGE_ERROR"
   fi
 
-  # -- 4. consume the marker + honest outcome check -----------------------------
+  # -- 5. consume the marker + honest outcome check -----------------------------
   marker_set_used "$marker"
   local issue_state pr_url
   issue_state=$(gh issue view "$issue" --json state --jq .state 2>/dev/null || printf '')
@@ -402,10 +480,54 @@ cmd_teardown() {
   done_ok
 }
 
+# cmd_revert - post-merge safety net (sec 6.5). When the smoke gate fails on the
+# updated base, prepare a DRAFT revert PR of the squash commit and hand back. NEVER
+# merges anything - the draft is the human's prepared undo, they still decide.
+cmd_revert() {
+  [ -n "$branch" ] || degrade missing-branch "worktree revert: --branch required"
+  local root base_ref title slug squash_sha rev_branch rev_wt rev_url
+  root=$(main_worktree)
+  [ -n "$root" ] || degrade not-a-git-repo "worktree revert: not inside a git repository"
+  squash_sha=$(gh pr view "$branch" --json mergeCommit --jq '.mergeCommit.oid' 2>/dev/null || printf '')
+  [ -n "$squash_sha" ] || degrade no-merge-commit "worktree revert: could not resolve the merge commit for $branch (is the PR merged?)"
+  base_ref=$(gh pr view "$branch" --json baseRefName --jq .baseRefName 2>/dev/null || printf 'main')
+  title=$(gh pr view "$branch" --json title --jq .title 2>/dev/null || printf 'issue %s' "$issue")
+  slug=$(slugify "$title")
+  rev_branch="revert/issue-$issue-$slug"
+
+  git -C "$root" fetch --quiet origin "$base_ref" 2>/dev/null || true
+  rev_wt=$(compute_wt_path "$root" "revert-$issue")
+  if ! git -C "$root" worktree add -b "$rev_branch" "$rev_wt" "origin/$base_ref" >/dev/null 2>&1; then
+    stop revert-branch-failed "could not create the revert branch $rev_branch off origin/$base_ref. Revert $squash_sha by hand."
+  fi
+  if ! git -C "$rev_wt" revert --no-edit "$squash_sha" >/dev/null 2>&1; then
+    git -C "$rev_wt" revert --abort >/dev/null 2>&1 || true
+    git -C "$root" worktree remove --force "$rev_wt" >/dev/null 2>&1 || true
+    git -C "$root" branch -D "$rev_branch" >/dev/null 2>&1 || true
+    stop revert-conflict "the automatic revert of $squash_sha did not apply cleanly. Revert it by hand."
+  fi
+  if ! git -C "$rev_wt" push -u origin "$rev_branch" >/dev/null 2>&1; then
+    git -C "$root" worktree remove --force "$rev_wt" >/dev/null 2>&1 || true
+    git -C "$root" branch -D "$rev_branch" >/dev/null 2>&1 || true
+    stop revert-push-failed "could not push $rev_branch. Push it and open the revert PR by hand."
+  fi
+  rev_url=$(gh pr create --draft --head "$rev_branch" --base "$base_ref" \
+    --title "Revert \"$title\"" \
+    --body "Draft revert of #$issue (merge commit $squash_sha) - post-merge smoke failed on $base_ref. Review, then merge to roll back or close to keep the change." \
+    2>/dev/null || printf '')
+  git -C "$root" worktree remove --force "$rev_wt" >/dev/null 2>&1 || true
+  [ -n "$rev_url" ] || stop revert-pr-failed "the revert branch $rev_branch is pushed but the draft PR could not be opened. Open it by hand."
+  emit REVERT_BRANCH "$rev_branch"
+  emit REVERT_PR_URL "$rev_url"
+  emit REVERT_COMMIT "$squash_sha"
+  done_ok
+}
+
 case "$subcmd" in
   ensure) cmd_ensure ;;
   merge) cmd_merge ;;
   cleanup) cmd_cleanup ;;
   teardown) cmd_teardown ;;
+  revert) cmd_revert ;;
   *) degrade unknown-subcommand "worktree: unknown subcommand '$subcmd'" ;;
 esac
