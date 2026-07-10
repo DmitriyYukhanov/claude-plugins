@@ -37,13 +37,17 @@ Informational, not blocking:
 
 ```toml
 # ~/.codex/config.toml
-model = "gpt-5.5"
+model = "gpt-5.6-sol"
 model_reasoning_effort = "xhigh"
 [features]
 multi_agent = true
 ```
 
-`gpt-5.5` is OpenAI's recommended Codex model (released 2026-04-23). It is available via ChatGPT sign-in; during the rollout it is **not yet available with API-key authentication**. If `codex exec -m gpt-5.5` errors with an unknown/unavailable model, fall back to `model = "gpt-5.4"` — per OpenAI's own guidance.
+`gpt-5.6-sol` is OpenAI's current flagship Codex model — the top-priority tier of the GPT-5.6 family (Sol/Terra/Luna), shipped in Codex CLI 0.143.0 (released 2026-07-08) and documented as the strongest model for complex agentic coding. It requires **Codex CLI ≥ 0.143.0** — if `codex exec -m gpt-5.6-sol` errors with an unknown/unavailable model, run `npm install -g @openai/codex@latest` first, then retry.
+
+Two things OpenAI's docs do not yet settle, so treat them as open rather than assumed:
+- **Auth availability** — unlike `gpt-5.5`'s documented ChatGPT-only rollout window, it is not confirmed whether `gpt-5.6-sol` requires ChatGPT sign-in or also works with API-key auth. If `-m gpt-5.6-sol` errors as unavailable for any reason, fall back to `model = "gpt-5.5"`; if that also fails under API-key auth, fall back further to `model = "gpt-5.4"`.
+- **Reasoning effort** — the model catalog's own default for `gpt-5.6-sol` is `low` (it's tuned to score higher on fewer tokens than gpt-5.5), while this config deliberately overrides to `xhigh` for review depth. `xhigh` is model-dependent per Codex docs — if the CLI rejects it for `gpt-5.6-sol`, drop to `high`.
 
 ## Runtime Failure Policy
 
@@ -191,7 +195,7 @@ PROMPT_EOF
 
 # Capture stdout AND stderr — stderr carries sandbox errors Monitor needs to see.
 # Append the exit code to the SAME log file Monitor tails, so the completion marker is observable.
-codex exec --model gpt-5.5 --full-auto < "$TMP/codex-prompt.txt" > "$TMP/codex-output.txt" 2>&1
+codex exec --model gpt-5.6-sol --full-auto < "$TMP/codex-prompt.txt" > "$TMP/codex-output.txt" 2>&1
 echo "EXIT_CODE=$?" >> "$TMP/codex-output.txt"
 ```
 
@@ -226,11 +230,11 @@ Get-Content "$env:TEMP\codex-output.txt" -Wait | Select-String -Pattern '## Stat
 
 ```bash
 # Bash / Git Bash / WSL with GNU coreutils
-timeout 600 codex exec --model gpt-5.5 --full-auto < "$TMP/codex-prompt.txt" > "$TMP/codex-output.txt" 2>&1
+timeout 600 codex exec --model gpt-5.6-sol --full-auto < "$TMP/codex-prompt.txt" > "$TMP/codex-output.txt" 2>&1
 echo "EXIT_CODE=$?" >> "$TMP/codex-output.txt"
 
 # Bash / Git Bash / WSL without timeout — rely on Monitor
-codex exec --model gpt-5.5 --full-auto < "$TMP/codex-prompt.txt" > "$TMP/codex-output.txt" 2>&1
+codex exec --model gpt-5.6-sol --full-auto < "$TMP/codex-prompt.txt" > "$TMP/codex-output.txt" 2>&1
 echo "EXIT_CODE=$?" >> "$TMP/codex-output.txt"
 ```
 
@@ -238,7 +242,7 @@ echo "EXIT_CODE=$?" >> "$TMP/codex-output.txt"
 # Native Windows PowerShell — no timeout, rely on Monitor
 $prompt = Join-Path $env:TEMP 'codex-prompt.txt'
 $log    = Join-Path $env:TEMP 'codex-output.txt'
-Get-Content $prompt | codex exec --model gpt-5.5 --full-auto *> $log
+Get-Content $prompt | codex exec --model gpt-5.6-sol --full-auto *> $log
 "EXIT_CODE=$LASTEXITCODE" | Add-Content $log
 ```
 

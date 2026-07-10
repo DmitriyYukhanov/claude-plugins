@@ -5,6 +5,13 @@ All notable changes to the **codex-collaboration** plugin will be documented in 
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.10.0] - 2026-07-10
+
+### Changed
+- Default Codex model updated from `gpt-5.5` to `gpt-5.6-sol` (OpenAI's new flagship, shipped in Codex CLI 0.143.0 on 2026-07-08) in the config example and all Direct CLI Fallback commands; fallback chain extended to `gpt-5.5` → `gpt-5.4`
+- Documented that `gpt-5.6-sol`'s auth requirement (ChatGPT sign-in vs. API-key) is not yet confirmed by OpenAI, unlike `gpt-5.5`'s known ChatGPT-only rollout — treat as open and rely on the fallback chain if the model errors as unavailable
+- Noted that Codex CLI ≥ 0.143.0 is required for `gpt-5.6-sol`, and that the model's own reasoning-effort default (`low`) differs from this config's deliberate `xhigh` override
+
 ## [1.9.0] - 2026-05-08
 
 ### Changed
