@@ -54,6 +54,27 @@ test_approve_no_pr_head_degrades() {
   assert_key "$OUT" DEGRADED_REASON no-pr-head
 }
 
+test_approve_resolves_pr_number_to_branch() {
+  local repo; repo=$(init_repo); cd "$repo"
+  use_fake_gh happy
+  run_script approve.sh 13 --quote "lgtm, ship it"
+  assert_rc 0
+  assert_key "$OUT" APPROVED true
+  local m="$repo/.claude/issue-to-pr/approval-feat-issue-6-x.json"
+  if [ ! -f "$m" ]; then fail "marker not written under the resolved branch name"; fi
+  if [ -f "$repo/.claude/issue-to-pr/approval-13.json" ]; then fail "marker wrongly keyed by the raw PR number"; fi
+}
+
+test_approve_unresolvable_ref_falls_back_to_raw() {
+  local repo; repo=$(init_repo); cd "$repo"
+  use_fake_gh head-name-missing
+  run_script approve.sh feat/issue-6-x --quote "ship it"
+  assert_rc 0
+  assert_key "$OUT" APPROVED true
+  local m="$repo/.claude/issue-to-pr/approval-feat-issue-6-x.json"
+  if [ ! -f "$m" ]; then fail "marker not written when branch resolution is unavailable"; fi
+}
+
 test_approve_refresh_updates_sha() {
   local repo; repo=$(init_repo); cd "$repo"
   use_fake_gh happy
@@ -179,6 +200,17 @@ test_guard_flag_first_branch_is_parsed() {
   # Correctly parsed branch -> deny names it (not "--squash").
   assert_contains "$OUT" 'feat/issue-6-x'
   assert_not_contains "$OUT" 'no approval marker for --squash'
+}
+
+test_guard_resolves_pr_number_to_marker() {
+  local repo; repo=$(init_repo); cd "$repo"
+  write_marker "$repo" feat/issue-6-x "$SHA_OK" false "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  use_fake_gh happy
+  # No marker filed under "13" -- the guard must resolve it to feat/issue-6-x and find
+  # the one approve.sh actually wrote, exactly the mismatch a real `gh pr merge <N>`
+  # produced before this fix.
+  run_guard "$(hook_json 'gh pr merge 13 --merge --delete-branch=false')"
+  assert_contains "$OUT" '"permissionDecision":"allow"'
 }
 
 test_guard_direct_gh_merge_consumes_marker() {

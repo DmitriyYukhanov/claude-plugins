@@ -5,6 +5,12 @@ All notable changes to the **issue-to-pr** plugin will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.0.1] - 2026-07-11
+
+### Fixed
+- The merge-approval marker now resolves a PR number to its branch name, so `gh pr merge <PR#>` and `approve.sh <PR#>` key the same approval as their branch-name equivalents instead of silently missing each other
+- Merge-gate denial messages now name the plugin and give the exact `approve.sh` command to run, so the model can't mistake the gate for a GitHub restriction or lose time hunting for the script
+
 ## [2.0.0] - 2026-07-07
 
 ### Added

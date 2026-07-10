@@ -7,6 +7,10 @@
 #   approve.sh <branch> --quote "<verbatim user reply>"
 #   approve.sh --refresh <branch>     # refresh head-SHA after a pure base merge
 #
+# <branch> also accepts a PR number (`approve.sh 13 --quote ...`) -- it is resolved to
+# the PR's actual branch before the marker is keyed, so a number and its branch name
+# always write the same marker file (merge-guard.sh does the matching resolution).
+#
 # The marker lives at <repo-root>/.claude/issue-to-pr/approval-<branch-slug>.json
 # (repo-level, so it also works in the in-place fallback). Exit 0 on success;
 # 4 (degraded) on a usage/environment problem.
@@ -34,6 +38,12 @@ done
 
 root=$(repo_root)
 [ -n "$root" ] || degrade not-a-git-repo "approve: not inside a git repository"
+
+# Canonicalize to the PR's branch name so a PR-number ref and its branch name key the
+# same marker that merge-guard.sh checks. Best-effort: if this fails, fall through with
+# the raw ref -- the sha read right below still degrades cleanly on a bad ref.
+resolved=$(gh pr view "$branch" --json headRefName --jq .headRefName 2>/dev/null || printf '')
+[ -n "$resolved" ] && branch=$resolved
 marker=$(marker_path "$root" "$branch")
 
 sha=$(gh pr view "$branch" --json headRefOid --jq .headRefOid 2>/dev/null || printf '')

@@ -252,6 +252,15 @@ EOF
               *) printf '%s\n' "$HEAD_SHA_CURRENT" ;;
             esac
             ;;
+          .headRefName)
+            # Every fixture's PR lives on this branch, regardless of whether it was
+            # looked up by branch name or by PR number -- that's the resolution the
+            # production scripts rely on to key one marker for either ref form.
+            case "$scenario" in
+              head-name-missing) printf '' ;;
+              *) printf 'feat/issue-6-x\n' ;;
+            esac
+            ;;
           .url) printf 'https://github.com/octo-owner/demo-repo/pull/123\n' ;;
           .baseRefName) printf 'main\n' ;;
           .title) printf 'Demo PR title\n' ;;

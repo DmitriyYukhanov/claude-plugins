@@ -288,18 +288,18 @@ cmd_merge() {
 
   # -- 1. approval marker: exists  and  unused  and  fresh (<30m)  and  head-SHA match ------
   marker=$(marker_path "$root" "$branch")
-  [ -f "$marker" ] || stop no-valid-approval "no approval marker for $branch - the model must run approve.sh after judging the reply a go-ahead"
+  [ -f "$marker" ] || stop no-valid-approval "issue-to-pr: no approval marker for $branch. Run: bash \"$SCRIPT_DIR/approve.sh\" \"$branch\" --quote \"<verbatim reply>\" after judging the reply a go-ahead, then re-run merge."
   used=$(marker_used "$marker")
-  [ "$used" = false ] || stop no-valid-approval "approval marker already used (single-use) - re-approve to merge again"
+  [ "$used" = false ] || stop no-valid-approval "issue-to-pr: approval marker already used (single-use) - re-approve to merge again"
   created=$(marker_str_field "$marker" created_at)
   created_epoch=$(epoch_of "$created")
-  [ -n "$created_epoch" ] || stop no-valid-approval "approval marker timestamp is unparseable - re-approve"
+  [ -n "$created_epoch" ] || stop no-valid-approval "issue-to-pr: approval marker timestamp is unparseable - re-approve"
   age=$(( $(now_epoch) - created_epoch ))
-  [ "$age" -le 1800 ] || stop no-valid-approval "approval marker is stale (>30 min) - re-approve"
+  [ "$age" -le 1800 ] || stop no-valid-approval "issue-to-pr: approval marker is stale (>30 min) - re-approve"
   marker_sha=$(marker_str_field "$marker" pr_head_sha)
   cur_sha=$(gh pr view "$branch" --json headRefOid --jq .headRefOid 2>/dev/null || printf '')
   if [ -z "$cur_sha" ] || [ "$marker_sha" != "$cur_sha" ]; then
-    stop no-valid-approval "PR head moved since approval (approved $marker_sha, now ${cur_sha:-unknown}); re-approve"
+    stop no-valid-approval "issue-to-pr: PR head moved since approval (approved $marker_sha, now ${cur_sha:-unknown}); re-approve"
   fi
 
   # -- 2. push the branch (must already track upstream from Step 9) -------------
