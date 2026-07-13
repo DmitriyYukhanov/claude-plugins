@@ -9,7 +9,7 @@
     {
       "name": "unity-dev",
       "description": "Unity C# development workflow with architecture design, coding guidelines, testing patterns, and specialized review agents",
-      "version": "1.7.2",
+      "version": "1.7.3",
       "author": {
         "name": "Dmitry Yuhanov"
       },
@@ -20,7 +20,7 @@
     {
       "name": "python-dev",
       "description": "Python development workflow with architecture design, coding guidelines, testing patterns, and specialized review agents",
-      "version": "1.2.1",
+      "version": "1.2.2",
       "author": {
         "name": "Dmitry Yuhanov"
       },
@@ -31,7 +31,7 @@
     {
       "name": "typescript-dev",
       "description": "TypeScript development workflow with architecture design, coding guidelines, testing patterns, and specialized review agents",
-      "version": "1.2.1",
+      "version": "1.2.2",
       "author": {
         "name": "Dmitry Yuhanov"
       },
@@ -42,7 +42,7 @@
     {
       "name": "agent-teams",
       "description": "Set up and orchestrate Claude Code agent teams - multiple instances working together with shared tasks, messaging, and coordination",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "author": {
         "name": "Dmitry Yuhanov"
       },
@@ -53,7 +53,7 @@
     {
       "name": "codex-collaboration",
       "description": "Cross-model collaboration between Claude and Codex — sequential drive/validate/act loops and parallel dual review with triage",
-      "version": "1.10.0",
+      "version": "1.10.1",
       "author": {
         "name": "Dmitry Yuhanov"
       },
@@ -64,7 +64,7 @@
     {
       "name": "implementation-prd",
       "description": "Implementation-ready spec bundle authoring for apps, services, platforms, and complex features",
-      "version": "1.1.1",
+      "version": "1.1.2",
       "author": {
         "name": "Dmitry Yuhanov"
       },
@@ -75,7 +75,7 @@
     {
       "name": "learning-guide",
       "description": "Generate a self-contained, offline-first, interactive HTML learning guide for any artifact — codebase, planning session, refactor plan, or generic input — via an analyze → render flow with a JSON tour-spec contract",
-      "version": "1.1.0",
+      "version": "1.1.1",
       "author": {
         "name": "Dmitry Yuhanov"
       },
@@ -86,7 +86,7 @@
     {
       "name": "lsp-setup",
       "description": "Set up LSP (Language Server Protocol) for Claude Code projects with auto-detection, plugin installation, and validation",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "author": {
         "name": "Dmitry Yuhanov"
       },
@@ -97,7 +97,7 @@
     {
       "name": "tg-alerts",
       "description": "Add Telegram error/alert notifications to any project — guides through bot setup, chat ID discovery, and framework integration with deduplication and graceful failure",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "author": {
         "name": "Dmitry Yuhanov"
       },
@@ -108,7 +108,7 @@
     {
       "name": "tg-voice",
       "description": "Transcribe Telegram voice messages using local Whisper (faster-whisper) — automatic PostToolUse hook with setup skill for installation and model download",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "author": {
         "name": "Dmitry Yuhanov"
       },
@@ -130,7 +130,7 @@
     {
       "name": "issue-to-pr",
       "description": "Take a GitHub issue (bare, or tracked on a Project board) from triage to a merge-ready PR through a gated, worktree-isolated pipeline that scales its depth to the task and asks at most one batched question. The gates hold every run: design hardening, tests green, code review clean. Once you approve the PR in-session it squash-merges, then deletes the branch, tears down the worktree, and clears the run's temp files; the issue auto-closes on merge and the board card advances as work moves.",
-      "version": "2.0.1",
+      "version": "2.0.2",
       "author": {
         "name": "Dmitry Yuhanov"
       },

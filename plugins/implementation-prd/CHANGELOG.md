@@ -5,6 +5,11 @@ All notable changes to the **implementation-prd** plugin will be documented in t
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.1.2] - 2026-07-13
+
+### Fixed
+- Correct install command to use the marketplace name (`@dmitriy-claude-plugins`) instead of the repo path
+
 ## [1.1.1] - 2026-04-03
 
 ### Added

@@ -5,7 +5,7 @@ A Claude Code plugin for writing implementation-ready spec bundles that another 
 ## Installation
 
 ```bash
-/plugin install implementation-prd@DmitriyYukhanov/claude-plugins
+/plugin install implementation-prd@dmitriy-claude-plugins
 ```
 
 ## Features

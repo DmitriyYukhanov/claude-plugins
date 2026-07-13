@@ -1,5 +1,10 @@
 # Custom Claude Code plugins and skills
 
+[![Last release](https://img.shields.io/github/release-date/DmitriyYukhanov/claude-plugins?label=last%20release)](https://github.com/DmitriyYukhanov/claude-plugins/releases)
+[![Last commit](https://img.shields.io/github/last-commit/DmitriyYukhanov/claude-plugins)](https://github.com/DmitriyYukhanov/claude-plugins/commits/main)
+[![License: MIT](https://img.shields.io/github/license/DmitriyYukhanov/claude-plugins)](./LICENSE)
+[![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin%20marketplace-d97757)](https://code.claude.com/docs/en/discover-plugins)
+
 Personal collection of Claude Code plugins and skills for structured, high-quality development workflows. Augments the official Claude plugins marketplace.
 
 ## Installation
@@ -10,42 +15,33 @@ Add this marketplace to Claude Code:
 /plugin marketplace add DmitriyYukhanov/claude-plugins
 ```
 
-Then install the plugins you want to use:
+Then install plugins by name. The `@` suffix is the marketplace name `dmitriy-claude-plugins` (from this repo's `marketplace.json`), not the GitHub path:
 
 ```bash
-/plugin install agent-teams
-/plugin install codex-collaboration
-/plugin install humanizer
-/plugin install implementation-prd
-/plugin install issue-to-pr
-/plugin install learning-guide
-/plugin install lsp-setup
-/plugin install python-dev
-/plugin install tg-alerts
-/plugin install tg-voice
-/plugin install typescript-dev
-/plugin install unity-dev
+/plugin install issue-to-pr@dmitriy-claude-plugins
+/plugin install codex-collaboration@dmitriy-claude-plugins
 ```
 
-You can also install individual plugins directly, for example:
+You can also run `/plugin` to browse and install interactively.
 
-```bash
-/plugin install python-dev@DmitriyYukhanov/claude-plugins
-/plugin install typescript-dev@DmitriyYukhanov/claude-plugins
-```
+## Plugins
 
-## Highlights
+| Plugin | Category | What it does |
+|--------|----------|--------------|
+| [agent-teams](#agent-teams) | productivity | Orchestrate multiple Claude Code instances working in parallel with shared tasks and messaging |
+| [codex-collaboration](#codex-collaboration) | workflow | Cross-model Claude + Codex collaboration: drive/validate loops and parallel dual review |
+| [humanizer](#humanizer) | writing | Remove AI-writing patterns from English and Russian text, with automatic language detection |
+| [implementation-prd](#implementation-prd) | productivity | Turn feature requests into build-ready spec bundles with PRDs, contracts, schemas, and test plans |
+| [issue-to-pr](#issue-to-pr) | workflow | Drive a GitHub issue or Project board card through a worktree-isolated, gated pipeline to an approved, merged PR |
+| [learning-guide](#learning-guide) | development | Generate self-contained, interactive HTML learning guides that work offline |
+| [lsp-setup](#lsp-setup) | development | Detect project languages and set up LSP servers and Claude Code LSP plugins |
+| [python-dev](#python-dev) | development | Python development workflow: architecture, coding guidelines, pytest patterns, and a review agent |
+| [tg-alerts](#tg-alerts) | operations | Add Telegram error and alert notifications to any project, with guided setup and reference implementations |
+| [tg-voice](#tg-voice) | operations | Transcribe Telegram voice messages automatically with local Whisper |
+| [typescript-dev](#typescript-dev) | development | TypeScript development workflow: architecture, coding guidelines, testing patterns, and a review agent |
+| [unity-dev](#unity-dev) | development | Unity C# workflow: architecture, coding guidelines, tests, CLI builds and runs, and review agents |
 
-| Plugin | What it does |
-|--------|-------------|
-| [codex-collaboration](#codex-collaboration) | Cross-model Claude + Codex collaboration — sequential drive/validate loops and parallel dual review |
-| [implementation-prd](#implementation-prd) | Turn feature requests into build-ready spec bundles with PRDs, contracts, schemas, and test plans |
-| [agent-teams](#agent-teams) | Orchestrate multiple Claude Code instances working in parallel with shared tasks and messaging |
-| [issue-to-pr](#issue-to-pr) | Drive a GitHub issue or Project board card through a worktree-isolated, gated pipeline to an approved, merged PR |
-| [tg-alerts](#tg-alerts) | Add Telegram error/alert notifications to any project — guided setup with reference implementations |
-| [tg-voice](#tg-voice) | Auto-transcribe Telegram voice messages using local Whisper via PostToolUse hook |
-
-## All Plugins
+## Plugin details
 
 ### agent-teams
 
@@ -65,12 +61,14 @@ Cross-model collaboration between Claude and Codex with two workflows:
 - **collaborative-loop** — Sequential drive/validate/act cycles. Claude analyzes, Codex validates each finding, both models must agree before any action is taken. Iterates until approved or max rounds.
 - **cross-review** — Parallel dual review. Both Claude and Codex review independently. Findings confirmed by reviewer agreement, cross-validation, or evidence research are auto-applied each round; only genuinely inconclusive disagreements surface for user decision.
 
+The default Codex model is `gpt-5.6-sol` (requires Codex CLI 0.143.0 or newer); if unavailable it falls back to `gpt-5.5`, then `gpt-5.4`.
+
 **Requires** the [Codex plugin for Claude Code](https://github.com/openai/codex-plugin-cc). Install it first:
 1. `/plugin marketplace add openai/codex-plugin-cc`
 2. `/plugin install codex@openai-codex`
 3. `/codex:setup` to verify
 
-[View skill documentation](./plugins/codex-collaboration/skills/collaborative-loop/SKILL.md)
+[View documentation](./plugins/codex-collaboration/README.md)
 
 ### humanizer
 
@@ -109,6 +107,7 @@ Drive a single GitHub issue from triage to a merge-ready pull request through a 
 - Opens the PR and stops; once you approve it in-session it squash-merges, then deletes the branch, tears down the worktree, and clears the run's temp artifacts (keeping anything important).
 - The PR auto-links the issue (`Closes #N`) to close on merge; board cards advance to *in-progress* at branch cut and *in-review* at PR open, with `Done` left to GitHub's merge-time automation.
 - Graceful by default — missing the `project` token scope degrades to link-only, and a failed status write never blocks the PR.
+- The `/issue-to-pr:tune` skill reads the friction log that runs leave behind and turns it into batched improvements to the pipeline.
 - Optional `.claude/issue-to-pr.local.md` for board URL, base branch, and test commands (auto-detected when unset); companion skills (`superpowers:*`, `/deep-research`, `/cross-review`, `humanizer`, `/code-review`) used if installed, with inline fallbacks otherwise.
 
 [View documentation](./plugins/issue-to-pr/README.md)
@@ -135,7 +134,7 @@ Set up LSP (Language Server Protocol) for Claude Code projects with:
 - Post-restart validation confirming LSP operations work per language
 - Supports all 12 official LSP plugins (C#, Python, TypeScript/JS, Go, Rust, Java, Kotlin, Lua, PHP, Ruby, Swift, C/C++)
 
-[View skill documentation](./plugins/lsp-setup/skills/lsp-setup/SKILL.md)
+[View documentation](./plugins/lsp-setup/README.md)
 
 ### python-dev
 
@@ -155,7 +154,7 @@ Add Telegram error/alert notifications to any project:
 - Reference implementations for Python async (FastAPI), Python sync (Django/Flask), and Node.js/TypeScript (Express/NestJS)
 - Built-in deduplication, HTML formatting, graceful failure handling, and fire-and-forget delivery
 
-[View skill documentation](./plugins/tg-alerts/skills/tg-alerts/SKILL.md)
+[View documentation](./plugins/tg-alerts/README.md)
 
 ### tg-voice
 
@@ -166,7 +165,7 @@ Transcribe Telegram voice messages using local Whisper:
 
 **Requires:** `faster-whisper` (`pip install faster-whisper`) and the [Telegram channel plugin](https://github.com/anthropics/claude-code).
 
-[View plugin](./plugins/tg-voice/)
+[View documentation](./plugins/tg-voice/README.md)
 
 ### typescript-dev
 
@@ -182,12 +181,11 @@ TypeScript development workflow with:
 ### unity-dev
 
 Unity C# development workflow with:
-- `/unity-dev` command for full workflow orchestration
-- Architecture design with Mermaid diagrams
-- C# coding guidelines following Microsoft conventions
-- EditMode/PlayMode testing patterns
-- Unity-specific code review agent
-- Code simplification agent
+- `/unity-dev` skill orchestrating the full workflow: discovery, architecture, implementation, review, testing
+- `unity-run` skill for CLI execution (builds, tests, method execution, asset imports) with Unity installation auto-detection and log monitoring
+- `/unity-tests-run` skill running Unity Test Framework tests via CLI batchmode
+- Architecture design with Mermaid diagrams, C# coding guidelines following Microsoft conventions, EditMode/PlayMode test patterns
+- Unity-specific review, simplification, and test-runner agents
 
 [View documentation](./plugins/unity-dev/README.md)
 

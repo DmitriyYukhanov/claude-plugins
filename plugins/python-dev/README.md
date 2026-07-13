@@ -5,7 +5,7 @@ A Claude Code plugin for Python development with architecture design, coding gui
 ## Installation
 
 ```bash
-/plugin install python-dev@DmitriyYukhanov/claude-plugins
+/plugin install python-dev@dmitriy-claude-plugins
 ```
 
 ## Dependencies

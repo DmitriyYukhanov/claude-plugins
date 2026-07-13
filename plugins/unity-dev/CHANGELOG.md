@@ -5,6 +5,12 @@ All notable changes to the **unity-dev** plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.7.3] - 2026-07-13
+
+### Fixed
+- Correct install command to use the marketplace name (`@dmitriy-claude-plugins`) instead of the repo path
+- Document `/unity-dev`, `/unity-tests-run`, and `unity-run` as skills in the README and add the missing `unity-run` entry
+
 ## [1.7.2] - 2026-04-03
 
 ### Added

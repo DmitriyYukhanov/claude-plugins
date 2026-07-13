@@ -5,6 +5,11 @@ All notable changes to the **codex-collaboration** plugin will be documented in 
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.10.1] - 2026-07-13
+
+### Added
+- Plugin README covering both workflows, invocation syntax, model defaults, and the no-degraded-mode policy
+
 ## [1.10.0] - 2026-07-10
 
 ### Changed

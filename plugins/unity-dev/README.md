@@ -5,7 +5,7 @@ A Claude Code plugin for Unity C# development with architecture design, coding g
 ## Installation
 
 ```bash
-/plugin install unity-dev@DmitriyYukhanov/claude-plugins
+/plugin install unity-dev@dmitriy-claude-plugins
 ```
 
 ## Dependencies
@@ -28,7 +28,7 @@ The Unity agents apply domain-specific patterns first, then delegate to general-
 
 ## Features
 
-### Command: `/unity-dev`
+### Skill: `/unity-dev`
 
 Orchestrates a complete Unity development workflow:
 
@@ -38,9 +38,13 @@ Orchestrates a complete Unity development workflow:
 4. **Review** - Unity-specific code review for performance, lifecycle, serialization issues
 5. **Testing** - EditMode and PlayMode test patterns
 
-### Command: `/unity-tests-run`
+### Skill: `/unity-tests-run`
 
 Runs Unity Test Framework tests via CLI batchmode with auto-detection of Unity installation. Supports platform, category, and filter arguments.
+
+### Skill: `unity-run`
+
+CLI execution layer used by the other skills: builds, tests, method execution, and asset imports, with Unity installation auto-detection, batchmode execution, and log monitoring.
 
 ### Skills (Reference Knowledge)
 

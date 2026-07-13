@@ -5,7 +5,7 @@ A Claude Code plugin for TypeScript development with architecture design, coding
 ## Installation
 
 ```bash
-/plugin install typescript-dev@DmitriyYukhanov/claude-plugins
+/plugin install typescript-dev@dmitriy-claude-plugins
 ```
 
 ## Dependencies

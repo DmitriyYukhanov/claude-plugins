@@ -5,7 +5,7 @@ Generate self-contained, offline-first, interactive HTML learning guides for any
 ## Installation
 
 ```bash
-/plugin install learning-guide@DmitriyYukhanov/claude-plugins
+/plugin install learning-guide@dmitriy-claude-plugins
 ```
 
 ## Quickstart

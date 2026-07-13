@@ -5,6 +5,14 @@ All notable changes to the **issue-to-pr** plugin will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.0.2] - 2026-07-13
+
+### Changed
+- Expand the plugin README to cover v2 behavior: tiers, autonomy contract, epic decomposition, the merge gate, post-merge smoke check with draft revert, and the `/issue-to-pr:tune` skill
+
+### Fixed
+- Correct install command to use the marketplace name (`@dmitriy-claude-plugins`) instead of the repo path
+
 ## [2.0.1] - 2026-07-11
 
 ### Fixed

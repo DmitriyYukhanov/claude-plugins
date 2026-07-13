@@ -5,7 +5,7 @@ A Claude Code plugin for setting up and orchestrating agent teams - multiple Cla
 ## Installation
 
 ```bash
-/plugin install agent-teams@DmitriyYukhanov/claude-plugins
+/plugin install agent-teams@dmitriy-claude-plugins
 ```
 
 ## Features
