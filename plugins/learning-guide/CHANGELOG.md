@@ -5,6 +5,11 @@ All notable changes to the **learning-guide** plugin will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.0.0] - 2026-07-14
+
+### Removed
+- Drop the generated `open.cmd` and `render.cmd` Windows launcher scripts, plus the `open_command` spec option — `index.html` is already double-clickable on its own, and `render.cmd` hardcoded the renderer's install path, so it silently broke the moment a rendered tour was moved to another machine or shared with a teammate.
+
 ## [1.1.1] - 2026-07-13
 
 ### Fixed

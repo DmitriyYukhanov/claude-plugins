@@ -5,7 +5,7 @@ description: Renders an existing tour-spec.json to a self-contained interactive 
 
 # Render — HTML Generation
 
-Take a `tour-spec.json` and produce a self-contained, offline-first `index.html` plus launcher scripts. This skill is deterministic; the heavy lifting is in `${CLAUDE_PLUGIN_ROOT}/scripts/render.cjs`.
+Take a `tour-spec.json` and produce a self-contained, offline-first `index.html`. This skill is deterministic; the heavy lifting is in `${CLAUDE_PLUGIN_ROOT}/scripts/render.cjs`.
 
 ## Trigger phrases
 
@@ -35,14 +35,11 @@ Take a `tour-spec.json` and produce a self-contained, offline-first `index.html`
 
 5. **Surface output.** On success, print the renderer's stdout summary verbatim. On non-zero exit, print stderr verbatim and offer the troubleshooting table from `references/renderer-cli.md`.
 
-6. **Confirm artifacts.** Verify `index.html`, `render.cmd`, `README.md` exist with non-zero size — and `open.cmd` too, unless `renderer.open_command` is `"none"`. If anything expected is missing, surface the discrepancy — do not retry blindly.
+6. **Confirm artifacts.** Verify `index.html` and `README.md` exist with non-zero size. If anything expected is missing, surface the discrepancy — do not retry blindly.
 
 ## Re-running from the shell
 
-After `render.cmd` is generated once, the user can re-render without involving Claude:
-
-- Windows: double-click `render.cmd`.
-- Any OS: `node "<plugin-root>/scripts/render.cjs" tour-spec.json`.
+The user can re-render without involving Claude by running `node "<plugin-root>/scripts/render.cjs" tour-spec.json`.
 
 ## When NOT to use this skill
 

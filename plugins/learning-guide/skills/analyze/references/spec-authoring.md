@@ -37,6 +37,5 @@ Each template must start with an allowed scheme (`http://`, `https://`, or `mail
 - `include_mermaid: null` — auto-detect from the rendered body HTML (default). Diagrams are scoped to `body_md`; a `mermaid` fence shown inside a code example is not treated as a diagram.
 - `include_progress_tracker: true` — sidebar progress block.
 - `include_pager: true` — Prev/Next buttons.
-- `open_command: "open.cmd"` or `"none"`.
 - `max_inline_payload_kb: <integer or null>` — soft warning when the inlined content (the vendored Mermaid bundle is excluded) exceeds this.
 - `template_compatibility_version: "1"` — required only when overriding `template.html`.

@@ -41,7 +41,7 @@ function verifyPlanningSession(tmp) {
   fs.mkdirSync(dir, { recursive: true });
   fs.copyFileSync(path.join(EXPECTED, 'planning-session.tour-spec.json'), path.join(dir, 'tour-spec.json'));
   run(path.join(dir, 'tour-spec.json'), dir);
-  assertFiles(dir, ['index.html', 'open.cmd', 'render.cmd', 'README.md']);
+  assertFiles(dir, ['index.html', 'README.md']);
   const html = fs.readFileSync(path.join(dir, 'index.html'), 'utf8');
   if (!html.includes('Demo Planning Session')) fail('title not in HTML');
   if (!html.includes('TICKET-101')) fail('external link token not rendered');
@@ -54,7 +54,7 @@ function verifyRefactorPlan(tmp) {
   fs.mkdirSync(dir, { recursive: true });
   fs.copyFileSync(path.join(EXPECTED, 'refactor-plan.tour-spec.json'), path.join(dir, 'tour-spec.json'));
   run(path.join(dir, 'tour-spec.json'), dir);
-  assertFiles(dir, ['index.html', 'open.cmd', 'render.cmd', 'README.md']);
+  assertFiles(dir, ['index.html', 'README.md']);
   const html = fs.readFileSync(path.join(dir, 'index.html'), 'utf8');
   if (!html.includes('class="callout warn"')) fail('callout not rendered');
   ok('refactor-plan: render + callout');
@@ -66,7 +66,7 @@ function verifyCodebase(tmp) {
   fs.copyFileSync(path.join(EXPECTED, 'codebase.tour-spec.json'), path.join(dir, 'tour-spec.json'));
   fs.copyFileSync(path.join(EXPECTED, 'codebase.tour-companion.md'), path.join(dir, 'tour-companion.md'));
   run(path.join(dir, 'tour-spec.json'), dir);
-  assertFiles(dir, ['index.html', 'open.cmd', 'render.cmd', 'README.md']);
+  assertFiles(dir, ['index.html', 'README.md']);
   const html = fs.readFileSync(path.join(dir, 'index.html'), 'utf8');
   if (!html.includes('script type="text/markdown" data-name="companion"')) fail('companion not embedded');
   // R1: every cross-ref anchor must resolve to a heading id the side panel emits.
@@ -111,19 +111,6 @@ function verifyXssAllowlist(tmp) {
   const r = cp.spawnSync('node', [RENDER, path.join(dir, 'tour-spec.json'), '--output-dir', dir], { encoding: 'utf8' });
   if (r.status === 0) fail('a javascript: external_links template should be rejected by the schema');
   ok('external-link scheme allowlist (R3): javascript: template rejected');
-}
-
-function verifyRenderCmdExec(tmp) {
-  if (process.platform !== 'win32') { ok('render.cmd exec (skipped: not Windows)'); return; }
-  const dir = path.join(tmp, 'rcmd');
-  fs.mkdirSync(dir, { recursive: true });
-  fs.copyFileSync(path.join(EXPECTED, 'planning-session.tour-spec.json'), path.join(dir, 'tour-spec.json'));
-  run(path.join(dir, 'tour-spec.json'), dir);          // initial render generates render.cmd
-  fs.rmSync(path.join(dir, 'index.html'));             // delete to prove the .cmd regenerates it
-  const r = cp.spawnSync('cmd.exe', ['/c', path.join(dir, 'render.cmd')], { encoding: 'utf8' });
-  if (r.status !== 0) fail(`render.cmd exited ${r.status}: ${r.stderr || r.stdout}`);
-  if (!fs.existsSync(path.join(dir, 'index.html'))) fail('render.cmd did not regenerate index.html');
-  ok('render.cmd re-render via cmd.exe (CF2)');
 }
 
 function verifyScriptDataEscape(tmp) {
@@ -171,7 +158,6 @@ function main() {
   verifyScriptEscape(tmpDir);
   verifyScriptDataEscape(tmpDir);
   verifyXssAllowlist(tmpDir);
-  verifyRenderCmdExec(tmpDir);
   verifyCRLF(tmpDir);
   process.stdout.write('\nAll verifications passed.\n');
 }

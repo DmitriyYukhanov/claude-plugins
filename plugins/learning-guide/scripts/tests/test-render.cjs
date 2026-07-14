@@ -25,7 +25,7 @@ function minimalSpec(extra) {
       { id: 'intro', level: 1, title: 'Intro', body_md: 'Welcome.' },
       { id: 'next',  level: 1, title: 'Next',  body_md: 'See [Service](src/x.cs:42).' }
     ],
-    renderer: { include_progress_tracker: true, include_pager: true, open_command: 'open.cmd' }
+    renderer: { include_progress_tracker: true, include_pager: true }
   }, extra || {});
 }
 
@@ -119,7 +119,7 @@ module.exports = [
   // R7: the vendored mermaid bundle is excluded from the payload-size warning.
   { name: 'mermaid bundle excluded from payload warning (R7)', fn: () => {
     const dir = tmpdir('merpay');
-    const spec = minimalSpec({ renderer: { max_inline_payload_kb: 2048, include_progress_tracker: true, include_pager: true, open_command: 'open.cmd' } });
+    const spec = minimalSpec({ renderer: { max_inline_payload_kb: 2048, include_progress_tracker: true, include_pager: true } });
     spec.sections.push({ id: 'diag', level: 1, title: 'Diagram', body_md: '```mermaid\nflowchart LR\nA-->B\n```' });
     const p = writeSpec(dir, spec);
     const r = runRender([p]);
@@ -173,26 +173,6 @@ module.exports = [
     assert.match(html, /script type="text\/markdown" data-name="design"/);
     assert.doesNotMatch(html, /A tag: <\/script> here/);
     assert.match(html, /A tag: <\\\/script> here/);
-  }},
-  { name: 'open.cmd and render.cmd generated', fn: () => {
-    const dir = tmpdir('cmd');
-    const p = writeSpec(dir, minimalSpec());
-    const r = runRender([p]);
-    if (r.code !== 0) throw new Error(r.stderr);
-    const oc = fs.readFileSync(path.join(dir, 'open.cmd'), 'utf8');
-    assert.match(oc, /start "" "%~dp0index\.html"/);
-    const rc = fs.readFileSync(path.join(dir, 'render.cmd'), 'utf8');
-    assert.match(rc, /node /);
-    assert.match(rc, /render\.cjs/);
-  }},
-  // R17: open_command "none" skips the launcher and the stdout hint.
-  { name: 'open_command none skips open.cmd (R17)', fn: () => {
-    const dir = tmpdir('noopen');
-    const p = writeSpec(dir, minimalSpec({ renderer: { open_command: 'none', include_progress_tracker: true, include_pager: true } }));
-    const r = runRender([p]);
-    if (r.code !== 0) throw new Error(r.stderr);
-    assert.ok(!fs.existsSync(path.join(dir, 'open.cmd')), 'open.cmd should not exist');
-    assert.doesNotMatch(r.stdout, /double-click open\.cmd/);
   }},
   { name: 'rejects absolute embedded path', fn: () => {
     const dir = tmpdir('abs');
@@ -253,21 +233,12 @@ module.exports = [
     fs.writeFileSync(path.join(dir, 'design.md'), big);
     const spec = minimalSpec({
       embedded_sources: [{ name: 'design', path: 'design.md', label: 'Design' }],
-      renderer: { max_inline_payload_kb: 1, include_progress_tracker: true, include_pager: true, open_command: 'open.cmd' }
+      renderer: { max_inline_payload_kb: 1, include_progress_tracker: true, include_pager: true }
     });
     const p = writeSpec(dir, spec);
     const r = runRender([p]);
     if (r.code !== 0) throw new Error(r.stderr);
     assert.match(r.stderr, /payload|max_inline_payload_kb/i);
-  }},
-  // CF2: render.cmd output-dir must be quote-safe (no trailing-backslash escape).
-  { name: 'render.cmd output-dir is quote-safe (CF2)', fn: () => {
-    const dir = tmpdir('rcmd');
-    const p = writeSpec(dir, minimalSpec());
-    const r = runRender([p]);
-    if (r.code !== 0) throw new Error(r.stderr);
-    const rc = fs.readFileSync(path.join(dir, 'render.cmd'), 'utf8');
-    assert.match(rc, /--output-dir "%~dp0\."/);
   }},
   // CF4: answer_index beyond options length is rejected.
   { name: 'answer_index out of range is rejected (CF4)', fn: () => {

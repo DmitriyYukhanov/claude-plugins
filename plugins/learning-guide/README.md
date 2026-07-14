@@ -12,7 +12,7 @@ Generate self-contained, offline-first, interactive HTML learning guides for any
 
 1. In Claude Code, say: *"Create a learning guide for `<path>`."*
 2. The `analyze` skill drafts `tour-spec.json` and hands off to `render`.
-3. Open `index.html` (or double-click `open.cmd` on Windows).
+3. Open `index.html` in any browser.
 
 ## Skills
 

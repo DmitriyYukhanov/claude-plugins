@@ -247,19 +247,6 @@ function buildProgressBlock(spec, i18n) {
   );
 }
 
-function buildOpenCmd() {
-  return fs.readFileSync(path.join(ASSETS, 'open.cmd.tmpl'), 'utf8');
-}
-
-function buildRenderCmd() {
-  const renderScript = path.resolve(__dirname, 'render.cjs');
-  const winScript = renderScript.replace(/\//g, '\\');
-  // "%~dp0" ends in a backslash, so a bare "%~dp0" would escape the closing quote and the
-  // arg would arrive with a trailing ". "%~dp0." absorbs the backslash; path.resolve
-  // normalises the trailing ".".
-  return `@echo off\r\nnode "${winScript}" "%~dp0tour-spec.json" --output-dir "%~dp0."\r\n`;
-}
-
 function buildReadme(spec, lang) {
   const title = spec.title;
   return [
@@ -269,12 +256,12 @@ function buildReadme(spec, lang) {
     '',
     `## Open`,
     '',
-    `Double-click \`open.cmd\` (Windows) or open \`index.html\` directly in any modern browser.`,
+    `Open \`index.html\` directly in any modern browser.`,
     '',
     `## Re-render after editing the spec`,
     '',
     `1. Edit \`tour-spec.json\`.`,
-    `2. Double-click \`render.cmd\` (Windows) or run \`node <plugin-path>/scripts/render.cjs tour-spec.json\` from this directory.`,
+    `2. Run \`node <plugin-path>/scripts/render.cjs tour-spec.json\` from this directory.`,
     `3. Reload \`index.html\` in your browser (Ctrl+F5).`,
     '',
     `## Persistence`,
@@ -437,11 +424,6 @@ function main() {
   fs.mkdirSync(outputDir, { recursive: true });
   fs.writeFileSync(path.join(outputDir, 'index.html'), html, 'utf8');
 
-  const writeOpen = !spec.renderer || spec.renderer.open_command !== 'none';
-  if (writeOpen)
-    fs.writeFileSync(path.join(outputDir, 'open.cmd'), buildOpenCmd(), 'utf8');
-  fs.writeFileSync(path.join(outputDir, 'render.cmd'), buildRenderCmd(), 'utf8');
-
   const readmePath = path.join(outputDir, 'README.md');
   if (!fs.existsSync(readmePath))
     fs.writeFileSync(readmePath, buildReadme(spec, spec.lang), 'utf8');
@@ -456,9 +438,8 @@ function main() {
   }
 
   const sizeKB = (Buffer.byteLength(html, 'utf8') / 1024).toFixed(1);
-  const openHint = writeOpen ? ' Open: double-click open.cmd' : '';
   process.stdout.write(
-    `Tour rendered to ${outputDir}/index.html (${sizeKB} KB, ${spec.sections.length} sections, Mermaid ${includeMermaid ? 'yes' : 'no'}).${openHint}\n`
+    `Tour rendered to ${outputDir}/index.html (${sizeKB} KB, ${spec.sections.length} sections, Mermaid ${includeMermaid ? 'yes' : 'no'}).\n`
   );
 }
 

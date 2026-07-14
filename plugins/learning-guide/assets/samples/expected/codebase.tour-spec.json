@@ -32,7 +32,6 @@
   "renderer": {
     "include_mermaid": null,
     "include_progress_tracker": true,
-    "include_pager": true,
-    "open_command": "open.cmd"
+    "include_pager": true
   }
 }

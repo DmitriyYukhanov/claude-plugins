@@ -102,7 +102,6 @@
         "include_mermaid":               { "type": ["boolean", "null"] },
         "include_progress_tracker":      { "type": "boolean" },
         "include_pager":                 { "type": "boolean" },
-        "open_command":                  { "type": "string", "enum": ["open.cmd", "none"] },
         "max_inline_payload_kb":         { "type": ["integer", "null"], "minimum": 1 },
         "template_compatibility_version":{ "type": "string", "pattern": "^[0-9]+$" }
       }

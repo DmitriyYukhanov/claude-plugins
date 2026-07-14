@@ -57,7 +57,7 @@ function renderFixture() {
     ],
     glossary: [{ term: 'Idempotency', definition: 'No duplicate effect.' }],
     final_quiz: [{ question: 'Finished?', options: ['No', 'Yes'], answer_index: 1 }],
-    renderer: { include_progress_tracker: true, include_pager: true, open_command: 'open.cmd' }
+    renderer: { include_progress_tracker: true, include_pager: true }
   };
   fs.writeFileSync(path.join(dir, 'tour-spec.json'), JSON.stringify(spec));
   const r = cp.spawnSync('node', [RENDER, path.join(dir, 'tour-spec.json')], { encoding: 'utf8' });

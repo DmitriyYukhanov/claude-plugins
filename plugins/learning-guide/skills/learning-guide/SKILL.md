@@ -15,7 +15,7 @@ Discoverability shim. Decides whether the user needs to start fresh (analyze) or
 
 2. **Does the user want to manually edit `tour-spec.json` and just re-render?**
    - Confirm Node is on PATH.
-   - Tell them they can run `node "${CLAUDE_PLUGIN_ROOT}/scripts/render.cjs" tour-spec.json` directly OR double-click `render.cmd` if a previous render generated it. They don't need to invoke any skill for that.
+   - Tell them they can run `node "${CLAUDE_PLUGIN_ROOT}/scripts/render.cjs" tour-spec.json` directly. They don't need to invoke any skill for that.
 
 ## When NOT to use this skill
 
