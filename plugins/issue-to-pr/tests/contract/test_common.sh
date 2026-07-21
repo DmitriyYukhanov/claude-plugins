@@ -61,6 +61,41 @@ test_common_degrade_exits_4() {
   assert_eq 4 "$?" "degrade exits 4"
 }
 
+test_common_strip_heredoc_bodies_blanks_body() {
+  source "$ITP_SCRIPTS/lib/common.sh"
+  local cmd out
+  cmd=$'git commit -m "$(cat <<EOF\nfix: mentions gh pr merge in prose\nEOF\n)"'
+  out=$(strip_heredoc_bodies "$cmd")
+  assert_not_contains "$out" "gh pr merge"
+  assert_contains "$out" "<<EOF"
+  assert_contains "$out" "EOF"
+}
+
+test_common_strip_heredoc_bodies_dash_variant_tab_indented_terminator() {
+  source "$ITP_SCRIPTS/lib/common.sh"
+  local cmd out
+  cmd=$'cat <<-EOF\n\t\tgh pr merge 13\n\tEOF'
+  out=$(strip_heredoc_bodies "$cmd")
+  assert_not_contains "$out" "gh pr merge"
+}
+
+test_common_strip_heredoc_bodies_multiple_heredocs() {
+  source "$ITP_SCRIPTS/lib/common.sh"
+  local cmd out
+  cmd=$'cat <<A\nfirst gh pr merge\nA\necho mid\ncat <<B\nsecond git add -A\nB'
+  out=$(strip_heredoc_bodies "$cmd")
+  assert_not_contains "$out" "gh pr merge"
+  assert_not_contains "$out" "git add -A"
+  assert_contains "$out" "echo mid"
+}
+
+test_common_strip_heredoc_bodies_no_heredoc_is_unchanged() {
+  source "$ITP_SCRIPTS/lib/common.sh"
+  local out
+  out=$(strip_heredoc_bodies "gh pr merge feat/issue-6-x --squash")
+  assert_contains "$out" "gh pr merge feat/issue-6-x --squash"
+}
+
 test_common_done_ok_exits_0() {
   local out rc
   out=$(bash -c 'source "$1/lib/common.sh"; emit RESULT good; done_ok' _ "$ITP_SCRIPTS" 2>/dev/null)

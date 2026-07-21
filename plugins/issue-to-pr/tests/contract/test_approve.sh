@@ -213,6 +213,16 @@ test_guard_resolves_pr_number_to_marker() {
   assert_contains "$OUT" '"permissionDecision":"allow"'
 }
 
+test_guard_heredoc_commit_message_mentioning_merge_is_not_gated() {
+  local repo; repo=$(init_repo); cd "$repo"
+  use_fake_gh happy
+  # Reproduces a real false positive: a `git commit -m "$(cat <<EOF ... EOF)"` whose
+  # message merely quotes `gh pr merge` in prose was being misread as the command.
+  run_guard $'{"tool_name":"Bash","tool_input":{"command":"cat <<EOF\\nfix: mentions gh pr merge in prose\\nEOF"}}'
+  assert_contains "$OUT" '"continue":true'
+  assert_not_contains "$OUT" 'permissionDecision'
+}
+
 test_guard_direct_gh_merge_consumes_marker() {
   local repo; repo=$(init_repo); cd "$repo"
   write_marker "$repo" feat/issue-6-x "$SHA_OK" false "$(date -u +%Y-%m-%dT%H:%M:%SZ)"

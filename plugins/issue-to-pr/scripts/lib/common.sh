@@ -258,6 +258,39 @@ hook_ask() { hook_decision ask "$1"; exit 0; }
 # every Bash command the hook sees, since it matches the whole Bash tool).
 hook_passthrough() { printf '{"continue":true,"suppressOutput":true}\n'; exit 0; }
 
+# strip_heredoc_bodies TEXT -> TEXT with every heredoc body (the lines between a
+# `<<[-]['"]?DELIM['"]?` opener and its bare DELIM terminator line) blanked out; opener
+# and terminator lines are kept. A heredoc body is data handed to whatever reads it
+# (cat, a nested shell...) -- the invoking shell never parses it as command syntax --
+# so merge-guard.sh / stage-guard.sh must not substring-match inside one (a commit
+# message that merely quotes `gh pr merge` or `git add -A` in prose would otherwise
+# trip the guard it's describing). `<<-DELIM` may tab-indent its terminator line, so
+# that variant's terminator is matched with leading tabs stripped.
+strip_heredoc_bodies() {
+  local text=$1 line delim="" tab_strip=0 in_heredoc=0 out=""
+  while IFS= read -r line || [ -n "$line" ]; do
+    if [ "$in_heredoc" = 1 ]; then
+      local check=$line
+      if [ "$tab_strip" = 1 ]; then
+        while [ "${check:0:1}" = "$(printf '\t')" ]; do check=${check:1}; done
+      fi
+      if [ "$check" = "$delim" ]; then
+        in_heredoc=0
+        out+="$line"$'\n'
+      fi
+      continue
+    fi
+    out+="$line"$'\n'
+    if [[ "$line" =~ \<\<(-)?[[:space:]]*(\'|\")?([A-Za-z_][A-Za-z0-9_]*)(\'|\")? ]]; then
+      tab_strip=0
+      [ "${BASH_REMATCH[1]}" = "-" ] && tab_strip=1
+      delim=${BASH_REMATCH[3]}
+      in_heredoc=1
+    fi
+  done <<<"$text"
+  printf '%s' "$out"
+}
+
 # hook_extract_command JSON -> the tool_input.command value, JSON-unescaped. A
 # pure-bash scanner (no jq/perl) that honours backslash escapes, so a quoted path
 # ("D:/Code Stage/...") or an embedded quote can't truncate the command the way a

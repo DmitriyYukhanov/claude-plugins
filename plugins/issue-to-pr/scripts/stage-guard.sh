@@ -18,6 +18,10 @@ case "$input" in
 esac
 
 cmd=$(hook_extract_command "$input")
+# Blank out heredoc bodies first (data, not command syntax -- see strip_heredoc_bodies
+# in lib/common.sh) so prose that merely mentions "git add -A", e.g. a commit message
+# discussing this very gate, can't be misread as the command itself.
+cmd=$(strip_heredoc_bodies "$cmd")
 cmd=$(printf '%s' "$cmd" | tr -s '[:space:]' ' ' | tr -d '\042\047')
 
 case "$cmd" in

@@ -48,6 +48,10 @@ case "$input" in
 esac
 
 cmd=$(hook_extract_command "$input")
+# Blank out heredoc bodies first (data, not command syntax -- see strip_heredoc_bodies)
+# so prose that merely mentions a guarded phrase, e.g. a `git commit -m "$(cat <<EOF`
+# commit message discussing this very gate, can't be misread as the command itself.
+cmd=$(strip_heredoc_bodies "$cmd")
 # Collapse whitespace runs, then strip quotes, so odd spacing (`gh  pr  merge`) and
 # a quoted script path (`"...worktree.sh" merge`, which would otherwise hide the
 # `worktree.sh merge` substring) can't slip a merge command past the matchers. A

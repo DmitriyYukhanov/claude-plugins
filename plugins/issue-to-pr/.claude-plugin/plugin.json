@@ -1,6 +1,6 @@
 {
   "name": "issue-to-pr",
-  "version": "2.0.2",
+  "version": "2.0.3",
   "description": "Take a GitHub issue (bare, or tracked on a Project board) from triage to a merge-ready PR through a gated, worktree-isolated pipeline that scales its depth to the task and asks at most one batched question. The gates hold every run: design hardening, tests green, code review clean. Once you approve the PR in-session it squash-merges, then deletes the branch, tears down the worktree, and clears the run's temp files; the issue auto-closes on merge and the board card advances as work moves.",
   "author": {
     "name": "Dmitry Yuhanov"
