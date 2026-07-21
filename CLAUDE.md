@@ -65,7 +65,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Initial release description
 ```
 
-**Release automation:** On push to `main`, a GitHub Action automatically assembles a combined changelog from all updated plugins, creates a GitHub Release, and posts a summary to Slack. You do NOT need to create releases or notify the team manually — just keep the changelogs accurate.
+**Release automation:** On push to `main` that touches `plugins/**`, a GitHub Action assembles a combined changelog from all updated plugins and creates a GitHub Release. That is the whole pipeline — it sends no notifications anywhere. You do NOT need to create releases manually; just keep the changelogs accurate.
 
 ## New Plugin Checklist (MANDATORY)
 

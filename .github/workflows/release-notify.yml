@@ -1,4 +1,4 @@
-name: Release & Notify
+name: Release
 
 on:
   push:
