@@ -4,15 +4,17 @@ Routing logic and plugin scaffolding are original work (c) 2026 Dmitry Yuhanov, 
 ================================================================================
 skills/humanizer/references/humanizer-en.md
   Source : https://github.com/blader/humanizer
+  Path   : SKILL.md
   Author : blader (and contributors)
   License: MIT
-  Pinned : 8b3a17889fbf12bedae20974a3c9f9de746ed754  (fetched 2026-04-30)
+  Pinned : 1b48564898e999219882660237fde01bf4843a0f  (v2.8.2, fetched 2026-07-21)
 
 skills/humanizer/references/humanizer-ru.md
   Source : https://github.com/ilyautov/humanizer-ru
+  Path   : skills/humanizer-ru/SKILL.md
   Author : ilyautov (and contributors)
   License: MIT
-  Pinned : e48eddce202bd79a70a579323b34df6d6f5cf523  (fetched 2026-04-30)
+  Pinned : 9aef259be89d7da4dd7d3c9bb97001eb612bbe73  (v3.14.2, fetched 2026-07-21)
 ================================================================================
 
 Full license texts of upstream projects are reproduced in

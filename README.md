@@ -74,8 +74,8 @@ The default Codex model is `gpt-5.6-sol` (requires Codex CLI 0.143.0 or newer); 
 
 Auto-routing EN + RU humanizer for Claude Code that removes signs of AI-generated writing:
 - Auto-detects language by Cyrillic ratio (≥60 % → RU, ≤10 % → EN, otherwise asks)
-- English ruleset — vendored from [blader/humanizer](https://github.com/blader/humanizer), 29 patterns from Wikipedia AI Cleanup
-- Russian ruleset — vendored from [ilyautov/humanizer-ru](https://github.com/ilyautov/humanizer-ru), 44 patterns with hard bans and triple-pass audit
+- English ruleset — vendored from [blader/humanizer](https://github.com/blader/humanizer), 33 patterns from Wikipedia AI Cleanup
+- Russian ruleset — vendored from [ilyautov/humanizer-ru](https://github.com/ilyautov/humanizer-ru), 54 patterns with hard bans and triple-pass audit
 - Explicit overrides ("humanize as English" / "обработай как русский") and mixed-text handling
 - Optional voice calibration from a writing sample
 
