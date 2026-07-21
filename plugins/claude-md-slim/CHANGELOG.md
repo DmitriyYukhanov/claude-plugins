@@ -5,6 +5,18 @@ All notable changes to the **claude-md-slim** plugin will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.0.1] - 2026-07-21
+
+### Changed
+- Tuned the staleness heuristic in `audit_claude_md.py` for precision over recall. Dogfooding it on
+  a well-maintained CLAUDE.md produced four hits, all false: the broad `will be` and `currently`
+  patterns matched *normative* prose ("features that will be removed", "you MUST bump") rather than
+  *claims about state*, which are what silently stop being true. Those patterns are gone and the
+  remaining ones are narrower. Re-verified after the change: zero hits on the clean file, and it
+  still catches the real case that motivated the plugin — a credential documented as a "placeholder,
+  not yet connected, pending the compliance audit" months after that audit passed. A detector that
+  cries wolf gets ignored, which is worse than no detector.
+
 ## [1.0.0] - 2026-07-21
 
 ### Added

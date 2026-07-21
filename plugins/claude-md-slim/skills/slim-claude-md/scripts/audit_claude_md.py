@@ -25,17 +25,24 @@ FENCE = re.compile(r"^\s*```")
 # Phrases that tend to mark content which silently rots. These are heuristics: every hit needs a
 # human to confirm, but stale prose in a file nobody prunes is the failure mode that makes an
 # oversized CLAUDE.md actively harmful rather than merely expensive.
+#
+# Tuned against a well-maintained file, where an earlier, broader set produced 100% false positives.
+# The rejected patterns all matched NORMATIVE prose (rules about what you must do) rather than
+# CLAIMS ABOUT STATE (assertions that can silently stop being true), which is the actual target:
+#   "will be"    -> "features that will be removed in a future version"  (a rule, not a claim)
+#   "currently"  -> "the currently supported syntax is ..."              (usually a rule)
+# A noisy detector gets ignored, which is worse than no detector, so these stay out. Prefer missing
+# a stale line to crying wolf; the phases that follow re-read this content anyway.
 STALE_HINTS = [
     (r"\bnot yet\b", "says something has not happened yet"),
-    (r"\bpending\b", "describes a pending state"),
+    (r"\bis pending\b|\bpending the\b", "describes a pending state"),
     (r"\bplaceholder\b", "mentions a placeholder"),
     (r"\bcoming soon\b", "promises future work"),
-    (r"\bwill be\b", "describes an intended future state"),
-    (r"\bcurrently\b", "pins a claim to an unstated 'now'"),
     (r"\bfor now\b", "describes a temporary state"),
-    (r"\bTODO\b", "unresolved TODO"),
-    (r"\bdeprecated\b", "claims something is deprecated"),
+    (r"\bTODO\b|\bFIXME\b", "unresolved marker"),
     (r"\bblocked on\b", "describes a blocker that may be resolved"),
+    (r"\bnot (?:yet )?(?:connected|wired|enabled|implemented|deployed)\b", "claims something is not live yet"),
+    (r"\bas of \d{4}\b|\bas of [A-Z][a-z]+ \d{4}\b", "pins a claim to a date"),
 ]
 
 
