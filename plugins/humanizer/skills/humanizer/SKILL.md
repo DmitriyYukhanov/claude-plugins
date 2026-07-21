@@ -13,6 +13,7 @@ allowed-tools:
   - Edit
   - Grep
   - Glob
+  - Bash
   - AskUserQuestion
 ---
 
@@ -68,6 +69,16 @@ Decide:
 
 The loaded file is authoritative. Treat its instructions as if they were yours.
 
+### Step 4b — Russian only: locate the scanner
+
+The Russian ruleset ships a deterministic scanner and tells you to run it before
+auditing. It refers to that scanner as `<папка скилла>/scripts/scan.py`. In this
+plugin the path is `scripts/scan.py` relative to *this* file — not relative to
+`references/`. Resolve it that way and otherwise follow the ruleset verbatim,
+including its fallbacks when Python or the packages are missing.
+
+There is no English counterpart; upstream does not ship one. Skip this step for EN.
+
 ### Step 5 — Execute
 
 Apply the diagnostic, rewrite, and audit process described in the loaded
@@ -84,9 +95,11 @@ draft → audit → final → list of changes). Do not change the format.
 
 ## Rules of the road
 
-- The router never edits the rulesets. Refresh from upstream is a separate
-  procedure documented in `../../../README.md`.
+- The router never edits the rulesets or `scripts/`. Both are vendored verbatim;
+  refresh from upstream is a separate procedure documented in `../../../README.md`.
 - The router never invents new patterns or merges English/Russian rules.
+- The scanner is advisory. Its score never overrides the ruleset's own judgement,
+  and a missing Python or a failed run never blocks the pass.
 - "Both passes" runs RU first because RU's hard bans include em-dash removal
   (which already covers EN pattern #14) — running EN first would let dashes
   re-enter via RU's rewrites.

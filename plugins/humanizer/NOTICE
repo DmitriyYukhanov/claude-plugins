@@ -15,6 +15,18 @@ skills/humanizer/references/humanizer-ru.md
   Author : ilyautov (and contributors)
   License: MIT
   Pinned : 9aef259be89d7da4dd7d3c9bb97001eb612bbe73  (v3.14.2, fetched 2026-07-21)
+
+skills/humanizer/scripts/scan.py
+skills/humanizer/scripts/humanizer_metrics/*.py
+  Source : https://github.com/ilyautov/humanizer-ru
+  Path   : skills/humanizer-ru/scripts/
+  Author : ilyautov (and contributors)
+  License: MIT
+  Pinned : 9aef259be89d7da4dd7d3c9bb97001eb612bbe73  (v3.14.2, fetched 2026-07-21)
+  Note   : vendored byte-for-byte, no local modifications. Runtime dependencies
+           (razdel, pymorphy3) are not bundled; the scanner degrades gracefully
+           when they are absent. Upstream's agents/openai.yaml is not vendored --
+           it is packaging metadata for upstream's own standalone plugin.
 ================================================================================
 
 Full license texts of upstream projects are reproduced in

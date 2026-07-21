@@ -5,6 +5,18 @@ All notable changes to the **humanizer** plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.2.0] - 2026-07-21
+
+### Added
+- Russian audits can now run the upstream scanner, which scores text 0-100 on hard bans, marker density, sentence rhythm, morphology, and paragraph evenness, so a rewrite reports "was N, now M" instead of a verdict you have to take on trust
+- The scanner is optional: a one-time `pip install razdel pymorphy3` turns it on, and without those packages the ruleset estimates the same score itself, exactly as it does on claude.ai
+
+### Fixed
+- Vendor the scanner that the 1.1.0 Russian ruleset already told the model to run, so its `scripts/scan.py` instruction stops pointing at a file the plugin never carried
+
+### Changed
+- Request the `Bash` tool, without which the scanner cannot run
+
 ## [1.1.0] - 2026-07-21
 
 ### Changed
