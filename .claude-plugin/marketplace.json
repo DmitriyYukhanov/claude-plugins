@@ -137,6 +137,17 @@
       "source": "./plugins/issue-to-pr",
       "category": "workflow",
       "homepage": "https://github.com/DmitriyYukhanov/claude-plugins"
+    },
+    {
+      "name": "claude-md-slim",
+      "description": "Shrink an oversized or stale CLAUDE.md by moving subsystem detail into path-scoped .claude/rules/ files, with scripts that measure the loaded size against the documented 200-line budget and prove the extraction lost nothing",
+      "version": "1.0.0",
+      "author": {
+        "name": "Dmitry Yuhanov"
+      },
+      "source": "./plugins/claude-md-slim",
+      "category": "development",
+      "homepage": "https://github.com/DmitriyYukhanov/claude-plugins"
     }
   ]
 }

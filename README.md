@@ -29,6 +29,7 @@ You can also run `/plugin` to browse and install interactively.
 | Plugin | Category | What it does |
 |--------|----------|--------------|
 | [agent-teams](#agent-teams) | productivity | Orchestrate multiple Claude Code instances working in parallel with shared tasks and messaging |
+| [claude-md-slim](#claude-md-slim) | development | Shrink an oversized or stale CLAUDE.md into path-scoped rules files, verifying the split lost nothing |
 | [codex-collaboration](#codex-collaboration) | workflow | Cross-model Claude + Codex collaboration: drive/validate loops and parallel dual review |
 | [humanizer](#humanizer) | writing | Remove AI-writing patterns from English and Russian text, with automatic language detection |
 | [implementation-prd](#implementation-prd) | productivity | Turn feature requests into build-ready spec bundles with PRDs, contracts, schemas, and test plans |
@@ -53,6 +54,19 @@ Set up and orchestrate Claude Code agent teams with:
 - Configuration reference with architecture, permissions, and limitations
 
 [View documentation](./plugins/agent-teams/README.md)
+
+### claude-md-slim
+
+Restructure an oversized or stale `CLAUDE.md` so instructions actually get followed:
+- Measures the **loaded** size (HTML comments are stripped and free) against the documented 200-line budget
+- Ranks sections and marks which to move; flags codebase-derivable content and staleness hints
+- Moves subsystem detail into `.claude/rules/*.md` with `paths:` frontmatter, so it loads only when those files are opened
+- Documents the `@import` trap: imports load eagerly at launch and save **no** context, only path-scoped rules defer
+- Verifies the extraction lost nothing, failing loudly rather than letting a dropped section look like an intentional trim
+
+Complements Anthropic's `claude-md-management` (which audits content quality) by fixing size and structure.
+
+[View documentation](./plugins/claude-md-slim/README.md)
 
 ### codex-collaboration
 
