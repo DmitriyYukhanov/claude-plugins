@@ -5,6 +5,11 @@ All notable changes to the **issue-to-pr** plugin will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.1.0] - 2026-07-22
+
+### Changed
+- Step 7's review loop now defaults straight to adversarial review subagents instead of first attempting `/code-review`, since most copies of that command block model-invocation and can never fire mid-pipeline anyway
+
 ## [2.0.3] - 2026-07-21
 
 ### Fixed

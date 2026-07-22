@@ -66,7 +66,9 @@ into the config after a successful run.
 
 Optional companions that sharpen specific steps: `superpowers:*`, `/deep-research`,
 `/cross-review` (from `codex-collaboration`), `humanizer`, and `/code-review`. Each is
-used if installed, with an inline fallback otherwise.
+used if installed, with an inline fallback otherwise. `/code-review` commonly ships
+`disable-model-invocation`, which blocks the pipeline from calling it mid-run regardless
+of install state — the adversarial-subagent fallback is the realistic default for Step 7.
 
 ## Usage
 
