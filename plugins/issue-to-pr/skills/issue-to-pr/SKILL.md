@@ -89,7 +89,10 @@ complex+); TDD: failing test → implement → passing. UI/layout work is verifi
 --gate test='<test_cmd>'` (+ `--gate visual=…` for UI). An empty gate command degrades
 (exit 4), never a false green. Red ⇒ STOP and fix. Never proceed red.
 
-**7. Review loop.** `/code-review <level> --fix` at the tier's level, ≤ tier's max passes.
+**7. Review loop.** Default to the inline fallback: independent adversarial review
+subagents critique the diff at the tier's level, ≤ tier's max passes. `/code-review
+<level> --fix` is preferred only when it's actually callable — most copies ship
+`disable-model-invocation`, which blocks a skill run from invoking it at all (`R/companions.md`).
 **Security overlay:** `git diff --name-only "$BASE"...HEAD | S/sensitive-paths.sh`; `SENSITIVE=true`
 → +1 `/security-review`. Track `confirmed_bugs_this_pass`/`gate_fail_streak` in metrics; **escalate a level** on 2+ confirmed bugs/pass or a gate failing twice; re-run gates after each fix.
 

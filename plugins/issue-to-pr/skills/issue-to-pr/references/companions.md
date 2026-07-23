@@ -14,7 +14,7 @@ companion silently degrade quality without saying so.
 | Codebase research (Step 3, complex+) | forked `research` sub-skill (isolated subagent → ≤150-line cited summary); `/deep-research` for external topics | A focused inline exploration distilled to a short summary. |
 | Design generation (Step 4, complex+) | `workflows/design-panel.js` (3 proposers → 2 adversarial critics → opus judge), with `/cross-review` critiquing the produced `design_md` | Inline self-review chain: draft, adversarially self-critique against the code, revise. |
 | Humanizing human-facing text (Step 9–10) | `humanizer` | Self-edit the PR body / report to drop AI-tell phrasing; flag that a humanizer pass would help. |
-| Diff review loop (Step 7) | `/code-review` | A manual diff read for correctness, reuse, and regressions; iterate. |
+| Diff review loop (Step 7) | `/code-review` — only if callable (see note) | Independent adversarial review subagents (2–3 reviewers) critique the diff for correctness, reuse, and regressions; iterate. This is the default in practice. |
 
 ## Install hints (same marketplace)
 
@@ -24,6 +24,15 @@ companion silently degrade quality without saying so.
   plugin and `/codex:setup`.
 - `superpowers:*` is the external Superpowers plugin. `/deep-research` and `/code-review`
   come from your own setup or other plugins.
+
+## Note: `/code-review` is usually unreachable from inside the pipeline
+
+`disable-model-invocation: true` on a command means only a human typing it triggers it —
+the model's own SlashCommand tool cannot invoke it, even from inside a skill run. Most
+`/code-review` copies set this deliberately (it's meant for a human to run directly), so
+Step 7 calling it mid-pipeline is a no-op, not a degraded case: it never fires and the
+inline fallback runs instead. Don't treat "installed" as "callable" — the fallback is the
+realistic default, not a rare miss.
 
 These are recommendations, not requirements — the skill checks availability at the relevant
 step and proceeds either way.
