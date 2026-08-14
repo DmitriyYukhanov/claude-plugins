@@ -7,14 +7,27 @@ skills/humanizer/references/humanizer-en.md
   Path   : SKILL.md
   Author : blader (and contributors)
   License: MIT
-  Pinned : 1b48564898e999219882660237fde01bf4843a0f  (v2.8.2, fetched 2026-07-21)
+  Pinned : 523374dee72d67c7b2b5f858ea0094ffda49c3ac  (v2.9.1, fetched 2026-08-14)
+  Note   : upstream's scripts/validate-package.py and agents/openai.yaml are not
+           vendored -- they are packaging tooling for upstream's own plugin.
 
 skills/humanizer/references/humanizer-ru.md
+skills/humanizer/references/catalog.md
+skills/humanizer/edit-log.md
   Source : https://github.com/ilyautov/humanizer-ru
   Path   : skills/humanizer-ru/SKILL.md
+           skills/humanizer-ru/references/catalog.md
+           skills/humanizer-ru/edit-log.md
   Author : ilyautov (and contributors)
   License: MIT
-  Pinned : 9aef259be89d7da4dd7d3c9bb97001eb612bbe73  (v3.14.2, fetched 2026-07-21)
+  Pinned : 6a750da0ec09b3946efe09189aef561bc635cce2  (v3.15.4, fetched 2026-08-14)
+  Note   : upstream splits the ruleset across three files -- a thin prompt, the
+           54-pattern catalog it loads on demand, and an append-only log of the
+           owner's own editing rules. The layout mirrors upstream's, so the paths
+           the prompt names (references/catalog.md, edit-log.md, scripts/scan.py)
+           resolve as-is from the skill root. edit-log.md ships empty and is the
+           one vendored file meant to be edited locally -- a refresh must keep
+           its entries.
 
 skills/humanizer/scripts/scan.py
 skills/humanizer/scripts/humanizer_metrics/*.py
@@ -22,7 +35,7 @@ skills/humanizer/scripts/humanizer_metrics/*.py
   Path   : skills/humanizer-ru/scripts/
   Author : ilyautov (and contributors)
   License: MIT
-  Pinned : 9aef259be89d7da4dd7d3c9bb97001eb612bbe73  (v3.14.2, fetched 2026-07-21)
+  Pinned : 6a750da0ec09b3946efe09189aef561bc635cce2  (v3.15.4, fetched 2026-08-14)
   Note   : vendored byte-for-byte, no local modifications. Runtime dependencies
            (razdel, pymorphy3) are not bundled; the scanner degrades gracefully
            when they are absent. Upstream's agents/openai.yaml is not vendored --

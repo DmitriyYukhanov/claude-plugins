@@ -69,13 +69,21 @@ Decide:
 
 The loaded file is authoritative. Treat its instructions as if they were yours.
 
-### Step 4b — Russian only: locate the scanner
+### Step 4b — Russian only: resolve the ruleset's own file paths
 
-The Russian ruleset ships a deterministic scanner and tells you to run it before
-auditing. It refers to that scanner as `<папка скилла>/scripts/scan.py`. In this
-plugin the path is `scripts/scan.py` relative to *this* file — not relative to
-`references/`. Resolve it that way and otherwise follow the ruleset verbatim,
-including its fallbacks when Python or the packages are missing.
+The Russian ruleset is a thin prompt that names three companion files. Every one
+of those paths is relative to *this* file, not to `references/`:
+
+- `references/catalog.md` — the 54 patterns with before/after examples and the
+  marker word lists. The ruleset tells you to open it in full-edit and audit
+  modes. Open it there; without it you have the process but not the tells.
+- `edit-log.md` — accumulated editing rules from the owner's own feedback. Read
+  it in the ruleset's Step 1. It ships empty, so an empty file is normal and
+  means there is nothing extra to apply.
+- `scripts/scan.py` — the deterministic scanner the ruleset runs before auditing.
+
+Otherwise follow the ruleset verbatim, including its fallbacks when Python or the
+scanner packages are missing.
 
 There is no English counterpart; upstream does not ship one. Skip this step for EN.
 
@@ -93,10 +101,17 @@ language.
 Use the output format specified by the loaded reference (typically:
 draft → audit → final → list of changes). Do not change the format.
 
+The English ruleset defines three invocation modes and the format follows from
+which one applies: pasted text, a file to rewrite in place, or an embedded call
+from another task, which gets the final prose and nothing else. Pick the mode
+that matches how this skill was reached rather than defaulting to the first.
+
 ## Rules of the road
 
-- The router never edits the rulesets or `scripts/`. Both are vendored verbatim;
-  refresh from upstream is a separate procedure documented in `../../../README.md`.
+- The router never edits the rulesets, `references/`, or `scripts/`. They are
+  vendored verbatim; refresh from upstream is a separate procedure documented in
+  `../../../README.md`. The one file that may grow locally is `edit-log.md`, and
+  only by appending an entry in the format that file specifies.
 - The router never invents new patterns or merges English/Russian rules.
 - The scanner is advisory. Its score never overrides the ruleset's own judgement,
   and a missing Python or a failed run never blocks the pass.

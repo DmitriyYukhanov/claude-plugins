@@ -5,6 +5,18 @@ All notable changes to the **humanizer** plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.3.0] - 2026-08-14
+
+### Added
+- Russian passes read `edit-log.md`, a file where you record the corrections you keep having to repeat, and apply them over the catalog's defaults on every later run
+- The scanner now flags text that advertises its own honesty ("честный список", "без воды", "это не очередной") instead of showing the facts
+
+### Changed
+- English ruleset refreshed to upstream v2.9.1: a rewrite may no longer state a fact, name, number, date, or citation the source doesn't have, which the shipped examples themselves had been doing
+- English ruleset gained file and embedded modes, so a humanizer call inside a larger task hands back finished prose instead of the draft-audit-final ceremony
+- A writing sample you provide now outranks the English em dash ban, so matching the author beats scrubbing the tell
+- Russian ruleset refreshed to upstream v3.15.4: the 54-pattern catalog moved into a file the model opens only when it edits or audits, which keeps the working prompt short
+
 ## [1.2.0] - 2026-07-21
 
 ### Added

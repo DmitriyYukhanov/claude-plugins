@@ -37,6 +37,12 @@ Skip the install if you don't want it. The ruleset falls back to estimating the 
 
 There is no English equivalent — upstream doesn't ship one, so the English pass is model-only.
 
+### Editing log (Russian only)
+
+The Russian ruleset opens `skills/humanizer/edit-log.md` in its first step, before it touches the text. The file ships empty. Add an entry when a rewrite comes back wrong in a way the catalog doesn't cover, so the correction lands once instead of on every draft. Entries win over the catalog's defaults and lose to the hard bans, and the file is append-only: a rule you regret gets cancelled by a newer entry rather than edited away.
+
+It sits inside the plugin directory, so a plugin update can replace it. Copy out anything you want to survive one.
+
 ### Voice calibration
 
 Provide a writing sample inline or as a file path; the skill matches its rhythm, lexicon, and quirks instead of using its default voice. The sample's own language doesn't matter — it's used only as a style reference.
@@ -60,14 +66,19 @@ When upstream releases changes worth pulling:
    git ls-remote https://github.com/ilyautov/humanizer-ru HEAD
    ```
 2. Fetch the upstream source files — paths are recorded in [`NOTICE`](./NOTICE) and have
-   moved before, so read them from there rather than assuming:
+   moved before, so read them from there rather than assuming. List the upstream skill
+   directory too: the Russian ruleset has split into more files once already, and a file
+   we don't carry is content the model silently loses.
    ```
-   gh api repos/blader/humanizer/contents/SKILL.md --jq .content | base64 -d
-   gh api repos/ilyautov/humanizer-ru/contents/skills/humanizer-ru/SKILL.md --jq .content | base64 -d
+   gh api repos/ilyautov/humanizer-ru/contents/skills/humanizer-ru?ref=<tag> --jq '.[].path'
+   gh api repos/blader/humanizer/contents/SKILL.md?ref=<tag> --jq .content | base64 -d
    ```
 3. Diff against the current vendored body (skip the first 4 lines — those are our header),
    then replace the body: strip the upstream YAML frontmatter, keep our 4-line header, and
-   update the SHA both in the header and in `NOTICE`.
+   update the SHA both in the header and in `NOTICE`. Mirror upstream's own layout when
+   vendoring, so the paths its prompt names resolve unchanged from the skill root.
+   `edit-log.md` is the exception to the overwrite rule — it holds local entries, so merge
+   rather than replace it.
 4. Refresh the Russian scanner under `skills/humanizer/scripts/` from
    `skills/humanizer-ru/scripts/` upstream. These carry no header, so overwrite them
    wholesale and confirm with `git hash-object` that each file still matches the upstream
@@ -75,6 +86,8 @@ When upstream releases changes worth pulling:
    ```
    python skills/humanizer/scripts/scan.py sample.txt
    ```
+   On Windows, run it with `PYTHONIOENCODING=utf-8`; the report is Russian and a cp1251
+   console dies on the first `≥`.
 5. Bump the plugin version in `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json`:
    - **MINOR** if upstream added new rules or sections
    - **PATCH** for typo / wording fixes
