@@ -6,7 +6,8 @@
 // Invoked by the SKILL as:
 //   Workflow({scriptPath: "${CLAUDE_PLUGIN_ROOT}/workflows/epic-decompose.js",
 //             args: {issue, title, body, contextFiles:[...], constraints}})
-// Returns {plan_md, children[], open_questions[]}. The SKILL shows plan_md at the
+// Returns {plan_md, children[], open_questions[], received_issue}; the caller MUST
+// check received_issue against the issue it passed. The SKILL shows plan_md at the
 // ledger checkpoint for approval (no raw JSON), opens each child as its own issue
 // linked "Part of #<parent>", and routes preference-bound open_questions to the
 // ledger. Workflow agents have Read/Grep, so contextFiles are paths they read.
@@ -21,10 +22,34 @@ export const meta = {
   ],
 }
 
+// Same contract as design-panel: an empty issue means `args` never arrived, and a
+// decomposition of a guessed parent is worse than none. Stop before the fan-out.
 const a = args || {}
-const issue = a.issue ?? '?'
-const title = a.title ?? ''
-const body = a.body ?? ''
+// A number or a numeric string, nothing else - see design-panel.js: the whole issue
+// OBJECT stringifies to "[object Object]", which is non-empty, so an emptiness test
+// alone waved it through and the six agents decomposed "Issue #[object Object]".
+if (a.issue == null || typeof a.issue === 'object' || !/^\d+$/.test(String(a.issue).trim())) {
+  throw new Error(
+    `epic-decompose: args.issue is missing or not an issue number (got ${JSON.stringify(a.issue)}) — ` +
+    'the panel never received its inputs. Do not retry blind: decompose the epic inline instead.',
+  )
+}
+const issue = String(a.issue).trim()
+// Coerced, not assumed: `??` only catches null/undefined, so a non-string title or body
+// reached `.trim()` below and threw a bare TypeError instead of the actionable stop.
+const title = typeof a.title === 'string' ? a.title : ''
+const body = typeof a.body === 'string' ? a.body : ''
+// `issue` arriving proves the args object arrived; it does not prove the args that
+// describe the WORK did. Title and body are the whole substance here, and with both
+// gone the six agents would invent a dependency-ordered breakdown out of an issue
+// number — which the SKILL then opens as real, linked child issues on GitHub. The
+// received_issue check cannot see this, so it has to fail here.
+if (title.trim() === '' && body.trim() === '') {
+  throw new Error(
+    `epic-decompose: issue #${issue} arrived with neither a title nor a body — ` +
+    'there is nothing to decompose. Do not retry blind: decompose the epic inline instead.',
+  )
+}
 const contextFiles = Array.isArray(a.contextFiles) ? a.contextFiles : []
 const constraints = a.constraints || 'none stated'
 
@@ -71,7 +96,7 @@ const proposals = (await parallel(ANGLES.map(angle => () =>
 
 if (proposals.length === 0) {
   // Total proposer failure: signal the SKILL to use its next fallback.
-  return { plan_md: '', children: [], open_questions: [], _failed: 'no proposals produced' }
+  return { plan_md: '', children: [], open_questions: [], received_issue: issue, _failed: 'no proposals produced' }
 }
 
 const proposalsText = proposals
@@ -139,6 +164,6 @@ const judge = await agent(
 
 if (!judge || !judge.plan_md) {
   // Judge failed or produced nothing usable: signal the SKILL's next fallback.
-  return { plan_md: '', children: [], open_questions: [], _failed: 'judge produced no plan' }
+  return { plan_md: '', children: [], open_questions: [], received_issue: issue, _failed: 'judge produced no plan' }
 }
-return judge
+return { ...judge, received_issue: issue }

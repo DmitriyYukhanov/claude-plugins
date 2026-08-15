@@ -122,6 +122,8 @@ EOF
       .name) printf 'demo-repo\n' ;;
       .nameWithOwner) printf 'octo-owner/demo-repo\n' ;;
       .defaultBranchRef.name) printf 'main\n' ;;
+      # The batched form preflight uses: one call, three fields, one per line.
+      *'.owner.login, .name'*) printf 'octo-owner\ndemo-repo\nmain\n' ;;
       *) printf '{"owner":{"login":"octo-owner"},"name":"demo-repo","defaultBranchRef":{"name":"main"}}\n' ;;
     esac
     ;;
@@ -167,6 +169,21 @@ EOF
               assigned-other) printf 'someone-else\n' ;;
               *) printf '' ;;
             esac
+            ;;
+          # The batched form preflight uses: state, title and assignees in one call,
+          # one field per line. `backslash-title` carries a Windows path so the tests
+          # can prove the value reaches the caller byte-for-byte.
+          *'.state, .title'*)
+            _st=OPEN; [ "$scenario" = issue-closed ] && _st=CLOSED
+            _ti='Demo issue'
+            [ "$scenario" = triage-rich ] && _ti='Create a new widget service'
+            [ "$scenario" = backslash-title ] && _ti='Fix C:\Users\foo path bug'
+            _as=''
+            case "$scenario" in
+              assigned-me) _as=$ME ;;
+              assigned-other) _as='someone-else' ;;
+            esac
+            printf '%s\n%s\n%s\n' "$_st" "$_ti" "$_as"
             ;;
           '.projectItems | length' | '.projectItems|length')
             case "$scenario" in

@@ -65,3 +65,4 @@ test_gates_log_file_written() {
   content=$(cat "$TEST_TMPDIR"/logs/hello-*.log 2>/dev/null)
   assert_contains "$content" "hi-there"
 }
+

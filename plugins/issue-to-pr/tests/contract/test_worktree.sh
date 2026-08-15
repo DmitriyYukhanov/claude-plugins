@@ -3,20 +3,9 @@
 # Real git fixtures (a bare remote + a repo) exercise every exit path.
 
 # ── fixtures ────────────────────────────────────────────────────────────────
-mk_repo() { # -> repo path; also creates $TEST_TMPDIR/remote.git as origin
-  local remote="$TEST_TMPDIR/remote.git" repo="$TEST_TMPDIR/repo"
-  git init -q --bare "$remote"
-  git init -q -b main "$repo"
-  git -C "$repo" config user.email t@e.com
-  git -C "$repo" config user.name T
-  git -C "$repo" config commit.gpgsign false
-  printf 'seed\n' >"$repo/README.md"
-  git -C "$repo" add README.md
-  git -C "$repo" commit -qm seed
-  git -C "$repo" remote add origin "$remote"
-  git -C "$repo" push -q -u origin main
-  printf '%s' "$repo"
-}
+# The shared fixture in assert.sh builds exactly this: bare origin + repo + seed
+# commit + pushed main. Kept as a name because every test in this file uses it.
+mk_repo() { init_repo_with_remote; }
 
 mk_worktree() { # repo branch -> worktree path at repo-worktrees/issue-6, pushed
   local repo=$1 branch=$2 wt="$TEST_TMPDIR/repo-worktrees/issue-6"
@@ -28,15 +17,10 @@ mk_worktree() { # repo branch -> worktree path at repo-worktrees/issue-6, pushed
   printf '%s' "$wt"
 }
 
-write_marker() { # root branch sha used created_iso
-  local root=$1 branch=$2 sha=$3 used=$4 created=$5 slug
-  slug=${branch//\//-}
-  mkdir -p "$root/.claude/issue-to-pr"
-  printf '{"branch":"%s","pr_head_sha":"%s","created_at":"%s","used":%s,"quote":"ship it"}\n' \
-    "$branch" "$sha" "$created" "$used" >"$root/.claude/issue-to-pr/approval-$slug.json"
-}
+# write_marker lives in tests/lib/assert.sh - test_approve.sh needs the identical shape.
 
 SHA_OK="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+NL=$'\n' # a real newline, for building a multi-line approval reply
 
 # ── ensure ──────────────────────────────────────────────────────────────────
 test_wt_ensure_creates() {
@@ -147,7 +131,9 @@ test_wt_merge_happy_consumes_marker() {
   assert_rc 0
   assert_key "$OUT" MERGED true
   assert_key "$OUT" MERGE_METHOD squash
-  assert_contains "$(cat "$repo/.claude/issue-to-pr/approval-feat-issue-6-x.json")" '"used":true'
+  # A merged approval is deleted, not merely flagged: cleanup used to be the only
+  # thing that removed it, and cleanup never runs for an abandoned or hand-merged PR.
+  if [ -f "$repo/.claude/issue-to-pr/approval-feat-issue-6-x.json" ]; then fail "marker survived the merge"; fi
   assert_gh_called "pr merge feat/issue-6-x --squash"
 }
 
@@ -419,3 +405,85 @@ test_wt_revert_no_merge_commit_degrades() {
   assert_rc 4
   assert_key "$OUT" DEGRADED_REASON no-merge-commit
 }
+
+# ── v3 run-dir + argument safety ────────────────────────────────────────────
+# Regression: `run_dir` splices the issue token into a path that cleanup hands to
+# `rm -rf`, so a token carrying `..` walked out of the state dir. Reproduced by
+# deleting a repository's .git before the guard existed.
+test_wt_non_numeric_issue_degrades_before_any_path_is_built() {
+  local repo; repo=$(mk_repo); cd "$repo"
+  use_fake_gh happy
+  run_script worktree.sh cleanup '6/../../../.git' --branch feat/issue-6-x
+  assert_rc 4
+  assert_key "$OUT" DEGRADED_REASON invalid-issue
+  if [ ! -d "$repo/.git" ]; then fail "the guard let a traversing issue token delete .git"; fi
+}
+
+
+
+
+# Regression: salvage_artifacts set SALVAGED on mkdir alone, so teardown reported a
+# salvage that copied nothing — and that report is what makes deleting originals feel safe.
+test_wt_salvage_reports_nothing_when_it_copied_nothing() {
+  local repo wt; repo=$(mk_repo); wt=$(mk_worktree "$repo" feat/issue-6-x)
+  cd "$repo"
+  use_fake_gh happy
+  run_script worktree.sh teardown 6 --salvage-to "$repo/docs/design"
+  assert_key "$OUT" SALVAGED ""
+}
+
+test_wt_merge_reports_the_approval_quote_before_consuming() {
+  local repo wt; repo=$(mk_repo); wt=$(mk_worktree "$repo" feat/issue-6-x); cd "$wt"
+  write_marker "$repo" feat/issue-6-x "$SHA_OK" false "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  use_fake_gh happy
+  run_script worktree.sh merge 6 --branch feat/issue-6-x
+  assert_rc 0
+  # Deleting the marker must not also delete the record of what the user said.
+  assert_key "$OUT" APPROVAL_QUOTE "ship it"
+}
+
+
+# Regression: marker_str_field's `"[^"]*"` match stops at the first escaped quote,
+# so a reply containing one was reported truncated.
+test_wt_merge_quote_survives_embedded_quotes() {
+  local repo wt m; repo=$(mk_repo); wt=$(mk_worktree "$repo" feat/issue-6-x); cd "$wt"
+  m="$repo/.claude/issue-to-pr/approval-feat-issue-6-x.json"
+  mkdir -p "$repo/.claude/issue-to-pr"
+  printf '{"branch":"feat/issue-6-x","pr_head_sha":"%s","created_at":"%s","used":false,"quote":"say \\"ship it\\" now"}\n' \
+    "$SHA_OK" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >"$m"
+  use_fake_gh happy
+  run_script worktree.sh merge 6 --branch feat/issue-6-x
+  assert_rc 0
+  assert_contains "$OUT" 'say "ship it" now'
+}
+
+
+# Regression: a multi-line approval was reported with a literal backslash-n, and
+# the merge deletes the marker, so that mangled copy was the only one left. Written through
+# approve.sh so the real escape/unescape pair is exercised, not a hand-built fixture.
+# The value must stay on ONE line: the machine block is one KEY=VALUE per line.
+test_wt_merge_quote_survives_newlines() {
+  local repo wt line; repo=$(mk_repo); wt=$(mk_worktree "$repo" feat/issue-6-x); cd "$wt"
+  use_fake_gh happy
+  run_script approve.sh feat/issue-6-x --quote "ship it${NL}but squash it"
+  run_script worktree.sh merge 6 --branch feat/issue-6-x
+  assert_rc 0
+  line=$(printf '%s
+' "$OUT" | grep '^APPROVAL_QUOTE=')
+  assert_contains "$line" "ship it"
+  assert_contains "$line" "but squash it"
+}
+
+# Regression: json_escape doubles backslashes first, so decoding `\n` before `\`
+# matched the second backslash plus the n and ate both — corrupting the only
+# surviving record of the approval once the marker is deleted.
+test_wt_merge_quote_survives_a_backslash() {
+  local repo wt line; repo=$(mk_repo); wt=$(mk_worktree "$repo" feat/issue-6-x); cd "$wt"
+  use_fake_gh happy
+  run_script approve.sh feat/issue-6-x --quote 'merge it, then update C:\notes.md'
+  run_script worktree.sh merge 6 --branch feat/issue-6-x
+  assert_rc 0
+  line=$(printf '%s\n' "$OUT" | grep '^APPROVAL_QUOTE=')
+  assert_contains "$line" 'C:\notes.md'
+}
+

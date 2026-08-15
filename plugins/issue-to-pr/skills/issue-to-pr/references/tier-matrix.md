@@ -39,7 +39,7 @@ project's `visual_cmd` or a dedicated browser test — never eyeballing alone.
 
 ## Security overlay
 
-Regardless of tier, run `git diff --name-only "$BASE"...HEAD | sensitive-paths.sh`;
+Regardless of tier, run `sensitive-paths.sh --base "<BASE>"` from the worktree;
 if `SENSITIVE=true`, add one `/security-review` pass. Sensitive = a path segment or
 filename stem naming auth/authz, crypto/keys, secrets/credentials/sessions,
 payment/billing, or migrations, plus `.env*`, `*.sql`, and key material. Matching is

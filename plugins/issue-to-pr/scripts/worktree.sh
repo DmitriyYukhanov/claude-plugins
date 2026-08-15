@@ -43,9 +43,13 @@ done
 
 [ -n "$subcmd" ] || degrade missing-subcommand "worktree: subcommand required (ensure|merge|cleanup|teardown)"
 [ -n "$issue" ] || degrade missing-issue "worktree: issue number required"
+assert_numeric_issue "$issue" worktree
 
 # -- shared helpers -----------------------------------------------------------
-main_worktree() { git worktree list --porcelain 2>/dev/null | sed -n 's/^worktree //p' | head -1; }
+# One definition of the main checkout, shared with preflight: v3 has preflight
+# compute RUN_DIR from repo_root while cleanup/teardown compute the same path from
+# here, so a divergence means teardown sweeps a directory preflight never wrote to.
+main_worktree() { repo_root; }
 
 compute_wt_path() { # root issue
   printf '%s/%s-worktrees/issue-%s' "$(dirname "$1")" "$(basename "$1")" "$2"
@@ -103,16 +107,20 @@ detect_deps() { # dir -> sets DEPS_MANIFEST, INSTALL_HINT
   fi
 }
 
-salvage_artifacts() { # wt salvage_dir issue -> sets SALVAGED
+# salvage_artifacts wt salvage_dir issue -> sets SALVAGED. Reports a destination only
+# when something actually landed in it: claiming a salvage that copied nothing is what
+# makes the caller comfortable deleting the originals.
+salvage_artifacts() {
   SALVAGED=""
-  local wt=$1 dst=$2 n=$3 f src
+  local wt=$1 dst=$2 n=$3 f src copied=0
   [ -n "$dst" ] || return 0
   mkdir -p "$dst" 2>/dev/null || return 0
-  for f in design.md progress.md state.json; do
+  for f in design.md progress.md state.json step.log; do
     src="$wt/tmp/task-$n/$f"
-    if [ -f "$src" ]; then cp "$src" "$dst/" 2>/dev/null || true; fi
+    if [ -f "$src" ]; then cp "$src" "$dst/" 2>/dev/null && copied=$((copied + 1)); fi
   done
-  SALVAGED=$dst
+  [ "$copied" -gt 0 ] && SALVAGED=$dst
+  return 0
 }
 
 # remove_worktree wt root issue -> sets REMOVED and (on a stubborn dir) LEFTOVER.
@@ -295,12 +303,18 @@ cmd_merge() {
   created_epoch=$(epoch_of "$created")
   [ -n "$created_epoch" ] || stop no-valid-approval "issue-to-pr: approval marker timestamp is unparseable - re-approve"
   age=$(( $(now_epoch) - created_epoch ))
-  [ "$age" -le 1800 ] || stop no-valid-approval "issue-to-pr: approval marker is stale (>30 min) - re-approve"
+  [ "$age" -le "$APPROVAL_TTL" ] || stop no-valid-approval "issue-to-pr: approval marker is stale (>$((APPROVAL_TTL / 60)) min) - re-approve"
   marker_sha=$(marker_str_field "$marker" pr_head_sha)
   cur_sha=$(gh pr view "$branch" --json headRefOid --jq .headRefOid 2>/dev/null || printf '')
   if [ -z "$cur_sha" ] || [ "$marker_sha" != "$cur_sha" ]; then
     stop no-valid-approval "issue-to-pr: PR head moved since approval (approved $marker_sha, now ${cur_sha:-unknown}); re-approve"
   fi
+  # Read the recorded reply HERE, while the marker is known to exist, not after the
+  # merge: the ladder can push, update the branch and wait on checks, and any
+  # preflight running in another session sweeps markers past the validity window.
+  # Reading it afterwards is a race whose only symptom is an empty APPROVAL_QUOTE.
+  local quote
+  quote=$(marker_quote "$marker")
 
   # -- 2. push the branch (must already track upstream from Step 9) -------------
   if ! push_out=$(git push 2>&1); then
@@ -379,7 +393,19 @@ cmd_merge() {
   fi
 
   # -- 5. consume the marker + honest outcome check -----------------------------
-  marker_set_used "$marker"
+  # Delete rather than merely flag it: the approval has served its whole purpose,
+  # and cleanup (which used to be the only thing that removed it) never runs for a
+  # PR that gets torn down, abandoned, or merged by hand. The verbatim reply was
+  # captured back in step 1 so deleting the file does not also delete the record of
+  # what was said - the model puts APPROVAL_QUOTE in the Step 12 report.
+  emit APPROVAL_QUOTE "$quote"
+  # The merge already happened and cannot be undone, so this is not a stop - but an
+  # approval that survives unspent authorises every further merge attempt in its
+  # window, and the human has to be told rather than left with a silent failure.
+  if ! marker_consume "$marker"; then
+    emit APPROVAL_NOT_CONSUMED true
+    warn "worktree merge: the approval at $marker could not be spent - delete it by hand before the next merge"
+  fi
   local issue_state pr_url
   issue_state=$(gh issue view "$issue" --json state --jq .state 2>/dev/null || printf '')
   pr_url=$(gh pr view "$branch" --json url --jq .url 2>/dev/null || printf '')
@@ -438,10 +464,17 @@ cmd_cleanup() {
     deleted_remote=true
   fi
 
-  # Remove the consumed approval marker if present.
+  # Remove the consumed approval marker if present: merge already deletes it, so this
+  # covers a PR merged outside the sanctioned path.
   local marker
   marker=$(marker_path "$root" "$branch")
   [ -f "$marker" ] && rm -f "$marker"
+  # A clean cleanup deletes the run dir outright. A partial one keeps the logs, which
+  # is exactly when they are worth reading - and so does a removal that was refused (a
+  # Windows lock on a log file still open). Either way what survives must not be left
+  # where the next run of this issue reads it: a surviving step.log/state.json is taken
+  # as ground truth, and that run would conclude the work is done and jump to a branch
+  # cleanup has just deleted. One call site, so "when does the run end" has one answer.
 
   emit REMOVED "$REMOVED"
   emit DELETED_LOCAL "$deleted_local"
@@ -452,31 +485,29 @@ cmd_cleanup() {
 }
 
 cmd_teardown() {
-  local root reg wt_path
+  local root reg wt_path kept
   root=$(main_worktree)
   [ -n "$root" ] || degrade not-a-git-repo "worktree teardown: not inside a git repository"
   reg=$(registered_wt "$issue")
 
-  # In-place fallback mode: nothing was ever created, so nothing to remove.
-  if [ -z "$reg" ]; then
-    wt_path=$(compute_wt_path "$root" "$issue")
-    if [ ! -d "$wt_path" ]; then
-      emit KEPT in-place
-      done_ok
-    fi
-  fi
   wt_path=${reg:-$(compute_wt_path "$root" "$issue")}
-
   salvage_artifacts "$wt_path" "$salvage_to" "$issue"
-  cd "$root" 2>/dev/null || true
 
   REMOVED=false
   LEFTOVER=""
-  remove_worktree "$wt_path" "$root" "$issue"
+  if [ -z "$reg" ] && [ ! -d "$wt_path" ]; then
+    # In-place fallback: no worktree was ever created, so there is none to remove.
+    kept=in-place
+  else
+    cd "$root" 2>/dev/null || true
+    remove_worktree "$wt_path" "$root" "$issue"
+    kept=branch-and-pr # teardown never touches the branch or PR
+  fi
+
   emit REMOVED "$REMOVED"
   emit SALVAGED "${SALVAGED:-}"
   [ -n "$LEFTOVER" ] && emit LEFTOVER_DIR "$LEFTOVER"
-  emit KEPT "branch-and-pr" # teardown never touches the branch or PR
+  emit KEPT "$kept"
   done_ok
 }
 

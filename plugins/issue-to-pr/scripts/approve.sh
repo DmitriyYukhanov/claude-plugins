@@ -54,13 +54,17 @@ created=$(now_iso)
 if [ "$refresh" = 1 ]; then
   [ -f "$marker" ] || degrade no-marker-to-refresh "approve --refresh: no existing marker for $branch"
   # Update head-SHA + timestamp in place, preserving quote and used:false.
-  tmp="$marker.tmp"
-  sed -E "s/\"pr_head_sha\":\"[^\"]*\"/\"pr_head_sha\":\"$sha\"/; s/\"created_at\":\"[^\"]*\"/\"created_at\":\"$created\"/" \
-    "$marker" >"$tmp" && mv "$tmp" "$marker"
+  if ! marker_refresh "$marker" "$sha" "$created"; then
+    degrade marker-refresh-failed "approve --refresh: could not rewrite the marker at $marker"
+  fi
   emit REFRESHED true
 else
   [ "$have_quote" = 1 ] || degrade missing-quote "approve: --quote <verbatim reply> required"
-  marker_write "$marker" "$branch" "$sha" "$quote" "$created" false
+  # An approval that was not actually recorded must never report success: the model
+  # would go straight to the merge, be denied for "no approval marker", and have no
+  # way to connect that to a write it was told had worked.
+  marker_write "$marker" "$branch" "$sha" "$quote" "$created" false ||
+    degrade marker-write-failed "approve: could not write the approval marker at $marker"
   emit APPROVED true
 fi
 

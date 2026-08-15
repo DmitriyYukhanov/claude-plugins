@@ -149,3 +149,36 @@ init_repo() {
   git -C "$dir" commit -qm "seed"
   printf '%s' "$dir"
 }
+
+# write_marker ROOT BRANCH SHA USED CREATED_ISO - an approval marker on disk, without
+# going through approve.sh (which needs a live PR head). Shared, because 25 call sites
+# across two test files depended on two independent copies of this exact JSON shape -
+# and the marker's format, escaping and write path all changed in v3, so a schema change
+# could update one copy and leave the other silently exercising a stale format.
+write_marker() {
+  local root=$1 branch=$2 sha=$3 used=$4 created=$5 slug
+  slug=${branch//\//-}
+  mkdir -p "$root/.claude/issue-to-pr"
+  printf '{"branch":"%s","pr_head_sha":"%s","created_at":"%s","used":%s,"quote":"ship it"}\n' \
+    "$branch" "$sha" "$created" "$used" >"$root/.claude/issue-to-pr/approval-$slug.json"
+}
+
+# init_repo_with_remote [BRANCHES...] - a repo with a real bare `origin` holding
+# `main` plus any extra branches named. Needed because `git ls-remote` is the whole
+# basis of base resolution: against a repo with no origin it always fails, so a
+# fixture without one exercises only the offline fallback and leaves the primary
+# path untested. Echoes the repo path.
+init_repo_with_remote() {
+  local dir="$TEST_TMPDIR/repo" remote="$TEST_TMPDIR/remote.git" b
+  git init -q --bare "$remote"
+  init_repo "$dir" >/dev/null
+  git -C "$dir" remote add origin "$remote"
+  git -C "$dir" push -q -u origin main
+  for b in "$@"; do
+    git -C "$dir" branch "$b" main
+    git -C "$dir" push -q origin "$b"
+    # Drop the local branch: these fixtures are about what the REMOTE has.
+    git -C "$dir" branch -q -D "$b"
+  done
+  printf '%s' "$dir"
+}

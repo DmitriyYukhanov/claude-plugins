@@ -5,6 +5,32 @@ All notable changes to the **issue-to-pr** plugin will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.2.0] - 2026-08-15
+
+### Added
+- The security overlay reads uncommitted edits to tracked files as well as new untracked ones, so a change to an existing auth or crypto file triggers the extra review pass
+- The overlay also flags Alembic, Flyway, Liquibase and `db/migrate` migration layouts
+- Test-command detection covers shell harnesses such as `tests/run-tests.sh`
+
+### Changed
+- `base_branch: auto` asks the remote instead of trusting local refs, so a stale `dev` whose remote was deleted no longer becomes the branch point, and `BASE_SOURCE` reports whether the answer was confirmed or guessed
+- The security overlay is one call that collects the changed files itself, rather than a shell pipeline the pipeline had to assemble by hand
+- The design panel refuses to run when its inputs fail to arrive, and reports which issue it received so the caller can prove it
+- Review subagents run in the foreground and never alongside the gates, which used to produce phantom failures
+- Cleanup no longer invents a salvage directory on every run; it keeps a run's scratch files only when you name somewhere to put them
+
+### Fixed
+- The post-merge smoke check actually runs. It was called without the log directory the gate runner requires, and after cleanup had already removed it, so a merge that broke the base was never caught and the draft revert PR never opened
+- The security overlay stops with a reason when it cannot read the diff, instead of reporting a clean scan and skipping the security review
+- Installing dependencies at Step 1 no longer omits the log directory the gate runner requires
+- Approvals work on macOS: the timestamp check only understood GNU `date`, so every marker was undatable and no merge could ever be approved
+- An approval is spent only once the merge has actually run, and never silently when the write fails
+- The merge gate's refusal explains that approval and merge must be separate calls, since chaining them could never pass
+- The approval quote survives embedded quotes, backslashes and line breaks
+
+### Security
+- `worktree.sh` could be made to remove arbitrary directories, including the repository's own `.git`, by an issue argument containing `..`. Every script now rejects a non-numeric issue before building a path from it
+
 ## [2.1.0] - 2026-07-22
 
 ### Changed

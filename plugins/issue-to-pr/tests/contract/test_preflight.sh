@@ -156,14 +156,81 @@ EOF
   assert_key "$OUT" CMD_SOURCE_TEST package.json
 }
 
-test_preflight_base_auto_detects_dev() {
+test_preflight_base_auto_detects_remote_dev() {
   local repo
-  repo=$(init_repo)
+  repo=$(init_repo_with_remote dev)
+  cd "$repo"
+  use_fake_gh happy
+  run_script preflight.sh 6
+  assert_key "$OUT" BASE dev
+  assert_key "$OUT" BASE_SOURCE auto-remote-dev
+  assert_key "$OUT" START_POINT origin/dev
+}
+
+# Regression: `ls-remote --heads origin dev` fnmatches the TAIL of a ref name on
+# slash boundaries, so a repo with only `release/dev` answered yes and the whole
+# run was cut from a branch that does not exist.
+test_preflight_base_auto_ignores_a_branch_merely_ending_in_dev() {
+  local repo
+  repo=$(init_repo_with_remote release/dev)
+  cd "$repo"
+  use_fake_gh happy
+  run_script preflight.sh 6
+  assert_key "$OUT" BASE main
+  assert_key "$OUT" BASE_SOURCE auto-default-branch
+}
+
+# The remote answered and has no dev: that is evidence, and the default branch wins.
+test_preflight_base_auto_uses_default_when_remote_has_no_dev() {
+  local repo
+  repo=$(init_repo_with_remote)
   cd "$repo"
   git branch dev
   use_fake_gh happy
   run_script preflight.sh 6
+  assert_key "$OUT" BASE main
+  assert_key "$OUT" BASE_SOURCE auto-default-branch
+  assert_contains "$OUT" "local 'dev' exists but origin has no 'dev'"
+}
+
+# Regression: when origin cannot be reached, a stale remote-tracking ref is a guess.
+# Using it is fine; reporting it as remote-confirmed re-armed the deleted-dev trap.
+test_preflight_base_auto_marks_an_unreachable_remote_as_unverified() {
+  local repo
+  repo=$(init_repo)
+  cd "$repo"
+  git update-ref refs/remotes/origin/dev HEAD
+  use_fake_gh happy
+  run_script preflight.sh 6
   assert_key "$OUT" BASE dev
+  assert_key "$OUT" BASE_SOURCE auto-unverified-dev
+  assert_contains "$OUT" "could not reach origin"
+}
+
+# Regression: a `dev` that exists only locally is what is left behind after its
+# remote is deleted post-merge. It looks like a trunk and is arbitrarily stale, so
+# `auto` must ignore it and fall back to the repository's real default branch.
+test_preflight_base_auto_ignores_local_only_dev() {
+  local repo
+  repo=$(init_repo_with_remote)
+  cd "$repo"
+  git branch dev
+  use_fake_gh happy
+  run_script preflight.sh 6
+  assert_key "$OUT" BASE main
+  assert_key "$OUT" BASE_SOURCE auto-default-branch
+}
+
+test_preflight_detects_shell_test_harness() {
+  local repo
+  repo=$(init_repo)
+  cd "$repo"
+  mkdir -p tests
+  printf '#!/usr/bin/env bash\n' >tests/run-tests.sh
+  use_fake_gh happy
+  run_script preflight.sh 6
+  assert_key "$OUT" CMD_TEST "bash tests/run-tests.sh"
+  assert_key "$OUT" CMD_SOURCE_TEST tests/run-tests.sh
 }
 
 test_preflight_worktree_resumable() {
@@ -215,4 +282,109 @@ EOF
   assert_rc 0
   assert_key "$OUT" BOARD_CONFIGURED true
   assert_contains "$OUT" "project"
+}
+
+test_preflight_non_numeric_issue_degrades() {
+  local repo
+  repo=$(init_repo)
+  cd "$repo"
+  use_fake_gh happy
+  run_script preflight.sh '6/../../evil'
+  assert_rc 4
+  assert_key "$OUT" DEGRADED_REASON invalid-issue
+}
+
+
+
+
+
+
+test_preflight_worktree_state_uses_the_main_checkout() {
+  local repo wt
+  repo=$(init_repo)
+  cd "$repo"
+  git -C "$repo" worktree add "$TEST_TMPDIR/repo-worktrees/issue-6" -b feat/issue-6-x HEAD >/dev/null 2>&1
+  wt="$TEST_TMPDIR/repo-worktrees/issue-6"
+  cd "$wt"
+  use_fake_gh happy
+  run_script preflight.sh 6
+  # From inside the worktree, `git rev-parse --show-toplevel` would return the
+  # worktree itself and report its own worktree as absent.
+  assert_key "$OUT" WORKTREE_STATE resumable
+}
+
+
+
+# Regression: a Step-0 probe the model runs on every task must not delete the
+# user's remote-tracking refs as a side effect.
+test_preflight_does_not_prune_remote_refs() {
+  local repo
+  repo=$(init_repo)
+  cd "$repo"
+  git update-ref refs/remotes/origin/some-old-branch HEAD
+  use_fake_gh happy
+  run_script preflight.sh 6
+  if git show-ref --verify --quiet refs/remotes/origin/some-old-branch; then :; else
+    fail "preflight pruned a remote-tracking ref"
+  fi
+}
+
+
+
+
+
+# Regression: batching state/title/assignees into one gh call with `--jq '...|@tsv'`
+# ran the values through jq's TSV encoder, which doubles a backslash and turns a tab
+# into the two characters `\t`. `read -r` is raw by definition and never undoes it,
+# so an issue titled `Fix C:\Users\foo path bug` arrived as `C:\\Users\\foo` - and
+# that string is what names the branch, the PR and the design panel's prompt. One
+# field per line carries the value through untouched.
+test_preflight_issue_title_survives_a_backslash() {
+  local repo
+  repo=$(init_repo)
+  cd "$repo"
+  use_fake_gh backslash-title
+  run_script preflight.sh 6
+  assert_key "$OUT" ISSUE_TITLE 'Fix C:\Users\foo path bug'
+}
+
+# Regression: the probe fetches only the base ref, so on a single-branch clone the
+# default branch has no local ref — and cmd_cleanup's in-place path runs
+# `git switch <default>` to get off the feature branch before deleting it. Without
+# the ref that switch fails and cleanup silently ends on a detached HEAD. Both
+# refspecs ride the same connection, so this costs no extra round trip.
+test_preflight_fetches_the_default_branch_too() {
+  local repo
+  repo=$(init_repo_with_remote dev)
+  cd "$repo"
+  git update-ref -d refs/remotes/origin/main 2>/dev/null || true
+  use_fake_gh happy
+  run_script preflight.sh 6
+  assert_key "$OUT" BASE dev
+  if git show-ref --verify --quiet refs/remotes/origin/main; then :; else
+    fail "the default branch was not fetched; in-place cleanup would end detached"
+  fi
+}
+
+# Regression: `git fetch` fails the WHOLE invocation the moment any one refspec names
+# a ref the remote does not have, so batching the base and the default branch into one
+# call let a default branch that is absent on THIS origin (a fork, a mirror, a renamed
+# trunk) take the base ref down with it - and Step 1 then hard-stops at
+# invalid-start-point on a base that ls-remote had just confirmed is there.
+test_preflight_fetches_the_base_when_the_default_branch_is_missing_on_origin() {
+  local repo
+  repo=$(init_repo_with_remote dev)
+  cd "$repo"
+  # gh still reports defaultBranchRef=main; this origin no longer has it. update-ref
+  # on the bare repo rather than `push --delete`, which refuses to drop remote HEAD.
+  git -C "$TEST_TMPDIR/remote.git" update-ref -d refs/heads/main
+  git update-ref -d refs/remotes/origin/dev 2>/dev/null || true
+  git update-ref -d refs/remotes/origin/main 2>/dev/null || true
+  use_fake_gh happy
+  run_script preflight.sh 6
+  assert_key "$OUT" BASE dev
+  assert_key "$OUT" START_POINT origin/dev
+  if git show-ref --verify --quiet refs/remotes/origin/dev; then :; else
+    fail "a missing default branch took the base ref down with it"
+  fi
 }

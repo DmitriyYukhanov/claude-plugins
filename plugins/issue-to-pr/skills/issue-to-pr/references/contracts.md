@@ -127,8 +127,9 @@ Best-effort: a failed read reports `clear` + `READ_OK=false` and still exits 0.
 ## triage-evidence.sh — objective triage signals (no tier decision)
 
 `triage-evidence.sh <N> [--json]` — Step 2. Emits `LABELS BODY_LENGTH CHECKLIST_ITEMS
-REF_PATHS_EXIST REF_PATHS_MISSING NEW_THING_HITS LINKED_ISSUES TITLE` from the issue. You map the
-signals to a tier yourself. Exit `4` if the issue cannot be read.
+REF_PATHS_EXIST REF_PATHS_MISSING NEW_THING_HITS LINKED_ISSUES TITLE` from the issue. It reads
+signals and never picks a tier; pipe it into `tier-select.sh`, which does. Exit `4` if the issue
+cannot be read.
 
 ## tier-select.sh - map triage signals to a tier (v1.3.0)
 
@@ -138,10 +139,14 @@ Emits `TIER` + `TIER_REASON`. Deterministic rubric (full table + boundaries in
 
 ## sensitive-paths.sh - security overlay trigger (v1.3.0)
 
-`git diff --name-only "$BASE"...HEAD | sensitive-paths.sh [--json]` -> `SENSITIVE=true|false`
-+ `MATCHED=`. Segment/stem-exact matching (auth, crypto, secrets, payment, migrations, plus
+`sensitive-paths.sh --base <BASE> [--json]` -> `SENSITIVE=true|false` + `MATCHED=`. Run from the
+worktree; `--base` collects the changed files itself - committed (three-dot against the base),
+edited-not-committed, and untracked - because the overlay runs at Step 7, before the Step 9
+commit. Segment/stem-exact matching (auth, crypto, secrets, payment, migrations, plus
 `.env*`/`*.sql`/key material), so `authors.py` / `payment_ui_copy.md` do not false-trip.
-`SENSITIVE=true` -> add one `/security-review` pass. Always exit 0.
+`SENSITIVE=true` -> add one `/security-review` pass. Exit 0 on a completed scan; `4`
+(`not-a-git-repo`, `base-unresolvable`) when it could not read the diff at all, which means scan
+it yourself rather than treat the run as clean. A path list on stdin still works.
 
 ## pin-config.sh - self-writing config (v1.3.0)
 

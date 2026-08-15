@@ -19,9 +19,11 @@ Workflow({scriptPath: "${CLAUDE_PLUGIN_ROOT}/workflows/epic-decompose.js",
           args:{issue, title, body, contextFiles, constraints}})
 ```
 
-Returns `{plan_md, children:[{title, body, depends_on[], tier_estimate}], open_questions[]}`.
-On `_failed` (or empty `children`), fall back to an inline decomposition by hand; route
-preference-bound `open_questions` to the ledger.
+Returns `{plan_md, children:[{title, body, depends_on[], tier_estimate}], open_questions[],
+received_issue}`. Accept only when `received_issue` equals the parent you passed: the script
+throws outright if `args.issue` never arrived, and a decomposition of a guessed parent is worse
+than none. On a throw, `_failed`, empty `children`, or a mismatch, fall back to an inline
+decomposition by hand; route preference-bound `open_questions` to the ledger.
 
 ## Checkpoint (the one epic ask)
 

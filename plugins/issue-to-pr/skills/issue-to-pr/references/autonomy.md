@@ -26,15 +26,16 @@ fits moment (1).
 `state.json.ledger[]`, each `{question, decision, rationale, kind: asked|auto}`, appended
 **immediately, before the next tool call** (so a compaction can't lose a decision). Render
 the `auto` entries as a **"Decisions made autonomously"** section in the Step 10 report AND
-the PR body — the human reviews them at the merge gate they already attend. A Step 10 canary
-cross-checks the ledger entry count against the visible autonomous work.
+the PR body — the human reviews them at the merge gate they already attend.
 
 ## state.json (schema v1) + step.log
 
-`tmp/task-<N>/state.json` (model-owned; the model reads/writes it as JSON) plus an
-append-only `tmp/task-<N>/step.log` that every side-effecting script writes one flat
-`KEY=VALUE` line to — the script-authored ground truth that survives a crash between a
-side effect and the model's state write.
+`tmp/task-<N>/state.json` and the append-only `tmp/task-<N>/step.log`. **Both are yours** —
+no script writes either one. After each side-effecting call, append one flat `KEY=VALUE`
+line to `step.log` naming the step and the keys you got back, then update `state.json`.
+Doing the cheap write first is what makes the log the tie-breaker below: an append cannot
+half-apply, while an `Edit` against a JSON document full of repeated `{done,at}` fragments
+can land on the wrong one.
 
 ```json
 { "schema_version": 1, "issue": 7, "tier": "standard", "branch": "…", "wt_path": "…",
@@ -45,8 +46,7 @@ side effect and the model's state write.
   "ledger": [{"question": "…", "decision": "…", "rationale": "…", "kind": "auto"}],
   "metrics": {"gate_runs": 3, "gate_fail_streak": {}, "confirmed_bugs_this_pass": 0,
     "review_passes": 2, "review_level": "medium", "design_panel_ran": false,
-    "research_fork_invocations": 0, "review_fallback_used": "design-panel",
-    "board_lookup_calls": 0, "started_at": "…"} }
+    "started_at": "…"} }
 ```
 
 - `tier` is written after Step 2 (null/pending before that).

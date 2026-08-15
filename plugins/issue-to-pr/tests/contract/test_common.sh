@@ -103,3 +103,33 @@ test_common_done_ok_exits_0() {
   assert_eq 0 "$rc" "done_ok exits 0"
   assert_key "$out" RESULT good
 }
+
+
+
+
+# Regression: `sed` exits 0 when its pattern matched nothing, so flipping a marker
+# that already said `true` reported success exactly like a real flip - and
+# merge-guard.sh's `marker_set_used || hook_deny` exists precisely to tell "I spent
+# this approval" from "somebody else already did". One approval, two merges.
+test_common_marker_set_used_refuses_an_already_used_marker() {
+  source "$ITP_SCRIPTS/lib/common.sh"
+  local m
+  m="$TEST_TMPDIR/marker-single-use.json"
+  printf '{"branch":"b","pr_head_sha":"a","created_at":"x","used":false,"quote":"q"}\n' >"$m"
+  marker_set_used "$m" || fail "the first flip should have succeeded"
+  assert_contains "$(cat "$m")" '"used":true'
+  if marker_set_used "$m"; then fail "flipping an already-used marker reported success"; fi
+}
+
+# Regression: same silent-no-op, other rewriter. A marker whose layout sed cannot find
+# was copied through byte-for-byte and reported REFRESHED, so the merge went on to stop
+# at "PR head moved since approval" with nothing tying that back to the refresh.
+test_common_marker_refresh_reports_a_rewrite_that_changed_nothing() {
+  source "$ITP_SCRIPTS/lib/common.sh"
+  local m
+  m="$TEST_TMPDIR/marker-unrecognisable.json"
+  printf '{"nothing":"recognisable"}\n' >"$m"
+  if marker_refresh "$m" "newsha" "2026-01-01T00:00:00Z"; then
+    fail "marker_refresh reported success after changing nothing"
+  fi
+}

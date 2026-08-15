@@ -5,13 +5,7 @@
 SHA_OK="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 SHA_MOVED="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 
-write_marker() { # root branch sha used created_iso
-  local root=$1 branch=$2 sha=$3 used=$4 created=$5 slug
-  slug=${branch//\//-}
-  mkdir -p "$root/.claude/issue-to-pr"
-  printf '{"branch":"%s","pr_head_sha":"%s","created_at":"%s","used":%s,"quote":"ship it"}\n' \
-    "$branch" "$sha" "$created" "$used" >"$root/.claude/issue-to-pr/approval-$slug.json"
-}
+# write_marker lives in tests/lib/assert.sh - test_worktree.sh needs the identical shape.
 
 hook_json() { # command -> hook stdin JSON
   printf '{"tool_name":"Bash","tool_input":{"command":"%s"}}' "$1"
@@ -223,14 +217,65 @@ test_guard_heredoc_commit_message_mentioning_merge_is_not_gated() {
   assert_not_contains "$OUT" 'permissionDecision'
 }
 
-test_guard_direct_gh_merge_consumes_marker() {
+# The refusal has to teach the reader how to unlock it, including the one mistake
+# the mechanism makes unavoidable: the hook reads the command line before it runs,
+# so approve.sh chained with the merge is checked before the marker exists.
+test_guard_denial_explains_approve_and_no_chaining() {
   local repo; repo=$(init_repo); cd "$repo"
+  use_fake_gh happy
+  run_guard "$(hook_json 'gh pr merge feat/issue-6-x --squash')"
+  assert_contains "$OUT" '"permissionDecision":"deny"'
+  assert_contains "$OUT" 'approve.sh'
+  assert_contains "$OUT" 'SEPARATE'
+}
+
+
+# Regression: the hook runs BEFORE the merge command, so deleting the marker there
+# meant an interrupted or failing merge destroyed the approval, and the next attempt
+# was told "no approval marker" instead of the truth, that it was already spent.
+test_guard_direct_gh_merge_flags_rather_than_deletes() {
+  local repo m; repo=$(init_repo); cd "$repo"
+  m="$repo/.claude/issue-to-pr/approval-feat-issue-6-x.json"
   write_marker "$repo" feat/issue-6-x "$SHA_OK" false "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   use_fake_gh happy
   run_guard "$(hook_json 'gh pr merge feat/issue-6-x --squash')"
   assert_contains "$OUT" '"permissionDecision":"allow"'
-  # Marker is now consumed, so a second direct merge is denied.
-  assert_contains "$(cat "$repo/.claude/issue-to-pr/approval-feat-issue-6-x.json")" '"used":true'
+  if [ ! -f "$m" ]; then fail "the marker was deleted before the merge even ran"; fi
+  assert_contains "$(cat "$m")" '"used":true'
   run_guard "$(hook_json 'gh pr merge feat/issue-6-x --squash')"
-  assert_contains "$OUT" '"permissionDecision":"deny"'
+  assert_contains "$OUT" 'already used'
+}
+
+# Regression: approve.sh emitted APPROVED=true regardless of whether the marker was
+# actually written, sending the model into a merge the gate would refuse.
+test_approve_reports_failure_when_the_marker_cannot_be_written() {
+  local repo; repo=$(init_repo); cd "$repo"
+  # A FILE where the state directory has to go: mkdir -p cannot succeed.
+  mkdir -p "$repo/.claude"
+  printf 'not a directory\n' >"$repo/.claude/issue-to-pr"
+  use_fake_gh happy
+  run_script approve.sh feat/issue-6-x --quote "ship it"
+  assert_rc 4
+  assert_key "$OUT" DEGRADED_REASON marker-write-failed
+}
+
+# Regression: --refresh reported success unconditionally, which made worktree.sh's
+# `marker-refresh-failed` stop unreachable and let a merge proceed on a stale SHA.
+test_approve_refresh_reports_a_failed_rewrite() {
+  local repo dir; repo=$(init_repo); cd "$repo"
+  use_fake_gh happy
+  run_script approve.sh feat/issue-6-x --quote "ship it"
+  dir="$repo/.claude/issue-to-pr"
+  chmod 500 "$dir" 2>/dev/null || true
+  # Windows filesystems do not enforce this; skip rather than assert a false pass.
+  if : >"$dir/.probe" 2>/dev/null; then
+    rm -f "$dir/.probe" 2>/dev/null
+    chmod 700 "$dir" 2>/dev/null || true
+    return 0
+  fi
+  use_fake_gh head-moved
+  run_script approve.sh --refresh feat/issue-6-x
+  chmod 700 "$dir" 2>/dev/null || true
+  assert_rc 4
+  assert_key "$OUT" DEGRADED_REASON marker-refresh-failed
 }

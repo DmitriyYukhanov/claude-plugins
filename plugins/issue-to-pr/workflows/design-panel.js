@@ -4,9 +4,10 @@
 // synthesizes a single design. Invoked by the SKILL as:
 //   Workflow({scriptPath: "${CLAUDE_PLUGIN_ROOT}/workflows/design-panel.js",
 //             args: {issue, title, contextFiles:[...], constraints, openQuestions:[...]}})
-// Returns {design_md, rejected_alternatives[], open_questions[]}. The SKILL writes
-// design_md to tmp/task-<N>/design.md and routes preference-bound open_questions to
-// the ledger. Workflow agents have Read/Grep, so contextFiles are paths they read.
+// Returns {design_md, rejected_alternatives[], open_questions[], received_issue}.
+// The caller MUST check received_issue against the issue it passed. The SKILL writes
+// design_md to $RUN_DIR/design.md and routes preference-bound open_questions to the
+// ledger. Workflow agents have Read/Grep, so contextFiles are paths they read.
 
 export const meta = {
   name: 'design-panel',
@@ -18,10 +19,38 @@ export const meta = {
   ],
 }
 
+// Fail before spending six agents. `args` has repeatedly failed to reach this
+// script; the old '?' default let the panel run anyway, and proposers "recovered"
+// by guessing the issue from the worktree name — once designing the wrong one
+// entirely. An empty issue is now a loud, immediate stop the SKILL can route
+// around, and `received_issue` travels back so the caller can prove what arrived.
 const a = args || {}
-const issue = a.issue ?? '?'
-const title = a.title ?? ''
+// A number or a numeric string, nothing else. `String(a.issue).trim() !== ''` alone
+// let the whole issue OBJECT through - it stringifies to "[object Object]", which is
+// non-empty - and every one of the six agents was then prompted with "Issue
+// #[object Object]", the same guessing this guard exists to stop.
+if (a.issue == null || typeof a.issue === 'object' || !/^\d+$/.test(String(a.issue).trim())) {
+  throw new Error(
+    `design-panel: args.issue is missing or not an issue number (got ${JSON.stringify(a.issue)}) — ` +
+    'the panel never received its inputs. Do not retry blind: design the issue inline instead.',
+  )
+}
+const issue = String(a.issue).trim()
+// Coerced, not assumed: `??` only catches null/undefined, so a non-string title
+// (the model passing the issue number, an object) reached `.trim()` and threw a bare
+// TypeError - an unrelated crash where the guard below is meant to give an actionable stop.
+const title = typeof a.title === 'string' ? a.title : ''
 const contextFiles = Array.isArray(a.contextFiles) ? a.contextFiles : []
+// `issue` arriving proves the args object arrived; it does not prove the args that
+// describe the WORK did. With no title and no files to read, the prompt is an issue
+// number and the panel is back to guessing — the same failure the issue guard exists
+// to stop, and one received_issue cannot see because the issue itself is fine.
+if (title.trim() === '' && contextFiles.length === 0) {
+  throw new Error(
+    `design-panel: issue #${issue} arrived with neither a title nor any contextFiles — ` +
+    'the panel has nothing to design from. Do not retry blind: design the issue inline instead.',
+  )
+}
 const constraints = a.constraints || 'none stated'
 const openQuestions = Array.isArray(a.openQuestions) ? a.openQuestions : []
 
@@ -59,7 +88,7 @@ const proposals = (await parallel(ANGLES.map(angle => () =>
 
 if (proposals.length === 0) {
   // Total proposer failure: signal the SKILL to use its next fallback.
-  return { design_md: '', rejected_alternatives: [], open_questions: [], _failed: 'no proposals produced' }
+  return { design_md: '', rejected_alternatives: [], open_questions: [], received_issue: issue, _failed: 'no proposals produced' }
 }
 
 const proposalsText = proposals
@@ -119,6 +148,6 @@ const judge = await agent(
 
 if (!judge || !judge.design_md) {
   // Judge failed or produced nothing usable: signal the SKILL's next fallback.
-  return { design_md: '', rejected_alternatives: [], open_questions: [], _failed: 'judge produced no design' }
+  return { design_md: '', rejected_alternatives: [], open_questions: [], received_issue: issue, _failed: 'judge produced no design' }
 }
-return judge
+return { ...judge, received_issue: issue }

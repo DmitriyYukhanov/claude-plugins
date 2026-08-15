@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # pin-config.sh - self-writing config (spec sec 5.6). After a run whose auto-detected
-# gate commands passed, pin them to .claude/issue-to-pr.local.md so later runs skip
+# gate commands passed, pin them to .claude/issue-to-pr/config.md so later runs skip
 # detection. NEVER overwrites a human-set value: idempotency is checked with the SAME
 # shared frontmatter parser preflight uses, so a nested `commands:` value counts as
 # already-set (design D6). Base branch is never auto-pinned.
@@ -68,6 +68,13 @@ if [ -z "$block" ]; then
   done_ok
 fi
 
+# Not a bare mkdir: pin-config can be the first thing to write into the state dir
+# (a resumed run whose Step 0 ran in an earlier session), and that directory has
+# to ignore itself from its first file onward, not from whenever preflight lands.
+#
+# A refusal is honoured, not swallowed: the file about to be written carries the
+# project's board URL and gate commands, and without the ignore rule it lands in the
+# repository as an ordinary untracked file that the next `git add -A` commits.
 mkdir -p "$(dirname "$config")" 2>/dev/null || true
 
 # Persist the block. Both paths write to a temp first and are STATUS-CHECKED: if
@@ -81,25 +88,19 @@ if [ -f "$config" ] && [ "$(grep -c '^---[[:space:]]*$' "$config")" -ge 1 ]; the
   # unterminated fence (EOF closes it) - so a hand-edited one-fence config is
   # amended in place, never wrapped/orphaned. ENVIRON (not awk -v) carries the
   # block so a backslash in a gate command is written verbatim, not escape-processed.
-  tmp="$config.tmp.$$"
-  if ADD_BLOCK="$block" awk '
+  ADD_BLOCK="$block" atomic_replace "$config" awk '
       { print }
       /^---[[:space:]]*$/ && !inserted { printf "%s", ENVIRON["ADD_BLOCK"]; inserted = 1 }
-    ' "$config" >"$tmp" && mv "$tmp" "$config"; then :; else
-    rm -f "$tmp" 2>/dev/null || true
+    ' "$config" ||
     degrade config-write-failed "pin-config: could not write $config"
-  fi
 else
   # No frontmatter yet: create one, preserving any existing notes below it.
   existing=""
   [ -f "$config" ] && existing=$(cat "$config")
   suffix=""
   [ -n "$existing" ] && suffix=$'\n'"$existing"$'\n'
-  tmp="$config.tmp.$$"
-  if printf -- '---\n%s---\n%s' "$block" "$suffix" >"$tmp" && mv "$tmp" "$config"; then :; else
-    rm -f "$tmp" 2>/dev/null || true
+  atomic_replace "$config" printf -- '---\n%s---\n%s' "$block" "$suffix" ||
     degrade config-write-failed "pin-config: could not write $config"
-  fi
 fi
 
 emit PINNED "$(join_by , "${pinned[@]}")"

@@ -9,6 +9,10 @@
 #
 # Exit 0 with the machine block on success; 2 (STOP) only when gh is not
 # authenticated; 4 (degraded) when the config file cannot be parsed.
+#
+# The only things it writes are its own state directory (which ignores itself)
+# and, with --claim, the issue assignee. It fetches, but never prunes: a probe the
+# model runs on every task must not delete the user's remote-tracking refs.
 set -uo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -30,10 +34,19 @@ while [ "$#" -gt 0 ]; do
 done
 
 [ -n "$issue" ] || degrade missing-issue "preflight: issue number required"
+assert_numeric_issue "$issue" preflight
 
 warnings=()
 add_warning() { warnings+=("$1"); }
 
+# The config now lives inside the self-ignoring state dir, so a repo gains no
+# tracked file from this plugin. The pre-v3 sibling path is still read when the
+# canonical one is absent, so existing projects keep working untouched.
+#
+# Both are resolved against the MAIN checkout, never the cwd: on a resume the
+# caller is already inside the worktree, which has no state dir at all. A relative
+# path would find nothing there, report CONFIG_PRESENT=false, and let the run
+# proceed with the pinned base branch and board silently missing.
 # -- Config (line-based YAML subset: top-level scalars + one nesting level) ----
 CFG_BASE=""
 CFG_BOARD_URL=""
@@ -91,25 +104,110 @@ has_project_scope=false
 case ",$scopes," in *,project,*) has_project_scope=true ;; esac
 
 # -- repo identity ------------------------------------------------------------
-owner=$(gh repo view --json owner --jq .owner.login 2>/dev/null || printf '')
-repo=$(gh repo view --json name --jq .name 2>/dev/null || printf '')
-default_branch=$(gh repo view --json defaultBranchRef --jq .defaultBranchRef.name 2>/dev/null || printf 'main')
+# One call, three fields. Three separate `gh repo view` invocations cost three
+# process spawns and three API round trips on a probe that runs for every task.
+#
+# One field per LINE, never `@tsv`: jq's TSV encoder escapes the value it emits, so
+# a backslash comes back doubled and a tab comes back as the two characters `\t`,
+# and `read -r` - raw by definition - never undoes either. Raw lines round-trip the
+# value verbatim, and none of these three fields can contain a newline.
+mapfile -t _repo_fields < <(
+  gh repo view --json owner,name,defaultBranchRef \
+    --jq '.owner.login, .name, (.defaultBranchRef.name // "main")' 2>/dev/null
+)
+owner=${_repo_fields[0]:-}
+repo=${_repo_fields[1]:-}
+default_branch=${_repo_fields[2]:-main}
 
 # -- base + start-point -------------------------------------------------------
-git fetch origin --quiet 2>/dev/null || true
+# `auto` trusts the remote and nothing else. A local `dev` left behind after its
+# remote counterpart was deleted post-merge is a trap: it still looks like a
+# trunk, is arbitrarily stale, and would silently become the branch point for
+# everything downstream.
+#
+# The question is asked with `ls-remote` rather than by pruning: a Step-0 probe the
+# model runs on every task must not delete the user's remote-tracking refs as a
+# side effect, and the stale local ref is exactly what a non-pruned fetch leaves
+# behind. ls-remote reads the remote directly, so it is both read-only and correct.
+base_source=config
 if [ -z "$CFG_BASE" ] || [ "$CFG_BASE" = auto ]; then
-  if [ -n "$(git branch --list dev 2>/dev/null)" ] || [ -n "$(git branch -r --list origin/dev 2>/dev/null)" ]; then
+  # Three outcomes, three different answers - conflating any two of them is how
+  # this resolution went wrong before:
+  #
+  #   asked, and dev is there   -> dev, confirmed
+  #   asked, and dev is gone    -> the repo's real default branch
+  #   could not ask (offline)   -> a remote-tracking ref is a guess, not evidence;
+  #                                use it, but say the source is unverified
+  #
+  # The ref is spelled in full: `ls-remote --heads origin dev` fnmatches the tail of
+  # a ref name on slash boundaries, so it also answers yes for `release/dev`.
+  if ls_out=$(git ls-remote origin refs/heads/dev 2>/dev/null); then
+    if [ -n "$ls_out" ]; then
+      base=dev
+      base_source=auto-remote-dev
+    else
+      base=$default_branch
+      base_source=auto-default-branch
+      # Name the discrepancy rather than resolve it silently: on a repo that really
+      # does integrate on a local-only `dev`, this is the line that says so.
+      [ -n "$(git branch --list dev 2>/dev/null)" ] &&
+        add_warning "a local 'dev' exists but origin has no 'dev' - using '$base'; pin base_branch in the config if that is wrong"
+    fi
+  elif git show-ref --verify --quiet refs/remotes/origin/dev; then
     base=dev
+    base_source=auto-unverified-dev
+    add_warning "could not reach origin; using 'dev' from a stale remote-tracking ref, which may name a branch that was deleted upstream - verify before the PR is opened"
   else
-    base=main
+    base=$default_branch
+    base_source=auto-unverified-default
+    add_warning "could not reach origin; falling back to '$base' without confirming it"
+    [ -n "$(git branch --list dev 2>/dev/null)" ] &&
+      add_warning "a local 'dev' exists but could not be confirmed against origin - pin base_branch in the config if that is your integration branch"
   fi
 else
   base=$CFG_BASE
 fi
+
+# The start point must be a ref that RESOLVES, which is not the same question as
+# which branch is the base. Asking the remote can name a branch this clone has no
+# ref for at all - a --single-branch or --depth 1 clone fetches only the default
+# branch - and handing `git worktree add` a bare name it cannot resolve hard-stops
+# the run at invalid-start-point on a base that is perfectly reachable. So fetch
+# the one ref we need before giving up on it.
+# Fetch exactly the one ref the start point needs, rather than every branch on the
+# remote: base identity was already answered by ls-remote, and nothing else in the
+# pipeline reads other remote refs. --no-prune is explicit because `fetch.prune` in
+# the user's config would otherwise make this probe delete their tracking refs.
+#
+# Two refspecs, one invocation: the base is what Step 1 cuts from, and the default
+# branch is what `cleanup` switches onto before deleting the feature branch in the
+# in-place fallback. On a single-branch clone the latter has no local ref, so that
+# `git switch` fails and cleanup silently finishes on a detached HEAD. Both refs
+# travel over the same connection, so naming the second costs no extra round trip.
+#
+# The retry is not belt-and-braces: `git fetch` fails the WHOLE invocation the moment
+# any one refspec names a ref the remote does not have ("fatal: couldn't find remote
+# ref"), so a default branch that is absent on THIS origin - a fork, a mirror, a repo
+# whose GitHub default differs from what `origin` actually holds - would take the base
+# down with it, and Step 1 would hard-stop at invalid-start-point on a base that is
+# perfectly reachable. Retrying one refspec at a time costs an extra round trip only
+# on the path that was already broken.
+fetch_refs=("+refs/heads/$base:refs/remotes/origin/$base")
+[ -n "$default_branch" ] && [ "$default_branch" != "$base" ] &&
+  fetch_refs+=("+refs/heads/$default_branch:refs/remotes/origin/$default_branch")
+if ! git fetch origin --no-prune --quiet "${fetch_refs[@]}" 2>/dev/null; then
+  for _ref in "${fetch_refs[@]}"; do
+    git fetch origin --no-prune --quiet "$_ref" 2>/dev/null || true
+  done
+fi
 if git show-ref --verify --quiet "refs/remotes/origin/$base"; then
   start_point="origin/$base"
+elif git show-ref --verify --quiet "refs/heads/$base"; then
+  start_point="$base"
+  add_warning "base '$base' has no origin/ ref - cutting from the local branch, which nothing verifies"
 else
   start_point="$base"
+  add_warning "base '$base' resolves to no ref in this clone - Step 1 will stop at invalid-start-point; fetch it or pin a different base_branch"
 fi
 
 # -- gate command auto-detect (config overrides) ------------------------------
@@ -140,19 +238,42 @@ elif [ -f Makefile ]; then
   grep -qE '^(typecheck|check):' Makefile && det_typecheck='make typecheck'
 fi
 
+# Shell-harness projects - plugin repos, dotfiles, anything where a runner script
+# IS the suite. Checked after the manifests so a real one still wins, but it also
+# rescues a manifest that declares no test at all; without this the Step 6 gate
+# degrades to "no command" and the run proceeds with nothing verifying it.
+det_source_test=""
+if [ -z "$det_test" ]; then
+  for h in tests/run-tests.sh test/run-tests.sh scripts/run-tests.sh run-tests.sh; do
+    [ -f "$h" ] || continue
+    det_test="bash $h"
+    det_source_test=$h
+    break
+  done
+fi
+
 # Config wins over auto-detect; track the source per command.
 cmd_test=${CFG_TEST:-$det_test}
 cmd_typecheck=${CFG_TYPECHECK:-$det_typecheck}
 cmd_visual=${CFG_VISUAL:-$det_visual}
 cmd_smoke=${CFG_SMOKE:-$det_smoke}
 pick_source() { if [ -n "$1" ]; then echo config; else echo "$2"; fi; }
-src_test=$(pick_source "$CFG_TEST" "$det_source")
+src_test=$(pick_source "$CFG_TEST" "${det_source_test:-$det_source}")
 src_typecheck=$(pick_source "$CFG_TYPECHECK" "$det_source")
 
 # -- issue state / assignees / title ------------------------------------------
-issue_state=$(gh issue view "$issue" --json state --jq .state 2>/dev/null || printf '')
-issue_title=$(gh issue view "$issue" --json title --jq .title 2>/dev/null || printf '')
-assignees=$(gh issue view "$issue" --json assignees --jq '.assignees[].login' 2>/dev/null | paste -sd, - || printf '')
+# Same again for the issue, and one field per line for the same reason - here it is
+# not theoretical: `@tsv` turned a title like `Fix C:\Users\foo` into `C:\\Users\\foo`,
+# and that string is what names the branch and the PR. projectItems stays a separate
+# call below: it needs the `project` scope, and folding it in would fail the whole
+# request for a token without it.
+mapfile -t _issue_fields < <(
+  gh issue view "$issue" --json state,title,assignees \
+    --jq '.state, .title, ([.assignees[].login] | join(","))' 2>/dev/null
+)
+issue_state=${_issue_fields[0]:-}
+issue_title=${_issue_fields[1]:-}
+assignees=${_issue_fields[2]:-}
 
 # -- claim (assign to @me), guarding against stealing someone else's issue -----
 if [ "$claim" = 1 ]; then
@@ -176,7 +297,11 @@ if [ "$claim" = 1 ]; then
 fi
 
 # -- worktree state for issue-<N> ---------------------------------------------
-root=$(git rev-parse --show-toplevel 2>/dev/null || printf '')
+# Same root as the config and the state dir. `git rev-parse --show-toplevel`
+# returns the WORKTREE's own root when preflight runs from inside one, which would
+# compute `<repo>-worktrees/issue-N-worktrees/issue-N` and report `absent` for a
+# worktree the caller is standing in.
+root=$(repo_root)
 wt_state="absent"
 wt_path=""
 if [ -n "$root" ]; then
@@ -227,6 +352,7 @@ emit OWNER "$owner"
 emit REPO "$repo"
 emit DEFAULT_BRANCH "$default_branch"
 emit BASE "$base"
+emit BASE_SOURCE "$base_source"
 emit START_POINT "$start_point"
 emit CMD_TYPECHECK "$cmd_typecheck"
 emit CMD_TEST "$cmd_test"

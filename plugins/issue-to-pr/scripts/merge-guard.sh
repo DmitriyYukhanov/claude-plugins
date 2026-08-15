@@ -99,23 +99,31 @@ if [ ! -f "$marker" ]; then
   fi
 fi
 
-[ -f "$marker" ] || hook_deny "issue-to-pr: no approval marker for $branch. This is the plugin's own merge gate, not a GitHub restriction -- running approve.sh yourself is the normal unlock step, not a bypass. If the user already gave an unambiguous go-ahead, run: bash \"$SCRIPT_DIR/approve.sh\" \"$branch\" --quote \"<verbatim reply>\", then retry the merge. Otherwise ask first; only suggest a manual terminal merge if you have no go-ahead to quote."
+[ -f "$marker" ] || hook_deny "issue-to-pr: no approval marker for $branch. This is the plugin's own merge gate, not a GitHub restriction -- running approve.sh yourself is the normal unlock step, not a bypass. If the user already gave an unambiguous go-ahead, run: bash \"$SCRIPT_DIR/approve.sh\" \"$branch\" --quote \"<verbatim reply>\", then retry the merge as a SEPARATE call -- this hook reads the command line before it runs, so chaining approve.sh and the merge together is always checked before the marker exists and can never pass. Otherwise ask first; only suggest a manual terminal merge if you have no go-ahead to quote."
 used=$(marker_used "$marker")
 [ "$used" = false ] || hook_deny "issue-to-pr: the approval for $branch was already used (single-use). Re-approve with approve.sh to merge again."
 created=$(marker_str_field "$marker" created_at)
 epoch=$(epoch_of "$created")
 [ -n "$epoch" ] || hook_deny "issue-to-pr: the approval marker timestamp is unparseable. Re-approve."
 age=$(($(now_epoch) - epoch))
-[ "$age" -le 1800 ] || hook_deny "issue-to-pr: the approval for $branch is stale (>30 min old). Re-approve."
+[ "$age" -le "$APPROVAL_TTL" ] || hook_deny "issue-to-pr: the approval for $branch is stale (>$((APPROVAL_TTL / 60)) min old). Re-approve."
 marker_sha=$(marker_str_field "$marker" pr_head_sha)
 cur_sha=$(gh pr view "$branch" --json headRefOid --jq .headRefOid 2>/dev/null || printf '')
 if [ -z "$cur_sha" ] || [ "$marker_sha" != "$cur_sha" ]; then
   hook_deny "issue-to-pr: the PR head for $branch moved since approval. Re-approve so the marker matches the new head."
 fi
 
-# On the direct `gh pr merge` path, consume the marker now so one approval buys one
+# On the direct `gh pr merge` path, spend the approval now so one approval buys one
 # merge even without worktree.sh (which consumes on success for the sanctioned path).
+# Flag it rather than delete it: this hook runs BEFORE the command, so the merge may
+# still be interrupted or fail. A flagged marker makes the next attempt say "already
+# used" - the truth - where a deleted one would say "no approval marker" and send the
+# model off to re-approve a merge that may have already happened.
 if [ "$is_gh_merge" = 1 ]; then
-  marker_set_used "$marker"
+  # Deny if the approval cannot be spent. An unwritable state dir would otherwise
+  # leave the marker unused and fresh, authorising every further merge attempt in
+  # its 30-minute window - the single-use guarantee failing open, silently.
+  marker_set_used "$marker" ||
+    hook_deny "issue-to-pr: the approval for $branch could not be marked as used (is $(dirname "$marker") writable?). Refusing rather than allowing an approval that cannot be spent - fix the permissions and re-approve."
 fi
 hook_allow "approval marker for $branch is valid (present, unused, fresh, head-SHA matches)."
