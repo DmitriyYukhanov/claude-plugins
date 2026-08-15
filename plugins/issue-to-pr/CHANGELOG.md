@@ -5,6 +5,11 @@ All notable changes to the **issue-to-pr** plugin will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.2.1] - 2026-08-15
+
+### Fixed
+- Two shellcheck warnings that turned the release build red; no change to how the pipeline behaves
+
 ## [2.2.0] - 2026-08-15
 
 ### Added

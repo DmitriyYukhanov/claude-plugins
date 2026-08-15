@@ -501,7 +501,7 @@ cmd_teardown() {
   else
     cd "$root" 2>/dev/null || true
     remove_worktree "$wt_path" "$root" "$issue"
-    kept=branch-and-pr # teardown never touches the branch or PR
+    kept="branch-and-pr" # teardown never touches the branch or PR (quoted: shellcheck reads the dashes as arithmetic)
   fi
 
   emit REMOVED "$REMOVED"

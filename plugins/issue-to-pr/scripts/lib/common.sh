@@ -281,6 +281,7 @@ epoch_of() {
 # How long an approval stays valid. One definition: the sweeper that deletes markers
 # and the two gates that validate them have to agree, or preflight deletes approvals
 # the merge gate would still honour (or dead ones pile up).
+# shellcheck disable=SC2034  # read by merge-guard.sh and worktree.sh, which source this file
 APPROVAL_TTL=1800
 # One file per branch under the state dir, branch '/' -> '-'. The marker is
 # single-use and short-lived: a successful merge deletes it (marker_consume) and
