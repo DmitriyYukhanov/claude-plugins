@@ -2,12 +2,56 @@
 'use strict';
 
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const { validate } = require('./validator.cjs');
 const md = require('./markdown.cjs');
 
 const PLUGIN_ROOT = path.resolve(__dirname, '..');
 const ASSETS = path.join(PLUGIN_ROOT, 'assets');
+
+// Mermaid is not vendored (it's a 3+ MB bundle) — fetched from a pinned CDN on first need
+// and cached on disk, so later renders don't touch the network. The init call below is
+// this project's own snippet, not upstream mermaid's: 11.x moves the API to
+// `mermaid.default`, breaking this guard, so DO NOT bump MERMAID_VERSION without also
+// rewriting this snippet (see assets/THIRD_PARTY.md).
+const MERMAID_VERSION = '10.9.1';
+const MERMAID_CDN_URL = `https://cdn.jsdelivr.net/npm/mermaid@${MERMAID_VERSION}/dist/mermaid.min.js`;
+const MERMAID_INIT = ';if(typeof mermaid!=="undefined"&&mermaid.initialize){mermaid.initialize({startOnLoad:true,securityLevel:"strict",theme:"default"});}';
+
+// Prefer Claude Code's own config dir (survives a `/plugin update`, which resets the
+// plugin's own install directory); fall back to the OS temp dir if it isn't writable.
+function mermaidCacheDir() {
+  const home = process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude');
+  try {
+    const dir = path.join(home, 'cache', 'learning-guide');
+    fs.mkdirSync(dir, { recursive: true });
+    return dir;
+  } catch (e) {
+    const dir = path.join(os.tmpdir(), 'learning-guide-cache');
+    fs.mkdirSync(dir, { recursive: true });
+    return dir;
+  }
+}
+
+// trimEnd, so the bundle and the init call are separated by exactly one newline whatever
+// the source ended with. That reproduces the vendored file byte for byte: a tour rendered
+// after this change is identical to one rendered before it.
+function withInit(lib) { return lib.trimEnd() + '\n' + MERMAID_INIT + '\n'; }
+
+async function getMermaidLib() {
+  const cachePath = path.join(mermaidCacheDir(), `mermaid-${MERMAID_VERSION}.min.js`);
+  if (fs.existsSync(cachePath)) return withInit(fs.readFileSync(cachePath, 'utf8'));
+  if (typeof fetch !== 'function')
+    throw new Error(`Node ${process.version} has no global fetch; upgrade to Node 18+ to render Mermaid diagrams`);
+  let res;
+  try { res = await fetch(MERMAID_CDN_URL); }
+  catch (e) { throw new Error(`could not reach ${MERMAID_CDN_URL} to download Mermaid ${MERMAID_VERSION} (cache: ${cachePath}): ${e.message}`); }
+  if (!res.ok) throw new Error(`Mermaid ${MERMAID_VERSION} download failed: HTTP ${res.status} from ${MERMAID_CDN_URL} (cache: ${cachePath})`);
+  const body = await res.text();
+  try { fs.writeFileSync(cachePath, body, 'utf8'); } catch (e) { /* best-effort cache; still render this run */ }
+  return withInit(body);
+}
 
 function die(msg, code) { process.stderr.write(msg + '\n'); process.exit(code || 1); }
 function warn(msg) { process.stderr.write(msg + '\n'); }
@@ -286,7 +330,7 @@ function fillTemplate(template, vars) {
   );
 }
 
-function main() {
+async function main() {
   const args = parseArgs(process.argv);
   if (!args.spec) die('usage: render.cjs <spec-path> [--output-dir <dir>]');
 
@@ -388,7 +432,10 @@ function main() {
     : renderedMermaidCount > 0;
 
   let mermaidLib = '';
-  if (includeMermaid) mermaidLib = fs.readFileSync(path.join(ASSETS, 'mermaid.min.js'), 'utf8');
+  if (includeMermaid) {
+    try { mermaidLib = await getMermaidLib(); }
+    catch (e) { die(`could not obtain Mermaid ${MERMAID_VERSION}: ${e.message}`); }
+  }
   const mermaidBlock = includeMermaid ? `<script>${inlineJs(mermaidLib)}</script>` : '';
 
   const tocItems = buildToc(navItems);
@@ -428,7 +475,7 @@ function main() {
   if (!fs.existsSync(readmePath))
     fs.writeFileSync(readmePath, buildReadme(spec, spec.lang), 'utf8');
 
-  // R7 — soft payload warning ignores the vendored mermaid bundle (user can't shrink it).
+  // R7 — soft payload warning ignores the mermaid bundle (user can't shrink it).
   const cap = (spec.renderer || {}).max_inline_payload_kb;
   if (cap != null) {
     const mermaidBytes = includeMermaid ? Buffer.byteLength(mermaidLib, 'utf8') : 0;
@@ -443,4 +490,4 @@ function main() {
   );
 }
 
-main();
+main().catch(e => die(e && e.message ? e.message : String(e)));

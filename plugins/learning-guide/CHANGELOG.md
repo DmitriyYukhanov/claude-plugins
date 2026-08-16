@@ -5,6 +5,12 @@ All notable changes to the **learning-guide** plugin will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.1.0] - 2026-08-16
+
+### Changed
+- Mermaid is downloaded on first use and cached instead of shipping inside the plugin, which takes 3.2 MB off every install
+- Rendering a tour with diagrams now needs network access once per machine; the tour itself is unchanged, with Mermaid still inlined and still rendering offline
+
 ## [2.0.0] - 2026-07-14
 
 ### Removed
