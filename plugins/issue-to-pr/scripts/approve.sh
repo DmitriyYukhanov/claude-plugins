@@ -41,8 +41,7 @@ root=$(repo_root)
 # Canonicalize to the PR's branch name so a PR-number ref and its branch name key the
 # same marker that merge-guard.sh checks. Best-effort: if this fails, fall through with
 # the raw ref -- the sha read right below still degrades cleanly on a bad ref.
-resolved=$(gh pr view "$branch" --json headRefName --jq .headRefName 2>/dev/null || printf '')
-[ -n "$resolved" ] && branch=$resolved
+branch=$(canonical_branch "$branch")
 marker=$(marker_path "$root" "$branch")
 
 sha=$(gh pr view "$branch" --json headRefOid --jq .headRefOid 2>/dev/null || printf '')

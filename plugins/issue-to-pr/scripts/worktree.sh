@@ -101,13 +101,22 @@ detect_deps() { # dir -> sets INSTALL_HINT
   fi
 }
 
-# salvage_artifacts wt salvage_dir issue -> sets SALVAGED. Reports a destination only
-# when something actually landed in it: claiming a salvage that copied nothing is what
-# makes the caller comfortable deleting the originals.
+# salvage_artifacts wt salvage_dir issue root -> sets SALVAGED. Reports a destination
+# only when something actually landed in it: claiming a salvage that copied nothing is
+# what makes the caller comfortable deleting the originals.
+#
+# A relative destination is resolved against the MAIN CHECKOUT, never cwd: both callers
+# are commonly run from inside the worktree, so a cwd-relative dir would be created in
+# the one directory the very next step deletes - the salvage would be reported and then
+# thrown away with the tree it was rescuing files from.
 salvage_artifacts() {
   SALVAGED=""
-  local wt=$1 dst=$2 n=$3 f src copied=0
+  local wt=$1 dst=$2 n=$3 root=$4 f src copied=0
   [ -n "$dst" ] || return 0
+  case "$dst" in
+    /* | ?:/* | ?:\\*) : ;; # already absolute (POSIX, or a Windows drive letter)
+    *) dst="$root/$dst" ;;
+  esac
   mkdir -p "$dst" 2>/dev/null || return 0
   for f in design.md progress.md state.json step.log; do
     src="$wt/tmp/task-$n/$f"
@@ -287,6 +296,11 @@ cmd_merge() {
   root=$(repo_root)
   [ -n "$root" ] || degrade not-a-git-repo "worktree merge: not inside a git repository"
 
+  # Every gh call below accepts a PR number, but the marker is keyed by BRANCH NAME.
+  # Resolve the ref the way approve.sh and merge-guard.sh do, or `merge --branch 42`
+  # hunts for an approval that was written under the branch name and stops on it.
+  branch=$(canonical_branch "$branch")
+
   # -- 1. approval marker: exists  and  unused  and  fresh (<30m)  and  head-SHA match ------
   marker=$(marker_path "$root" "$branch")
   [ -f "$marker" ] || stop no-valid-approval "issue-to-pr: no approval marker for $branch. Run: bash \"$SCRIPT_DIR/approve.sh\" \"$branch\" --quote \"<verbatim reply>\" after judging the reply a go-ahead, then re-run merge."
@@ -415,6 +429,12 @@ cmd_cleanup() {
   root=$(repo_root)
   [ -n "$root" ] || degrade not-a-git-repo "worktree cleanup: not inside a git repository"
 
+  # Same resolution as merge, and for a sharper reason: everything past the gh
+  # precondition below is git, which knows nothing about PR numbers. Given a raw
+  # number, `gh pr view` would report MERGED and then `git branch -D` and the marker
+  # lookup would both silently miss, exiting 0 with the merged branch still there.
+  branch=$(canonical_branch "$branch")
+
   # Hard precondition: the PR must be MERGED. Deleting an open PR's branch is
   # thereby mechanically impossible.
   pr_state=$(gh pr view "$branch" --json state --jq .state 2>/dev/null || printf '')
@@ -425,7 +445,10 @@ cmd_cleanup() {
   wt_path=${reg:-$(compute_wt_path "$root" "$issue")}
 
   # Salvage lasting artifacts before the worktree (and its gitignored files) go.
-  salvage_artifacts "$wt_path" "$salvage_to" "$issue"
+  salvage_artifacts "$wt_path" "$salvage_to" "$issue" "$root"
+  # Reported BEFORE the removal, which flushes the buffer on its way out when the tree
+  # is dirty: a caller whose salvage DID happen would otherwise never be told about it.
+  emit SALVAGED "${SALVAGED:-}"
 
   # Get out of the worktree before removing it.
   cd "$root" 2>/dev/null || true
@@ -466,7 +489,6 @@ cmd_cleanup() {
   emit REMOVED "$REMOVED"
   emit DELETED_LOCAL "$deleted_local"
   emit DELETED_REMOTE "$deleted_remote"
-  emit SALVAGED "${SALVAGED:-}"
   [ -n "$LEFTOVER" ] && emit LEFTOVER_DIR "$LEFTOVER"
   done_ok
 }
@@ -478,7 +500,8 @@ cmd_teardown() {
   reg=$(registered_wt "$issue")
 
   wt_path=${reg:-$(compute_wt_path "$root" "$issue")}
-  salvage_artifacts "$wt_path" "$salvage_to" "$issue"
+  salvage_artifacts "$wt_path" "$salvage_to" "$issue" "$root"
+  emit SALVAGED "${SALVAGED:-}" # before the removal, which can stop and flush (see cleanup)
 
   REMOVED=false
   LEFTOVER=""
@@ -492,7 +515,6 @@ cmd_teardown() {
   fi
 
   emit REMOVED "$REMOVED"
-  emit SALVAGED "${SALVAGED:-}"
   [ -n "$LEFTOVER" ] && emit LEFTOVER_DIR "$LEFTOVER"
   emit KEPT "$kept"
   done_ok

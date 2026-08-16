@@ -268,6 +268,18 @@ APPROVAL_TTL=1800
 # JSON is hand-written/parsed (no jq): quote is escaped and placed last so a
 # hostile quote cannot spoof the scalar fields parsed before it.
 
+# canonical_branch REF - the branch a gh ref names: a PR number resolves to that PR's
+# head branch, a branch name resolves to itself. An unresolvable ref (no such PR,
+# offline, old gh) comes back UNCHANGED so the caller's own error path still fires.
+# All three gates key the marker through here - approve.sh writing it, merge-guard.sh
+# and worktree.sh merge reading it - because `gh pr merge 42` must find the approval
+# that `approve.sh 42` wrote under the branch name, not miss it and re-ask.
+canonical_branch() {
+  local resolved
+  resolved=$(gh pr view "$1" --json headRefName --jq .headRefName 2>/dev/null) || resolved=""
+  printf '%s' "${resolved:-$1}"
+}
+
 marker_path() { # root branch
   printf '%s/.claude/issue-to-pr/approval-%s.json' "$1" "$(printf '%s' "$2" | tr '/' '-')"
 }

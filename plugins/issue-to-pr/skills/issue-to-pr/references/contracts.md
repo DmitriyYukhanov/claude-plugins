@@ -53,7 +53,8 @@ Stops: `bad-checkout-state · stale-unregistered-dir · invalid-start-point · p
 exit `3` → cut the branch in place with `git switch -c <b> <ref>`.
 
 `worktree.sh merge <N> --branch <b> [--ladder-attempt <n>]` — Step 11. The **only** path that
-runs `gh pr merge`. Self-validates the approval marker (present · unused · fresh <30m · head-SHA
+runs `gh pr merge`. `<b>` may be a PR number; it resolves to that PR's branch first, so it keys
+the same marker `approve.sh` wrote whichever form either was given. Self-validates the approval marker (present · unused · fresh <30m · head-SHA
 matches), pushes, then runs the merge-failure ladder (sec 6.3): a structured pre-check classifies
 the PR and emits a typed stop per rung; a clean base merge auto-updates + refreshes the marker +
 merges in one call (`LADDER_STEP=base-merged-refreshed`). On success consumes the marker and
@@ -65,8 +66,10 @@ marker-refresh-failed · checks-pending · merge-ladder-exhausted · merge-faile
 stop, nothing is cleaned up.
 
 `worktree.sh cleanup <N> --branch <b> [--salvage-to <dir>]` — Step 12, after a successful merge.
+`<b>` may be a PR number here too (everything past the precondition is git, which cannot read one).
 Hard precondition: the PR is `MERGED` (else stop `pr-not-merged` — deleting an open PR's branch is
-mechanically impossible). Salvages `tmp/task-<N>/{design,progress,state}` first, removes the
+mechanically impossible). Salvages `tmp/task-<N>/{design,progress,state}` first — a relative
+`--salvage-to` lands under the **main checkout**, not cwd, so it survives the removal — removes the
 worktree (never `--force`; tracked dirtiness → stop `dirty-tracked-files`), deletes the local +
 remote branch, removes the marker. Keys: `REMOVED DELETED_LOCAL DELETED_REMOTE SALVAGED`, plus
 `LEFTOVER_DIR` if a directory could not be removed. **Run it with your shell's cwd in

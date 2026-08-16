@@ -92,8 +92,8 @@ marker=$(marker_path "$root" "$branch")
 # (or vice versa). Resolve to the canonical branch and retry once before denying, so
 # `gh pr merge <PR#>` and `gh pr merge <branch>` always agree on one marker file.
 if [ ! -f "$marker" ]; then
-  resolved=$(gh pr view "$branch" --json headRefName --jq .headRefName 2>/dev/null || printf '')
-  if [ -n "$resolved" ] && [ "$resolved" != "$branch" ]; then
+  resolved=$(canonical_branch "$branch")
+  if [ "$resolved" != "$branch" ]; then
     branch=$resolved
     marker=$(marker_path "$root" "$branch")
   fi
