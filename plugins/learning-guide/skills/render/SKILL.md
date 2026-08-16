@@ -1,11 +1,11 @@
 ---
 name: render
-description: Renders an existing tour-spec.json to a self-contained interactive HTML guide via the bundled Node renderer. Use when the user has hand-edited a tour-spec.json, when learning-guide:analyze hands off after drafting, or when the user explicitly asks to "render the tour", "regenerate the HTML", or "update the embedded sources". Idempotent for generated artifacts; preserves user-edited README and tour-spec.json.
+description: Renders an existing tour-spec.json to a single-file interactive HTML guide via the bundled Node renderer. Use when the user has hand-edited a tour-spec.json, when learning-guide:analyze hands off after drafting, or when the user explicitly asks to "render the tour", "regenerate the HTML", or "update the embedded sources". Idempotent for generated artifacts; preserves user-edited README and tour-spec.json.
 ---
 
 # Render — HTML Generation
 
-Take a `tour-spec.json` and produce a self-contained, offline-first `index.html`. This skill is deterministic; the heavy lifting is in `${CLAUDE_PLUGIN_ROOT}/scripts/render.cjs`.
+Take a `tour-spec.json` and produce a single-file `index.html`. This skill is deterministic; the heavy lifting is in `${CLAUDE_PLUGIN_ROOT}/scripts/render.cjs`.
 
 ## Trigger phrases
 

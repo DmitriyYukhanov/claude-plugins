@@ -26,8 +26,11 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/render.cjs" <tour-spec.json> [--output-dir <
 | `outside project root` | `embedded_sources[].path` resolves outside the spec's parent dir (including via a symlink) | move the source under the spec's directory OR widen with `.learning-guide/policy.json` `{"project_root":"<rel>"}` |
 | `template_compatibility_version` | user `template.html` override mismatched | update `tour-spec.renderer.template_compatibility_version` to match the value in `<!-- template_compatibility_version: N -->` at the top of the override |
 | `schema_version` | spec uses an unsupported major version | regenerate via `analyze` or upgrade/downgrade the plugin |
-| `payload` | inlined content exceeds `max_inline_payload_kb` | soft warning only. The Mermaid bundle is excluded from the count, so this reflects content + embedded sources — trim oversized embedded sources or raise the cap |
-| `could not obtain Mermaid` / `could not reach` / `download failed` | a spec with a diagram needs Mermaid and neither the disk cache nor the CDN fetch succeeded | check network access; the renderer fetches `mermaid@10.9.1` from jsdelivr on first use per machine and caches it — retry once connectivity is back, or set `renderer.include_mermaid: false` to render without diagrams |
+| `payload` | inlined content exceeds `max_inline_payload_kb` | soft warning only. Mermaid loads from a CDN rather than being inlined, so this measures content + embedded sources — trim oversized embedded sources or raise the cap |
+
+Diagrams blank in the browser? The tour loads Mermaid from jsdelivr, so a reader with no
+network sees the diagram source and nothing drawn. Everything else in the tour still works.
+Set `renderer.include_mermaid: false` to render without diagrams at all.
 
 ## Quick recipes
 

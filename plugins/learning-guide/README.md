@@ -1,6 +1,6 @@
 # learning-guide
 
-Generate self-contained, offline-first, interactive HTML learning guides for any artifact.
+Generate single-file, interactive HTML learning guides for any artifact.
 
 ## Installation
 

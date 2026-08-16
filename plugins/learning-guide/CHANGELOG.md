@@ -5,6 +5,15 @@ All notable changes to the **learning-guide** plugin will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [3.0.0] - 2026-08-16
+
+### Changed
+- Breaking: a generated tour loads Mermaid from a CDN instead of carrying it inside the file, which takes a tour with diagrams from 3.3 MB down to about 30 KB. Reading one now needs network access to draw its diagrams; navigation, quizzes, progress and embedded sources still work with none
+- The plugin no longer ships the 3.2 MB Mermaid bundle, so installing it pulls that much less
+
+### Security
+- The Mermaid tag carries a Subresource Integrity hash, so a reader's browser refuses to run the file if the CDN ever serves different bytes
+
 ## [2.1.0] - 2026-08-16
 
 ### Changed

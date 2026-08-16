@@ -34,7 +34,7 @@ You can also run `/plugin` to browse and install interactively.
 | [humanizer](#humanizer) | writing | Remove AI-writing patterns from English and Russian text, with automatic language detection |
 | [implementation-prd](#implementation-prd) | productivity | Turn feature requests into build-ready spec bundles with PRDs, contracts, schemas, and test plans |
 | [issue-to-pr](#issue-to-pr) | workflow | Drive a GitHub issue or Project board card through a worktree-isolated, gated pipeline to an approved, merged PR |
-| [learning-guide](#learning-guide) | development | Generate self-contained, interactive HTML learning guides that work offline |
+| [learning-guide](#learning-guide) | development | Generate single-file, interactive HTML learning guides |
 | [lsp-setup](#lsp-setup) | development | Detect project languages and set up LSP servers and Claude Code LSP plugins |
 | [python-dev](#python-dev) | development | Python development workflow: architecture, coding guidelines, pytest patterns, and a review agent |
 | [tg-alerts](#tg-alerts) | operations | Add Telegram error and alert notifications to any project, with guided setup and reference implementations |
@@ -128,7 +128,7 @@ Drive a single GitHub issue from triage to a merge-ready pull request through a 
 
 ### learning-guide
 
-Generate self-contained, offline-first, interactive HTML learning guides for any artifact:
+Generate single-file, interactive HTML learning guides for any artifact:
 
 - **`analyze`** skill — reads input artifact(s) (codebase, planning session, refactor plan, generic doc), writes a `tour-spec.json` describing sections, embedded sources, cross-refs, quizzes, and external link maps. Hands off to render.
 - **`render`** skill — runs the bundled zero-dependency Node renderer to produce `index.html` plus launcher scripts. Idempotent for generated artifacts; re-runnable from the shell after hand-edits to the spec.

@@ -1,8 +1,8 @@
 # Third-party assets
 
-Both libraries end up fully inlined into the generated `index.html`, so the tour itself
-stays offline-first regardless of how the library reached the renderer. markdown-it is
-vendored and committed. mermaid is not — see below.
+The two libraries reach the reader by different routes. markdown-it is vendored here and
+runs at build time only. Mermaid is not vendored at all: the generated tour loads it from a
+CDN in the reader's browser.
 
 ## markdown-it
 
@@ -17,13 +17,17 @@ vendored and committed. mermaid is not — see below.
 - Version: 10.9.1
 - License: MIT
 - Source: https://github.com/mermaid-js/mermaid
-- **Not vendored.** `scripts/render.cjs` downloads it from a pinned CDN URL
-  (`https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js`) the first time a spec
-  needs it, and caches the file on disk (`$CLAUDE_CONFIG_DIR/cache/learning-guide/`, or the
-  OS temp dir if that isn't writable) so every later render is offline again. Rendering a
-  tour with a diagram for the very first time on a machine needs network access once; the
-  generated `index.html` itself still has mermaid fully inlined and needs no network to view.
-- Inlined into `index.html` only when `body_md` contains a diagram.
+- **Not vendored, not inlined.** `scripts/render.cjs` writes a pinned `<script src>` tag
+  (`https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js`) into `index.html`,
+  only when the tour actually contains a diagram. This is what keeps a tour around 30 KB
+  instead of 3.3 MB. The cost: **a tour needs network access to draw its diagrams.**
+  Everything else in it — navigation, quizzes, progress, embedded sources — still works with
+  no network.
+- The tag carries a Subresource Integrity hash and `crossorigin="anonymous"`, so the browser
+  runs the file only if its bytes match `MERMAID_SRI` in render.cjs. jsdelivr serves
+  `Access-Control-Allow-Origin: *`, which is what makes that work from a `file://` page.
+  Recompute the hash if the version changes:
+  `openssl dgst -sha384 -binary mermaid.min.js | openssl base64 -A`
 - **Do not bump MERMAID_VERSION in render.cjs to mermaid 11.x without rewriting the init
   snippet:** 11.x ships an IIFE bundle that exposes the API under `mermaid.default`, so the
   `typeof mermaid !== 'undefined' && mermaid.initialize` guard used by the renderer silently
