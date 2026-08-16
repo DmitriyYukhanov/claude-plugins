@@ -7,8 +7,8 @@ decision. This file is the reference: what to call, when, and how to read the re
 
 ## How the scripts talk back
 
-- **Output:** each script prints `KEY=VALUE` lines on stdout (the machine block). Pass `--json`
-  for one flat JSON object with the same keys. Lists are comma-joined strings. Human hints go to
+- **Output:** each script prints `KEY=VALUE` lines on stdout (the machine block); board-sync.sh
+  alone prints a JSON object. Lists are comma-joined strings. Human hints go to
   stderr. A green run is a handful of lines — that printed block IS your
   verification-before-completion proof.
 - **Uniform exit codes:** `0` proceed · `2` stop-and-ask (reason in `STOP_REASON=`, a hint on
@@ -30,7 +30,7 @@ decision. This file is the reference: what to call, when, and how to read the re
 
 ## preflight.sh — Step 0 probe (run once, from the main checkout)
 
-`preflight.sh <N> [--claim] [--json] [--config <path>]`
+`preflight.sh <N> [--claim] [--config <path>]`
 
 Collapses auth, repo identity, base resolution, gate-command detection, issue state, worktree
 state, and board membership into one call. `--claim` assigns the issue to you (warns, does not
@@ -47,7 +47,7 @@ Exit `2` gh-auth-failed · `4` config-parse-failed / missing-issue.
 
 `worktree.sh ensure  <N> --branch <b> --start-point <ref>` — Step 1. Creates / resumes /
 reattaches the `../<repo>-worktrees/issue-<N>` worktree. Keys: `STATE`
-(`CREATED|REATTACHED|RESUMED`), `WT_PATH ORIGINAL_ROOT BRANCH DEPS_MANIFEST INSTALL_HINT
+(`CREATED|REATTACHED|RESUMED`), `WT_PATH ORIGINAL_ROOT BRANCH INSTALL_HINT
 PR_STATE`. You run the install (`INSTALL_HINT`) visibly, piping it through `run-gates.sh`.
 Stops: `bad-checkout-state · stale-unregistered-dir · invalid-start-point · pr-already-merged`;
 exit `3` → cut the branch in place with `git switch -c <b> <ref>`.
@@ -118,7 +118,7 @@ forms (still always exit 0): `board-sync.sh <owner/repo> --create-card "<title>"
 
 ## review-check.sh — GitHub review ingestion (v2.0)
 
-`review-check.sh <b> [--json]` — Step 11 entry. Emits `REVIEW_STATE=clear | changes_requested |
+`review-check.sh <b>` — Step 11 entry. Emits `REVIEW_STATE=clear | changes_requested |
 unresolved_threads` (from GitHub's own `reviewDecision` plus a best-effort unresolved-thread
 count), `UNRESOLVED_THREADS`, `READ_OK`. `changes_requested` / `unresolved_threads` routes through
 the change-request path, so an in-session go-ahead never merges over unaddressed GitHub review.
@@ -126,20 +126,20 @@ Best-effort: a failed read reports `clear` + `READ_OK=false` and still exits 0.
 
 ## triage-evidence.sh — objective triage signals (no tier decision)
 
-`triage-evidence.sh <N> [--json]` — Step 2. Emits `LABELS BODY_LENGTH CHECKLIST_ITEMS
+`triage-evidence.sh <N>` — Step 2. Emits `LABELS BODY_LENGTH CHECKLIST_ITEMS
 REF_PATHS_EXIST REF_PATHS_MISSING NEW_THING_HITS LINKED_ISSUES TITLE` from the issue. It reads
 signals and never picks a tier; pipe it into `tier-select.sh`, which does. Exit `4` if the issue
 cannot be read.
 
 ## tier-select.sh - map triage signals to a tier (v1.3.0)
 
-`triage-evidence.sh <N> | tier-select.sh [--tier trivial|standard|complex|epic] [--json]`
+`triage-evidence.sh <N> | tier-select.sh [--tier trivial|standard|complex|epic]`
 Emits `TIER` + `TIER_REASON`. Deterministic rubric (full table + boundaries in
 `tier-matrix.md`); `--tier` overrides; borderline picks higher. Always exit 0.
 
 ## sensitive-paths.sh - security overlay trigger (v1.3.0)
 
-`sensitive-paths.sh --base <BASE> [--json]` -> `SENSITIVE=true|false` + `MATCHED=`. Run from the
+`sensitive-paths.sh --base <BASE>` -> `SENSITIVE=true|false` + `MATCHED=`. Run from the
 worktree; `--base` collects the changed files itself - committed (three-dot against the base),
 edited-not-committed, and untracked - because the overlay runs at Step 7, before the Step 9
 commit. Segment/stem-exact matching (auth, crypto, secrets, payment, migrations, plus

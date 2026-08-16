@@ -88,7 +88,7 @@ const proposals = (await parallel(ANGLES.map(angle => () =>
 
 if (proposals.length === 0) {
   // Total proposer failure: signal the SKILL to use its next fallback.
-  return { design_md: '', rejected_alternatives: [], open_questions: [], received_issue: issue, _failed: 'no proposals produced' }
+  return { design_md: '', rejected_alternatives: [], open_questions: [], received_issue: issue }
 }
 
 const proposalsText = proposals
@@ -148,6 +148,6 @@ const judge = await agent(
 
 if (!judge || !judge.design_md) {
   // Judge failed or produced nothing usable: signal the SKILL's next fallback.
-  return { design_md: '', rejected_alternatives: [], open_questions: [], received_issue: issue, _failed: 'judge produced no design' }
+  return { design_md: '', rejected_alternatives: [], open_questions: [], received_issue: issue }
 }
 return { ...judge, received_issue: issue }

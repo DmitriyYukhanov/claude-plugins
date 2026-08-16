@@ -50,13 +50,6 @@ test_sp_case_insensitive() {
   assert_key "$OUT" SENSITIVE true
 }
 
-test_sp_json() {
-  sp_run "src/auth/x.py"
-  # re-run with --json
-  OUT=$(printf '%s\n' "src/auth/x.py" | bash "$ITP_SCRIPTS/sensitive-paths.sh" --json 2>/dev/null)
-  assert_contains "$OUT" '"SENSITIVE":"true"'
-}
-
 test_sp_unterminated_last_line() {
   # A path with NO trailing newline (e.g. a raw `git diff` tail) must still be
   # classified - the read loop keeps the final unterminated line.

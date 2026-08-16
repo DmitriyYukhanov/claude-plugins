@@ -45,13 +45,6 @@ test_gates_empty_command_degrades_not_green() {
   assert_key "$OUT" DEGRADED_REASON empty-gate-command
 }
 
-test_gates_json_output() {
-  run_script run-gates.sh --json --log-dir "$TEST_TMPDIR/logs" --gate 'ok=true'
-  assert_rc 0
-  assert_contains "$OUT" '"GATE_OK_EXIT":"0"'
-  assert_contains "$OUT" '"GATES_OK":"true"'
-}
-
 test_gates_key_naming_normalizes_hyphen() {
   run_script run-gates.sh --log-dir "$TEST_TMPDIR/logs" --gate 'type-check=true'
   assert_rc 0

@@ -30,7 +30,6 @@ test_wt_ensure_creates() {
   assert_rc 0
   assert_key "$OUT" STATE CREATED
   assert_key "$OUT" BRANCH feat/issue-6-new
-  assert_key "$OUT" DEPS_MANIFEST none
   assert_key_present "$OUT" WT_PATH
 }
 

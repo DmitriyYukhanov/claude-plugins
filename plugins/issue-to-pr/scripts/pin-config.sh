@@ -24,7 +24,6 @@ while [ "$#" -gt 0 ]; do
     --typecheck) val_typecheck=${2:-}; shift 2 2>/dev/null || shift "$#" ;;
     --visual) val_visual=${2:-}; shift 2 2>/dev/null || shift "$#" ;;
     --smoke) val_smoke=${2:-}; shift 2 2>/dev/null || shift "$#" ;;
-    --json) enable_json; shift ;;
     -*) warn "pin-config: ignoring unknown flag: $1"; shift ;;
     *) shift ;;
   esac

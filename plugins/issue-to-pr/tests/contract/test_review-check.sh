@@ -39,8 +39,3 @@ test_review_missing_branch_degrades() {
   assert_key "$OUT" DEGRADED_REASON missing-branch
 }
 
-test_review_json_mode() {
-  use_fake_gh review-changes-requested
-  OUT=$(bash "$ITP_SCRIPTS/review-check.sh" feat/issue-6-x --json 2>/dev/null)
-  assert_contains "$OUT" '"REVIEW_STATE":"changes_requested"'
-}

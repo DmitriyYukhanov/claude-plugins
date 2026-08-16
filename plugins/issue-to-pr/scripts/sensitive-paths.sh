@@ -7,8 +7,8 @@
 # extension stripped), NOT raw substring - so auth/, db/migrations/001.sql and .env
 # trip, while authors.py, thesaurus.md and payment_ui_copy.md do not (design D2).
 #
-#   sensitive-paths.sh --base <ref> [--json]      # collects the changed files itself
-#   git diff --name-only "$BASE"...HEAD | sensitive-paths.sh [--json]
+#   sensitive-paths.sh --base <ref>      # collects the changed files itself
+#   git diff --name-only "$BASE"...HEAD | sensitive-paths.sh
 #
 # Emits SENSITIVE=true|false and MATCHED=<comma-list of matching paths>.
 set -uo pipefail
@@ -20,7 +20,6 @@ source "$SCRIPT_DIR/lib/common.sh"
 base_ref=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
-    --json) enable_json; shift ;;
     --base) base_ref=${2:-}; shift 2 2>/dev/null || shift "$#" ;;
     *) shift ;;
   esac

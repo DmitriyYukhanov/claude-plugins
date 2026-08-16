@@ -11,7 +11,7 @@ SKILL reads `TIER` and routes each step accordingly.
 |---|---|---|---|---|
 | Examples | typo, copy change, config value | bugfix, small feature in known code | new behavior / multi-file / design choices | new service or product, "from scratch" |
 | Session effort | suggest `low` | default | `high` | `high` |
-| Research (`skills/research`) | - | - | if unknowns | per child |
+| Research (Explore fork) | - | - | if unknowns | per child |
 | Design | - | mini-design in the PR body | **design-panel** or `/cross-review` | **decompose** into children (`epic.md`) |
 | Plan | - | inline checklist | writing-plans | per child |
 | Tests / gates | always | always | always | per child |

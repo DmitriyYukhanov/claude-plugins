@@ -6,8 +6,8 @@
 #
 # Output contract (spec sec 3):
 #   - Scripts buffer KEY=VALUE pairs with emit(), then flush_output() prints them
-#     as `KEY=VALUE` lines (default) or a single flat JSON object (when --json is
-#     set). Lists are comma-joined string values in both modes ("same keys").
+#     as `KEY=VALUE` lines. Lists are comma-joined string values. board-sync.sh is
+#     the one exception and prints a JSON object instead (enable_json).
 #   - Human-readable hints go to stderr via warn(); the machine block stays clean.
 # Exit-code contract (uniform):
 #   0 proceed | 2 stop-and-ask (STOP_REASON=) | 3 sandbox/permission fallback
@@ -32,8 +32,8 @@ OUTPUT_JSON=0
 _ITP_OUT_KEYS=()
 _ITP_OUT_VALS=()
 
-# enable_json - switch subsequent flush_output to JSON-object mode. Scripts call
-# this on --json (keeps the OUTPUT_JSON assignment + read in one file for lint).
+# enable_json - switch flush_output to JSON-object mode. board-sync.sh is the only
+# caller; every other script speaks KEY=VALUE.
 enable_json() { OUTPUT_JSON=1; }
 
 # emit KEY VALUE - buffer one machine-block pair.
@@ -114,11 +114,6 @@ done_ok() {
 # warn MESSAGE... - human hint to stderr (never pollutes the machine block).
 warn() {
   printf '%s\n' "$*" >&2
-}
-
-# has_cmd NAME - true if NAME is on PATH.
-has_cmd() {
-  command -v "$1" >/dev/null 2>&1
 }
 
 # join_by SEP ITEM... - join arguments with SEP (empty string for zero items).
@@ -220,7 +215,7 @@ assert_numeric_issue() {
 # otherwise. Five sites hand-rolled this dance and two of them used a `.tmp` name
 # with no PID, so two concurrent runs on one marker clobbered each other's temp.
 # Every writer of a file this plugin owns goes through here now: marker_set_used,
-# marker_refresh, write_ignore_rule and both of pin-config's config writes.
+# marker_refresh and both of pin-config's config writes.
 atomic_replace() {
   local file=$1 tmp="$1.tmp.$$"
   shift
@@ -232,17 +227,6 @@ atomic_replace() {
     return 1
   fi
 }
-
-# write_ignore_rule DIR - install the `*` rule that makes DIR ignore itself, keeping
-# whatever the user already put in its .gitignore.
-#
-# PREPENDED, not appended: in gitignore the LAST matching rule wins, so a trailing
-# `*` would silently defeat a `!keep-this` negation above it. With `*` first, such a
-# negation still overrides it - for a file directly in this directory. A negation
-# pointing INTO a subdirectory (`!logs/keep`) cannot win either way, because git
-# never descends into a directory `*` has already excluded. A lone `*` covers
-# .gitignore itself too, which is what keeps the whole directory out of git without
-# touching the repo root.
 
 # -- Time helpers ------------------------------------------------------------
 now_epoch() { date +%s; }
@@ -272,11 +256,6 @@ epoch_of() {
   printf ''
 }
 
-# -- Approval marker (shared by approve.sh, merge-guard.sh, worktree.sh merge) -
-# One file per branch under <root>/.claude/issue-to-pr/, branch '/' -> '-'. The
-# marker is single-use: worktree.sh merge flips used->true on a successful merge.
-# JSON is hand-written/parsed (no jq): quote is escaped and placed last so a
-# hostile quote cannot spoof the scalar fields parsed before it.
 # -- Approval marker (shared by approve.sh, merge-guard.sh, worktree.sh merge) -
 # How long an approval stays valid. One definition: the sweeper that deletes markers
 # and the two gates that validate them have to agree, or preflight deletes approvals

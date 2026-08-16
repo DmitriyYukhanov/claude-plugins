@@ -35,7 +35,6 @@ while [ "$#" -gt 0 ]; do
     --start-point) start_point=${2:-}; shift 2 2>/dev/null || shift "$#" ;;
     --salvage-to) salvage_to=${2:-}; shift 2 2>/dev/null || shift "$#" ;;
     --ladder-attempt) ladder_attempt=${2:-1}; shift 2 2>/dev/null || shift "$#" ;;
-    --json) enable_json; shift ;;
     -*) warn "worktree: ignoring unknown flag: $1"; shift ;;
     *) [ -z "$issue" ] && issue=$1; shift ;;
   esac
@@ -46,11 +45,6 @@ done
 assert_numeric_issue "$issue" worktree
 
 # -- shared helpers -----------------------------------------------------------
-# One definition of the main checkout, shared with preflight: v3 has preflight
-# compute RUN_DIR from repo_root while cleanup/teardown compute the same path from
-# here, so a divergence means teardown sweeps a directory preflight never wrote to.
-main_worktree() { repo_root; }
-
 compute_wt_path() { # root issue
   printf '%s/%s-worktrees/issue-%s' "$(dirname "$1")" "$(basename "$1")" "$2"
 }
@@ -94,16 +88,16 @@ is_pure_base_merge() {
   [ "$d_old" = "$d_new" ]
 }
 
-detect_deps() { # dir -> sets DEPS_MANIFEST, INSTALL_HINT
+detect_deps() { # dir -> sets INSTALL_HINT
   local d=$1
-  if [ -f "$d/pnpm-lock.yaml" ]; then DEPS_MANIFEST=node; INSTALL_HINT='pnpm install'
-  elif [ -f "$d/yarn.lock" ]; then DEPS_MANIFEST=node; INSTALL_HINT='yarn install'
-  elif [ -f "$d/package-lock.json" ] || [ -f "$d/package.json" ]; then DEPS_MANIFEST=node; INSTALL_HINT='npm install'
-  elif [ -f "$d/requirements.txt" ]; then DEPS_MANIFEST=python; INSTALL_HINT='pip install -r requirements.txt'
-  elif [ -f "$d/pyproject.toml" ]; then DEPS_MANIFEST=python; INSTALL_HINT='pip install -e .'
-  elif [ -f "$d/Cargo.toml" ]; then DEPS_MANIFEST=rust; INSTALL_HINT='cargo fetch'
-  elif [ -f "$d/go.mod" ]; then DEPS_MANIFEST=go; INSTALL_HINT='go mod download'
-  else DEPS_MANIFEST=none; INSTALL_HINT=''
+  if [ -f "$d/pnpm-lock.yaml" ]; then INSTALL_HINT='pnpm install'
+  elif [ -f "$d/yarn.lock" ]; then INSTALL_HINT='yarn install'
+  elif [ -f "$d/package-lock.json" ] || [ -f "$d/package.json" ]; then INSTALL_HINT='npm install'
+  elif [ -f "$d/requirements.txt" ]; then INSTALL_HINT='pip install -r requirements.txt'
+  elif [ -f "$d/pyproject.toml" ]; then INSTALL_HINT='pip install -e .'
+  elif [ -f "$d/Cargo.toml" ]; then INSTALL_HINT='cargo fetch'
+  elif [ -f "$d/go.mod" ]; then INSTALL_HINT='go mod download'
+  else INSTALL_HINT=''
   fi
 }
 
@@ -198,7 +192,7 @@ cmd_ensure() {
   [ -n "$start_point" ] || degrade missing-start-point "worktree ensure: --start-point required"
 
   local root reg wt_path add_out state actual_branch
-  root=$(main_worktree)
+  root=$(repo_root)
   [ -n "$root" ] || degrade not-a-git-repo "worktree ensure: not inside a git repository"
   wt_path=$(compute_wt_path "$root" "$issue")
   reg=$(registered_wt "$issue")
@@ -253,7 +247,6 @@ cmd_ensure() {
   emit ORIGINAL_ROOT "$root"
   emit STATE "$state"
   emit BRANCH "$actual_branch"
-  emit DEPS_MANIFEST "$DEPS_MANIFEST"
   emit INSTALL_HINT "$INSTALL_HINT"
   done_ok
 }
@@ -291,7 +284,7 @@ cmd_merge() {
   [ -n "$branch" ] || degrade missing-branch "worktree merge: --branch required"
   [ "$ladder_attempt" -le "$LADDER_CAP" ] || stop merge-ladder-exhausted "the merge ladder retried $LADDER_CAP times without landing $branch. Resolve the PR state on GitHub by hand, then re-approve."
   local root marker used created created_epoch age marker_sha cur_sha
-  root=$(main_worktree)
+  root=$(repo_root)
   [ -n "$root" ] || degrade not-a-git-repo "worktree merge: not inside a git repository"
 
   # -- 1. approval marker: exists  and  unused  and  fresh (<30m)  and  head-SHA match ------
@@ -419,7 +412,7 @@ cmd_merge() {
 cmd_cleanup() {
   [ -n "$branch" ] || degrade missing-branch "worktree cleanup: --branch required"
   local root wt_path pr_state
-  root=$(main_worktree)
+  root=$(repo_root)
   [ -n "$root" ] || degrade not-a-git-repo "worktree cleanup: not inside a git repository"
 
   # Hard precondition: the PR must be MERGED. Deleting an open PR's branch is
@@ -469,12 +462,6 @@ cmd_cleanup() {
   local marker
   marker=$(marker_path "$root" "$branch")
   [ -f "$marker" ] && rm -f "$marker"
-  # A clean cleanup deletes the run dir outright. A partial one keeps the logs, which
-  # is exactly when they are worth reading - and so does a removal that was refused (a
-  # Windows lock on a log file still open). Either way what survives must not be left
-  # where the next run of this issue reads it: a surviving step.log/state.json is taken
-  # as ground truth, and that run would conclude the work is done and jump to a branch
-  # cleanup has just deleted. One call site, so "when does the run end" has one answer.
 
   emit REMOVED "$REMOVED"
   emit DELETED_LOCAL "$deleted_local"
@@ -486,7 +473,7 @@ cmd_cleanup() {
 
 cmd_teardown() {
   local root reg wt_path kept
-  root=$(main_worktree)
+  root=$(repo_root)
   [ -n "$root" ] || degrade not-a-git-repo "worktree teardown: not inside a git repository"
   reg=$(registered_wt "$issue")
 
@@ -517,7 +504,7 @@ cmd_teardown() {
 cmd_revert() {
   [ -n "$branch" ] || degrade missing-branch "worktree revert: --branch required"
   local root base_ref title slug squash_sha rev_branch rev_wt rev_url
-  root=$(main_worktree)
+  root=$(repo_root)
   [ -n "$root" ] || degrade not-a-git-repo "worktree revert: not inside a git repository"
   squash_sha=$(gh pr view "$branch" --json mergeCommit --jq '.mergeCommit.oid' 2>/dev/null || printf '')
   [ -n "$squash_sha" ] || degrade no-merge-commit "worktree revert: could not resolve the merge commit for $branch (is the PR merged?)"

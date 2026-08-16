@@ -5,7 +5,7 @@
 # by config), issue state/assignees, the issue-<N> worktree state, and board
 # membership. Never mutates anything except `--claim` (assign issue to @me).
 #
-#   preflight.sh <issue-number> [--claim] [--json] [--config <path>]
+#   preflight.sh <issue-number> [--claim] [--config <path>]
 #
 # Exit 0 with the machine block on success; 2 (STOP) only when gh is not
 # authenticated; 4 (degraded) when the config file cannot be parsed.
@@ -26,7 +26,6 @@ config_path=".claude/issue-to-pr.local.md"
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --claim) claim=1; shift ;;
-    --json) enable_json; shift ;;
     --config) config_path=${2:-}; shift 2 2>/dev/null || shift "$#" ;;
     -*) warn "preflight: ignoring unknown flag: $1"; shift ;;
     *) [ -z "$issue" ] && issue=$1; shift ;;
@@ -129,7 +128,6 @@ default_branch=${_repo_fields[2]:-main}
 # model runs on every task must not delete the user's remote-tracking refs as a
 # side effect, and the stale local ref is exactly what a non-pruned fetch leaves
 # behind. ls-remote reads the remote directly, so it is both read-only and correct.
-base_source=config
 if [ -z "$CFG_BASE" ] || [ "$CFG_BASE" = auto ]; then
   # Three outcomes, three different answers - conflating any two of them is how
   # this resolution went wrong before:
@@ -144,10 +142,8 @@ if [ -z "$CFG_BASE" ] || [ "$CFG_BASE" = auto ]; then
   if ls_out=$(git ls-remote origin refs/heads/dev 2>/dev/null); then
     if [ -n "$ls_out" ]; then
       base=dev
-      base_source=auto-remote-dev
     else
       base=$default_branch
-      base_source=auto-default-branch
       # Name the discrepancy rather than resolve it silently: on a repo that really
       # does integrate on a local-only `dev`, this is the line that says so.
       [ -n "$(git branch --list dev 2>/dev/null)" ] &&
@@ -155,11 +151,9 @@ if [ -z "$CFG_BASE" ] || [ "$CFG_BASE" = auto ]; then
     fi
   elif git show-ref --verify --quiet refs/remotes/origin/dev; then
     base=dev
-    base_source=auto-unverified-dev
     add_warning "could not reach origin; using 'dev' from a stale remote-tracking ref, which may name a branch that was deleted upstream - verify before the PR is opened"
   else
     base=$default_branch
-    base_source=auto-unverified-default
     add_warning "could not reach origin; falling back to '$base' without confirming it"
     [ -n "$(git branch --list dev 2>/dev/null)" ] &&
       add_warning "a local 'dev' exists but could not be confirmed against origin - pin base_branch in the config if that is your integration branch"
@@ -352,7 +346,6 @@ emit OWNER "$owner"
 emit REPO "$repo"
 emit DEFAULT_BRANCH "$default_branch"
 emit BASE "$base"
-emit BASE_SOURCE "$base_source"
 emit START_POINT "$start_point"
 emit CMD_TYPECHECK "$cmd_typecheck"
 emit CMD_TEST "$cmd_test"

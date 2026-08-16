@@ -163,7 +163,6 @@ test_preflight_base_auto_detects_remote_dev() {
   use_fake_gh happy
   run_script preflight.sh 6
   assert_key "$OUT" BASE dev
-  assert_key "$OUT" BASE_SOURCE auto-remote-dev
   assert_key "$OUT" START_POINT origin/dev
 }
 
@@ -177,7 +176,6 @@ test_preflight_base_auto_ignores_a_branch_merely_ending_in_dev() {
   use_fake_gh happy
   run_script preflight.sh 6
   assert_key "$OUT" BASE main
-  assert_key "$OUT" BASE_SOURCE auto-default-branch
 }
 
 # The remote answered and has no dev: that is evidence, and the default branch wins.
@@ -189,7 +187,6 @@ test_preflight_base_auto_uses_default_when_remote_has_no_dev() {
   use_fake_gh happy
   run_script preflight.sh 6
   assert_key "$OUT" BASE main
-  assert_key "$OUT" BASE_SOURCE auto-default-branch
   assert_contains "$OUT" "local 'dev' exists but origin has no 'dev'"
 }
 
@@ -203,7 +200,6 @@ test_preflight_base_auto_marks_an_unreachable_remote_as_unverified() {
   use_fake_gh happy
   run_script preflight.sh 6
   assert_key "$OUT" BASE dev
-  assert_key "$OUT" BASE_SOURCE auto-unverified-dev
   assert_contains "$OUT" "could not reach origin"
 }
 
@@ -218,7 +214,6 @@ test_preflight_base_auto_ignores_local_only_dev() {
   use_fake_gh happy
   run_script preflight.sh 6
   assert_key "$OUT" BASE main
-  assert_key "$OUT" BASE_SOURCE auto-default-branch
 }
 
 test_preflight_detects_shell_test_harness() {

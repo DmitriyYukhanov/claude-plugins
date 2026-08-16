@@ -5,14 +5,13 @@
 # outcome as JSON, so a board hiccup never blocks the pipeline. The SKILL runs it
 # with run_in_background, so there is zero main-context wait.
 #
-#   board-sync.sh <owner/repo> <issue> <in_progress|in_review|done> \
+#   board-sync.sh <owner/repo> <issue> <in_progress|in_review> \
 #                 [--board-url U] [--status-field F] [--state S]
 #   board-sync.sh <owner/repo> --create-card <title> [--board-url U]
 #   board-sync.sh <owner/repo> --convert-draft <itemId>
 #
-# Always JSON: OK plus optional SKIPPED_REASON / ERROR / HINT. The create-card /
-# convert-draft modes have no Layer-1 caller (they are used by epic mode, sec 6.1);
-# they report OK=false SKIPPED_REASON=mode-deferred until v2.0.
+# Always JSON: OK plus optional SKIPPED_REASON / ERROR / HINT. The create-card and
+# convert-draft modes are used by epic mode (sec 6.1).
 #
 # The GraphQL queries and some jq filters below intentionally hold literal
 # $-tokens (GraphQL variables like $owner, jq bindings like $f) inside single
@@ -43,10 +42,8 @@ while [ "$#" -gt 0 ]; do
     --board-url) board_url=${2:-}; shift 2 2>/dev/null || shift "$#" ;;
     --status-field) status_field=${2:-}; shift 2 2>/dev/null || shift "$#" ;;
     --option) explicit_option=${2:-}; shift 2 2>/dev/null || shift "$#" ;;
-    --state) shift 2 2>/dev/null || shift "$#" ;; # state.json caching lands in v1.3.0 (sec 5.5)
     --create-card) mode="create-card"; card_title=${2:-}; shift 2 2>/dev/null || shift "$#" ;;
     --convert-draft) mode="convert-draft"; draft_item=${2:-}; shift 2 2>/dev/null || shift "$#" ;;
-    --json) shift ;; # already JSON
     -*) warn "board-sync: ignoring unknown flag: $1"; shift ;;
     *) positionals+=("$1"); shift ;;
   esac
@@ -105,16 +102,12 @@ if [ -z "$issue" ] || [ -z "$status" ]; then
 fi
 
 # -- project scope gate -------------------------------------------------------
-scopes=$(gh auth status 2>&1 | grep -i 'token scopes' | grep -oE "'[^']+'" | tr -d "'" | paste -sd, - || printf '')
-case ",$scopes," in
-  *,project,*) : ;;
-  *)
-    emit OK false
-    emit SKIPPED_REASON missing-scope
-    emit HINT "gh auth refresh -s project"
-    done_ok
-    ;;
-esac
+if ! has_project_scope; then
+  emit OK false
+  emit SKIPPED_REASON missing-scope
+  emit HINT "gh auth refresh -s project"
+  done_ok
+fi
 
 # -- resolve the project item + project id for this issue ---------------------
 item_line=$(gh api graphql \
@@ -150,7 +143,6 @@ aliases_for() {
   case "$1" in
     in_progress) printf 'in progress\ndoing\nstarted\nwip\nin development\ndevelopment\n' ;;
     in_review) printf 'in review\nreview\nreviewing\ncode review\npr open\nready for review\n' ;;
-    done) printf 'done\nclosed\ncomplete\ncompleted\nmerged\n' ;;
     *) printf '%s\n' "$1" ;;
   esac
 }

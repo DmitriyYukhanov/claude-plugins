@@ -40,10 +40,3 @@ test_triage_default_no_labels_no_checklist() {
   assert_key "$OUT" REF_PATHS_EXIST 0
 }
 
-test_triage_json_output() {
-  use_fake_gh triage-rich
-  run_script triage-evidence.sh 6 --json
-  assert_rc 0
-  assert_contains "$OUT" '"CHECKLIST_ITEMS":"2"'
-  assert_contains "$OUT" '"LINKED_ISSUES":"2"'
-}

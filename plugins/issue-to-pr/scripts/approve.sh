@@ -28,7 +28,6 @@ while [ "$#" -gt 0 ]; do
   case "$1" in
     --quote) quote=${2:-}; have_quote=1; shift 2 2>/dev/null || shift "$#" ;;
     --refresh) refresh=1; shift ;;
-    --json) enable_json; shift ;;
     -*) warn "approve: ignoring unknown flag: $1"; shift ;;
     *) [ -z "$branch" ] && branch=$1; shift ;;
   esac

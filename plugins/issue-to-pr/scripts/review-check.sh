@@ -5,7 +5,7 @@
 # read reports clear with READ_OK=false and still exits 0, so a flaky API call never
 # blocks a merge the human explicitly approved - it just cannot hide a review.
 #
-#   review-check.sh <branch> [--json]
+#   review-check.sh <branch>
 #
 # Emits REVIEW_STATE=clear|changes_requested|unresolved_threads, UNRESOLVED_THREADS,
 # and READ_OK. changes_requested comes from GitHub's own reviewDecision (which already
@@ -21,7 +21,6 @@ source "$SCRIPT_DIR/lib/common.sh"
 branch=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
-    --json) enable_json; shift ;;
     -*) warn "review-check: ignoring unknown flag: $1"; shift ;;
     *) [ -z "$branch" ] && branch=$1; shift ;;
   esac

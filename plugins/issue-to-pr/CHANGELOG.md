@@ -5,6 +5,15 @@ All notable changes to the **issue-to-pr** plugin will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.3.0] - 2026-08-16
+
+### Removed
+- The `--json` flag on the pipeline's scripts. Nothing ever passed it; board sync still reports JSON exactly as before
+- The bundled `research` sub-skill. That step now uses `/deep-research` when it is installed and a plain Explore subagent otherwise, which is what the sub-skill was configured to do anyway
+
+### Changed
+- Dead code and stale comments swept out of the scripts and the reference docs: a documented helper that was never written, a header printed twice, a note describing run-directory behaviour this version does not have, and a board-sync flag whose feature shipped elsewhere
+
 ## [2.2.1] - 2026-08-15
 
 ### Fixed

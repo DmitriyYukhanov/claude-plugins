@@ -94,11 +94,6 @@ LABELS="
   assert_key "$OUT" TIER trivial # all coerced to 0
 }
 
-test_tier_json_output() {
-  tier_run "NEW_THING_HITS=1" --json
-  assert_contains "$OUT" '"TIER":"complex"'
-}
-
 test_tier_unterminated_last_line() {
   # The decisive signal on the final line with NO trailing newline must still be
   # read - otherwise the tier silently falls to trivial (read-loop regression).

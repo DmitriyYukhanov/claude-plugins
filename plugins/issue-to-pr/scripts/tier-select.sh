@@ -4,7 +4,7 @@
 # The rubric is a deterministic function so cost-scaling is CI-verifiable and cannot
 # silently drift (design D2). `--tier <t>` always overrides. Borderline picks higher.
 #
-#   triage-evidence.sh <N> | tier-select.sh [--tier trivial|standard|complex|epic] [--json]
+#   triage-evidence.sh <N> | tier-select.sh [--tier trivial|standard|complex|epic]
 #
 # Tiers: trivial | standard | complex | epic. (Epic MODE - decompose - is v2.0; here
 # epic is just the detected tier and the SKILL treats it as complex+ for now.)
@@ -18,7 +18,6 @@ override=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --tier) override=${2:-}; shift 2 2>/dev/null || shift "$#" ;;
-    --json) enable_json; shift ;;
     -*) warn "tier-select: ignoring unknown flag: $1"; shift ;;
     *) shift ;;
   esac

@@ -5,7 +5,7 @@
 # lines per gate, and only a failing gate's last 40 lines are surfaced (on
 # stderr) so gate output never floods the model's context.
 #
-#   run-gates.sh --log-dir <dir> --gate name='<cmd>' [--gate name2='<cmd2>'] [--json]
+#   run-gates.sh --log-dir <dir> --gate name='<cmd>' [--gate name2='<cmd2>']
 #
 # Gates run sequentially in the current directory and STOP at the first failure
 # (fail-fast). Unlike the rest of the pipeline, this script's exit code is the
@@ -27,10 +27,6 @@ while [ "$#" -gt 0 ]; do
     --log-dir)
       log_dir=${2:-}
       shift 2 2>/dev/null || shift "$#"
-      ;;
-    --json)
-      enable_json
-      shift
       ;;
     --gate)
       spec=${2:-}

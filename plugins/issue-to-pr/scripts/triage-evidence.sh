@@ -4,7 +4,7 @@
 # via the rubric in references/tier-matrix.md (v1.3.0). Referenced paths are
 # checked for existence relative to the current directory (run it in the repo).
 #
-#   triage-evidence.sh <issue-number> [--json]
+#   triage-evidence.sh <issue-number>
 #
 # Keys: LABELS (comma-joined), BODY_LENGTH, CHECKLIST_ITEMS, REF_PATHS_EXIST,
 # REF_PATHS_MISSING, NEW_THING_HITS, LINKED_ISSUES, TITLE.
@@ -18,10 +18,6 @@ source "$SCRIPT_DIR/lib/common.sh"
 issue=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
-    --json)
-      enable_json
-      shift
-      ;;
     --repo)
       shift 2 2>/dev/null || shift "$#"
       ;;

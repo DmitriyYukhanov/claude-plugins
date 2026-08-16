@@ -72,8 +72,9 @@ background (add `--option "<STATUS_MAP_IN_PROGRESS>"` if preflight reported one)
 **2. Triage.** `S/triage-evidence.sh <N> | S/tier-select.sh [--tier …]` → `TIER`; record it.
 `epic` → decompose into child issues first (`R/epic.md`); each child is a full 0–12 run.
 
-**3. Research** (tier routes it, complex+ with unknowns): the forked `research` sub-skill (or
-`/deep-research`) returns a ≤150-line cited summary; raw exploration stays out of context.
+**3. Research** (tier routes it, complex+ with unknowns): `/deep-research` if installed, else an
+`Explore` subagent handed an explicit question list. Either way you get back a ≤150-line summary
+citing `path:line`; the raw file reads stay in its context, not yours.
 
 **4. Design** (tier routes it). Complex+: `Workflow({scriptPath:
 "S/../workflows/design-panel.js", args:{issue,title,contextFiles,constraints,openQuestions}})`
