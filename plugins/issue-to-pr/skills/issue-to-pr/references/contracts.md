@@ -68,7 +68,7 @@ stop, nothing is cleaned up.
 `worktree.sh cleanup <N> --branch <b> [--salvage-to <dir>]` — Step 12, after a successful merge.
 `<b>` may be a PR number here too (everything past the precondition is git, which cannot read one).
 Hard precondition: the PR is `MERGED` (else stop `pr-not-merged` — deleting an open PR's branch is
-mechanically impossible). Salvages `tmp/task-<N>/{design,progress,state}` first — a relative
+mechanically impossible). Salvages `tmp/task-<N>/{design.md,progress.md,state.json,step.log}` first — a relative
 `--salvage-to` lands under the **main checkout**, not cwd, so it survives the removal — removes the
 worktree (never `--force`; tracked dirtiness → stop `dirty-tracked-files`), deletes the local +
 remote branch, removes the marker. Keys: `REMOVED DELETED_LOCAL DELETED_REMOTE SALVAGED`, plus

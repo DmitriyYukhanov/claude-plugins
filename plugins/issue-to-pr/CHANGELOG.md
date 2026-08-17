@@ -5,9 +5,10 @@ All notable changes to the **issue-to-pr** plugin will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [2.3.1] - 2026-08-16
+## [2.3.2] - 2026-08-17
 
 ### Fixed
+- The documented salvage list names the files cleanup actually copies
 - A PR number now works wherever a branch name does: the merge finds the approval recorded under the branch name instead of refusing it, and cleanup deletes the branch instead of reporting success and leaving it behind
 - A relative `--salvage-to` path lands in the main checkout, not inside the worktree that cleanup is about to remove
 - Cleanup reports what it salvaged even when it then refuses to remove a worktree with uncommitted changes
