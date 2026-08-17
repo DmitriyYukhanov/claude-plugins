@@ -51,6 +51,13 @@ as an alias for the top-level `*_cmd` scalars.)
 
 `preflight.sh` (Step 0) parses this file and, for any command it does not find, auto-detects one
 from the project's manifests (`package.json` scripts, then `Cargo.toml` / `go.mod` / `pyproject`
-/ `Makefile`). Config always wins over auto-detection; the reported `CMD_SOURCE_*` keys say which
-source each command came from. If neither a config value nor a detected command exists, ask the
+/ `Makefile`), falling back to a shell runner (`tests/run-tests.sh` and its usual spellings).
+No probe reads the directory you happen to run from: everything resolves against the **main
+checkout**, which is where the config lives and the only tree that is certain to exist when
+Step 0 runs. A runner at the top wins outright; failing that, a single **tracked** runner
+inside a project is accepted, so a plugin or package monorepo is still found. Two or more are
+left ambiguous on purpose, and reported as no test command, because Step 0 cannot honestly
+enumerate projects for a worktree Step 1 has not cut yet: pin the command you want
+([#23](https://github.com/DmitriyYukhanov/claude-plugins/issues/23)). Config always wins over auto-detection;
+the reported `CMD_SOURCE_*` keys say which source each command came from. If neither a config value nor a detected command exists, ask the
 user once and suggest saving it here. Never invent a command.
