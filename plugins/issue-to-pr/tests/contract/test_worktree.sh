@@ -136,6 +136,19 @@ test_wt_merge_happy_consumes_marker() {
   assert_gh_called "pr merge feat/issue-6-x --squash"
 }
 
+# Regression: cmd_merge keyed the marker off the raw --branch value while approve.sh
+# and merge-guard.sh both canonicalize a PR number first, so `--branch 13` looked for
+# a marker nobody had written and the merge stopped on an approval that existed.
+test_wt_merge_resolves_pr_number_to_marker() {
+  local repo wt; repo=$(mk_repo); wt=$(mk_worktree "$repo" feat/issue-6-x); cd "$wt"
+  write_marker "$repo" feat/issue-6-x "$SHA_OK" false "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  use_fake_gh happy
+  run_script worktree.sh merge 6 --branch 13
+  assert_rc 0
+  assert_key "$OUT" MERGED true
+  assert_gh_called "pr merge feat/issue-6-x --squash"
+}
+
 test_wt_merge_squash_disallowed_falls_back_to_merge() {
   local repo wt; repo=$(mk_repo); wt=$(mk_worktree "$repo" feat/issue-6-x); cd "$wt"
   write_marker "$repo" feat/issue-6-x "$SHA_OK" false "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -221,6 +234,53 @@ test_wt_cleanup_salvages_then_removes() {
   assert_rc 0
   assert_key "$OUT" REMOVED true
   if [ ! -f "$TEST_TMPDIR/salvage/design.md" ]; then fail "design.md not salvaged"; fi
+}
+
+# Regression: cleanup keyed the branch off the raw --branch too. `gh pr view 13` still
+# reported MERGED, then every git step missed - the merged branch survived local and
+# remote, the marker stayed behind, and the script exited 0 as if it had cleaned up.
+test_wt_cleanup_resolves_pr_number_to_the_branch() {
+  local repo wt; repo=$(mk_repo); wt=$(mk_worktree "$repo" feat/issue-6-x); cd "$repo"
+  write_marker "$repo" feat/issue-6-x "$SHA_OK" false "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  use_fake_gh pr-merged
+  run_script worktree.sh cleanup 6 --branch 13
+  assert_rc 0
+  assert_key "$OUT" DELETED_LOCAL true
+  if git -C "$repo" show-ref --verify --quiet refs/heads/feat/issue-6-x; then
+    fail "cleanup by PR number left the merged branch behind"
+  fi
+  if [ -f "$repo/.claude/issue-to-pr/approval-feat-issue-6-x.json" ]; then
+    fail "cleanup by PR number left the approval marker behind"
+  fi
+}
+
+# Regression: a relative --salvage-to was resolved against cwd, so a cleanup run from
+# inside the worktree copied the artifacts into the directory it was about to remove.
+test_wt_cleanup_relative_salvage_resolves_against_the_main_checkout() {
+  local repo wt; repo=$(mk_repo); wt=$(mk_worktree "$repo" feat/issue-6-x)
+  mkdir -p "$wt/tmp/task-6"
+  printf '# design\n' >"$wt/tmp/task-6/design.md"
+  cd "$wt"
+  use_fake_gh pr-merged
+  run_script worktree.sh cleanup 6 --branch feat/issue-6-x --salvage-to salvaged
+  assert_rc 0
+  if [ ! -f "$repo/salvaged/design.md" ]; then fail "relative salvage did not land in the main checkout"; fi
+  if [ -f "$wt/salvaged/design.md" ]; then fail "salvage landed in the worktree being removed"; fi
+}
+
+# Regression: SALVAGED was emitted after remove_worktree, which flushes the buffer on
+# its way out when the tree is dirty - so a caller whose salvage HAD happened was never
+# told, and had no reason to trust the copies it could not see reported.
+test_wt_cleanup_reports_salvage_even_when_removal_stops() {
+  local repo wt; repo=$(mk_repo); wt=$(mk_worktree "$repo" feat/issue-6-x); cd "$repo"
+  mkdir -p "$wt/tmp/task-6"
+  printf '# design\n' >"$wt/tmp/task-6/design.md"
+  printf 'changed\n' >>"$wt/README.md" # tracked modification -> removal stops
+  use_fake_gh pr-merged
+  run_script worktree.sh cleanup 6 --branch feat/issue-6-x --salvage-to "$TEST_TMPDIR/salvage"
+  assert_rc 2
+  assert_key "$OUT" STOP_REASON dirty-tracked-files
+  assert_key "$OUT" SALVAGED "$TEST_TMPDIR/salvage"
 }
 
 test_wt_cleanup_in_place_deletes_checked_out_branch() {
