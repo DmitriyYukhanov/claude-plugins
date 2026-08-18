@@ -113,10 +113,7 @@ salvage_artifacts() {
   SALVAGED=""
   local wt=$1 dst=$2 n=$3 root=$4 f src copied=0
   [ -n "$dst" ] || return 0
-  case "$dst" in
-    /* | ?:/* | ?:\\*) : ;; # already absolute (POSIX, or a Windows drive letter)
-    *) dst="$root/$dst" ;;
-  esac
+  dst=$(resolve_under "$root" "$dst")
   mkdir -p "$dst" 2>/dev/null || return 0
   for f in design.md progress.md state.json step.log; do
     src="$wt/tmp/task-$n/$f"

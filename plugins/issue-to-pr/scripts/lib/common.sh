@@ -199,6 +199,22 @@ repo_root() {
   git rev-parse --show-toplevel 2>/dev/null || printf ''
 }
 
+# resolve_under ROOT PATH - PATH unchanged when it is already absolute (POSIX, or a
+# Windows drive letter in either slash), else PATH resolved under ROOT. Every path this
+# plugin keys off something other than the caller's cwd goes through here: preflight's
+# config file and worktree.sh's --salvage-to destination both used to be cwd-relative,
+# and both landed somewhere the caller never meant when the run was not started from
+# the repository root.
+# A `\\server\share` UNC path is absolute without starting in a slash at all; missing it
+# resolved a network path under the root, where nothing is. (`//server/share` needs no
+# pattern of its own - `/*` already matches it.)
+resolve_under() {
+  case "$2" in
+    /* | \\\\* | ?:/* | ?:\\*) printf '%s' "$2" ;;
+    *) printf '%s/%s' "$1" "$2" ;;
+  esac
+}
+
 # assert_numeric_issue VALUE SCRIPT - the issue number is the only caller-supplied
 # value that gets spliced into a state-dir or worktree path, and those paths are
 # later handed to `rm -rf`. A token carrying `..` (a fabricated number, a fragment

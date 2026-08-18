@@ -228,6 +228,218 @@ test_preflight_detects_shell_test_harness() {
   assert_key "$OUT" CMD_SOURCE_TEST tests/run-tests.sh
 }
 
+# Regression: every gate-command probe ran against the caller's cwd while repo
+# identity, the config and the worktree state all resolved against the repository
+# root, so a run from any subdirectory reported no test command for a project that
+# has one - and Step 6 then had nothing to verify the work with.
+test_preflight_detects_the_harness_from_a_subdirectory() {
+  local repo
+  repo=$(init_repo)
+  cd "$repo"
+  mkdir -p tests sub/deeper
+  printf '#!/usr/bin/env bash\n' >tests/run-tests.sh
+  cd sub/deeper
+  use_fake_gh happy
+  run_script preflight.sh 6
+  assert_key "$OUT" CMD_TEST "bash tests/run-tests.sh"
+}
+
+test_preflight_detects_package_json_from_a_subdirectory() {
+  local repo
+  repo=$(init_repo)
+  cd "$repo"
+  printf '%s\n' '{ "scripts": { "test": "jest" } }' >package.json
+  mkdir -p sub
+  cd sub
+  use_fake_gh happy
+  run_script preflight.sh 6
+  assert_key "$OUT" CMD_TEST "npm test"
+  assert_key "$OUT" CMD_SOURCE_TEST package.json
+}
+
+# A plugin or package monorepo keeps its runner under the project, not at the top. The
+# path is emitted bare, and only when nothing in it could change how a shell reads it.
+test_preflight_finds_a_nested_harness() {
+  local repo
+  repo=$(init_repo)
+  cd "$repo"
+  mkdir -p plugins/foo/tests
+  printf '#!/usr/bin/env bash\n' >plugins/foo/tests/run-tests.sh
+  git add plugins/foo/tests/run-tests.sh
+  use_fake_gh happy
+  run_script preflight.sh 6
+  assert_key "$OUT" CMD_TEST "bash plugins/foo/tests/run-tests.sh"
+  assert_key "$OUT" CMD_SOURCE_TEST plugins/foo/tests/run-tests.sh
+}
+
+# Two runners are ambiguous ON PURPOSE. Assembling a command from both cannot be honest
+# here: Step 0 probes this checkout while the gates run in a worktree cut from
+# origin/$base afterwards, so an enumeration can disagree with the tree under test, and
+# one stale link either hides a red suite or kills the whole command. No command means
+# Step 6 degrades loudly and pin-config names the right one (#23).
+test_preflight_two_nested_harnesses_stay_ambiguous() {
+  local repo
+  repo=$(init_repo)
+  cd "$repo"
+  mkdir -p plugins/a/tests plugins/b/tests
+  printf '#!/usr/bin/env bash\n' >plugins/a/tests/run-tests.sh
+  printf '#!/usr/bin/env bash\n' >plugins/b/tests/run-tests.sh
+  git add plugins/a/tests/run-tests.sh plugins/b/tests/run-tests.sh
+  use_fake_gh happy
+  run_script preflight.sh 6
+  assert_key "$OUT" CMD_TEST ""
+  assert_key "$OUT" CMD_SOURCE_TEST none
+}
+
+# An untracked runner is not in the worktree the gates run in, so a command naming it
+# would die there at 127 on a repository whose own suite is fine.
+test_preflight_untracked_nested_harness_is_not_used() {
+  local repo
+  repo=$(init_repo)
+  cd "$repo"
+  mkdir -p plugins/foo/tests
+  printf '#!/usr/bin/env bash\n' >plugins/foo/tests/run-tests.sh
+  use_fake_gh happy
+  run_script preflight.sh 6
+  assert_key "$OUT" CMD_TEST ""
+}
+
+# A runner at the top is the repository's entry point, so it wins outright and the search
+# below it never happens - not even for a tracked one.
+test_preflight_root_harness_wins_over_nested_ones() {
+  local repo
+  repo=$(init_repo)
+  cd "$repo"
+  mkdir -p tests plugins/foo/tests
+  printf '#!/usr/bin/env bash\n' >tests/run-tests.sh
+  printf '#!/usr/bin/env bash\n' >plugins/foo/tests/run-tests.sh
+  git add plugins/foo/tests/run-tests.sh
+  use_fake_gh happy
+  run_script preflight.sh 6
+  assert_key "$OUT" CMD_TEST "bash tests/run-tests.sh"
+}
+
+# Regression: the config path was the last cwd-relative read left in the script, and it
+# outranks auto-detect - so a run from a subdirectory found no config, silently swapped
+# the pinned test command for a guess, and lost the pinned base branch with it. The
+# package.json is here so a regression shows up as `npm test`, not as an empty value.
+test_preflight_reads_the_config_from_a_subdirectory() {
+  local repo
+  repo=$(init_repo)
+  cd "$repo"
+  mkdir -p .claude sub
+  printf -- '---\nbase_branch: dev\ntest_cmd: make ci\n---\n' >.claude/issue-to-pr.local.md
+  printf '%s\n' '{ "scripts": { "test": "jest" } }' >package.json
+  cd sub
+  use_fake_gh happy
+  run_script preflight.sh 6
+  assert_key "$OUT" CONFIG_PRESENT true
+  assert_key "$OUT" CMD_TEST "make ci"
+  assert_key "$OUT" CMD_SOURCE_TEST config
+  assert_key "$OUT" BASE dev
+}
+
+# SECURITY. The detected command is evaluated by `bash -c` in run-gates.sh, so a tracked
+# directory named `$(...)` used to execute at gate time on any repository merely cloned
+# and taken through Step 0. Reproduced against the double-quoted form this replaced.
+test_preflight_nested_harness_path_cannot_inject_a_command() {
+  local repo cmd
+  repo=$(init_repo)
+  cd "$repo"
+  mkdir -p 'plugins/$(touch PWNED)/tests'
+  printf '#!/usr/bin/env bash\n' >'plugins/$(touch PWNED)/tests/run-tests.sh'
+  git add 'plugins/$(touch PWNED)/tests/run-tests.sh'
+  use_fake_gh happy
+  run_script preflight.sh 6
+  assert_key "$OUT" CMD_TEST ""
+  cmd=$(printf '%s\n' "$OUT" | grep -m1 '^CMD_TEST=' | sed 's/^CMD_TEST=//')
+  bash -c "$cmd" >/dev/null 2>&1
+  if [ -e PWNED ]; then fail "the detected command executed a substitution from a path"; fi
+}
+
+# A path that needs quoting to be one argument is left undetected instead. The value is
+# evaluated twice (bash -c, and Step 6's --gate test='<cmd>' wrapper), so no quoting
+# scheme survives both; not detecting is the honest outcome and pin-config names it.
+test_preflight_nested_harness_with_a_space_is_not_used() {
+  local repo
+  repo=$(init_repo)
+  cd "$repo"
+  mkdir -p "my proj/tests"
+  printf '#!/usr/bin/env bash\n' >"my proj/tests/run-tests.sh"
+  git add "my proj/tests/run-tests.sh"
+  use_fake_gh happy
+  run_script preflight.sh 6
+  assert_key "$OUT" CMD_TEST ""
+}
+
+# An explicit --config is the caller's instruction and stays relative to the caller; only
+# the default path is re-rooted. Re-rooting both would hand a caller standing in a
+# subdirectory with a real ./custom.md the auto-detected commands instead of their own.
+test_preflight_explicit_relative_config_stays_relative_to_the_caller() {
+  local repo
+  repo=$(init_repo)
+  cd "$repo"
+  mkdir -p sub
+  printf -- '---\ntest_cmd: from sub\n---\n' >sub/custom.md
+  printf -- '---\ntest_cmd: from root\n---\n' >custom.md
+  cd sub
+  use_fake_gh happy
+  run_script preflight.sh 6 --config custom.md
+  assert_key "$OUT" CMD_TEST "from sub"
+}
+
+# Regression: a `check:`-only Makefile (the GNU spelling) reported `make typecheck`,
+# which make refuses for want of such a rule - a red gate on a healthy repository, with
+# nothing to tell the model the command had been invented rather than read.
+test_preflight_makefile_check_target_is_reported_as_itself() {
+  local repo
+  repo=$(init_repo)
+  cd "$repo"
+  printf 'check:\n\t@true\n' >Makefile
+  use_fake_gh happy
+  run_script preflight.sh 6
+  assert_key "$OUT" CMD_TYPECHECK "make check"
+}
+
+# Regression: the search read the working tree, so a gitignored scratch project's runner
+# was taken as a suite of this repository. It is absent from the worktree the gates run
+# in, so the gate died at 127 - and sorting first, it also kept the real suite from
+# running. It is not tracked, so it is not a candidate now, and the real one still is.
+test_preflight_ignores_a_gitignored_project() {
+  local repo
+  repo=$(init_repo)
+  cd "$repo"
+  printf 'aaa-sandbox/\n' >.gitignore
+  mkdir -p aaa-sandbox/tests plugins/real/tests
+  printf '#!/usr/bin/env bash\n' >aaa-sandbox/tests/run-tests.sh
+  printf '#!/usr/bin/env bash\n' >plugins/real/tests/run-tests.sh
+  git add plugins/real/tests/run-tests.sh
+  use_fake_gh happy
+  run_script preflight.sh 6
+  assert_not_contains "$OUT" aaa-sandbox
+  assert_key "$OUT" CMD_TEST "bash plugins/real/tests/run-tests.sh"
+}
+
+# Regression: anchoring the probes to "whatever tree cwd is in" meant that starting a run
+# for issue 9 from issue 5's worktree gated issue 9 on a project that exists only on
+# issue 5's branch - while the same script reported issue 9's own worktree as absent.
+test_preflight_never_probes_a_foreign_worktree() {
+  local repo other
+  repo=$(init_repo)
+  cd "$repo"
+  mkdir -p tests
+  printf '#!/usr/bin/env bash\n' >tests/run-tests.sh
+  git -C "$repo" worktree add "$TEST_TMPDIR/repo-worktrees/issue-5" -b feat/issue-5-x HEAD >/dev/null 2>&1
+  other="$TEST_TMPDIR/repo-worktrees/issue-5"
+  mkdir -p "$other/newpkg/tests"
+  printf '#!/usr/bin/env bash\n' >"$other/newpkg/tests/run-tests.sh"
+  cd "$other"
+  use_fake_gh happy
+  run_script preflight.sh 9
+  assert_key "$OUT" CMD_TEST "bash tests/run-tests.sh"
+  assert_not_contains "$OUT" newpkg
+}
+
 test_preflight_worktree_resumable() {
   local repo
   repo=$(init_repo)

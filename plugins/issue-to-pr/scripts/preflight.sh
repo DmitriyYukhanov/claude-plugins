@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 # preflight.sh - one Step-0 probe that replaces ~8 separate model tool calls
-# (spec sec 4.1). Run once from the MAIN checkout. Reports auth/scopes, repo
+# (spec sec 4.1). Run once, from anywhere in the repository: the config, the gate
+# commands and the worktree state all resolve against the main checkout, so the
+# answer does not depend on the directory you started in. The commands it reports
+# are relative to the repository root, which is where the gates run. Reports
+# auth/scopes, repo
 # identity, resolved base + start-point, auto-detected gate commands (overridden
 # by config), issue state/assignees, the issue-<N> worktree state, and board
 # membership. Never mutates anything except `--claim` (assign issue to @me).
@@ -22,11 +26,12 @@ source "$SCRIPT_DIR/lib/common.sh"
 issue=""
 claim=0
 config_path=".claude/issue-to-pr.local.md"
+config_from_flag=0
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --claim) claim=1; shift ;;
-    --config) config_path=${2:-}; shift 2 2>/dev/null || shift "$#" ;;
+    --config) config_path=${2:-}; config_from_flag=1; shift 2 2>/dev/null || shift "$#" ;;
     -*) warn "preflight: ignoring unknown flag: $1"; shift ;;
     *) [ -z "$issue" ] && issue=$1; shift ;;
   esac
@@ -84,6 +89,27 @@ set_cfg() { # top sub value
 }
 
 # trim_quotes + parse_frontmatter now live in lib/common.sh (shared with pin-config.sh).
+
+# The config is read from the MAIN checkout, resolved before anything reads it. It was
+# the one cwd-relative path left in this script, and it outranks auto-detect: a run
+# started from a subdirectory found no config at all and silently swapped the pinned
+# test command for whatever auto-detect guessed, taking the pinned base branch and the
+# board with it.
+#
+# The main checkout and not the current tree, because the file is usually untracked
+# (`pin-config.sh` writes it there and nothing commits it), so a worktree simply has no
+# copy. A repository that DOES commit it is read from the main checkout too, which means
+# a branch changing the config is gated by the version on the base - a wart, not a
+# hazard, and one the pinned values being explicit makes visible.
+root=$(repo_root)
+# `git worktree list` puts a BARE repository first, and a bare directory holds neither
+# the config nor a project to probe: `.git` (a dir in a checkout, a file in a linked
+# worktree) is missing there, so fall back to the tree we are standing in.
+[ -e "${root:-.}/.git" ] || root=$(git rev-parse --show-toplevel 2>/dev/null || printf '')
+# Only the DEFAULT path is re-rooted. An explicit --config is a caller's instruction and
+# stays relative to the caller, which is also how every in-tree caller already passes it
+# (SKILL Step 8 hands it an absolute path).
+[ "$config_from_flag" = 1 ] || config_path=$(resolve_under "${root:-.}" "$config_path")
 
 config_present=false
 if [ -f "$config_path" ]; then
@@ -205,45 +231,104 @@ else
 fi
 
 # -- gate command auto-detect (config overrides) ------------------------------
+# Every probe below is anchored to a checkout root, never to cwd: a run started from a
+# subdirectory used to report "no test command" for a project that plainly has one, and
+# Step 6 then had nothing left to verify the work with.
+#
+# Probed in the main checkout, never in "whatever tree cwd happens to be in": started
+# from issue-5's worktree, a run for issue 9 would otherwise gate issue 9 on a project
+# that exists only on issue 5's branch. Anchoring this to the worktree the run will
+# actually use is a different job and cannot be done here anyway - Step 0 probes before
+# Step 1 has cut that worktree from `origin/$base`, so the tree the gates will run in
+# does not exist yet.
+det_root=${root:-.}
 det_test="" det_typecheck="" det_visual="" det_smoke="" det_source="none"
 detect_from_package_json() {
+  local pkg="$det_root/package.json"
   det_source="package.json"
-  grep -qE '"test"[[:space:]]*:' package.json && det_test='npm test'
+  grep -qE '"test"[[:space:]]*:' "$pkg" && det_test='npm test'
   local k
   for k in typecheck tsc type-check; do
-    if grep -qE "\"$k\"[[:space:]]*:" package.json; then det_typecheck="npm run $k"; break; fi
+    if grep -qE "\"$k\"[[:space:]]*:" "$pkg"; then det_typecheck="npm run $k"; break; fi
   done
   for k in 'test:visual' visual e2e playwright; do
-    if grep -qE "\"$k\"[[:space:]]*:" package.json; then det_visual="npm run $k"; break; fi
+    if grep -qE "\"$k\"[[:space:]]*:" "$pkg"; then det_visual="npm run $k"; break; fi
   done
-  grep -qE '"smoke"[[:space:]]*:' package.json && det_smoke='npm run smoke'
+  grep -qE '"smoke"[[:space:]]*:' "$pkg" && det_smoke='npm run smoke'
 }
-if [ -f package.json ]; then
+if [ -f "$det_root/package.json" ]; then
   detect_from_package_json
-elif [ -f Cargo.toml ]; then
+elif [ -f "$det_root/Cargo.toml" ]; then
   det_source="Cargo.toml"; det_test='cargo test'; det_typecheck='cargo check'
-elif [ -f go.mod ]; then
+elif [ -f "$det_root/go.mod" ]; then
   det_source="go.mod"; det_test='go test ./...'; det_typecheck='go vet ./...'
-elif [ -f pyproject.toml ] || [ -f setup.py ]; then
+elif [ -f "$det_root/pyproject.toml" ] || [ -f "$det_root/setup.py" ]; then
   det_source="python"; det_test='pytest'
-elif [ -f Makefile ]; then
+elif [ -f "$det_root/Makefile" ]; then
   det_source="Makefile"
-  grep -qE '^test:' Makefile && det_test='make test'
-  grep -qE '^(typecheck|check):' Makefile && det_typecheck='make typecheck'
+  grep -qE '^test:' "$det_root/Makefile" && det_test='make test'
+  # Emit the target that is actually there. A `check:`-only Makefile (the GNU spelling)
+  # used to yield `make typecheck`, which make then refuses for want of such a rule -
+  # a red gate on a repository with nothing wrong, and nothing telling the model the
+  # command had been invented rather than read.
+  for k in typecheck check; do
+    if grep -qE "^$k:" "$det_root/Makefile"; then det_typecheck="make $k"; break; fi
+  done
 fi
 
 # Shell-harness projects - plugin repos, dotfiles, anything where a runner script
 # IS the suite. Checked after the manifests so a real one still wins, but it also
 # rescues a manifest that declares no test at all; without this the Step 6 gate
 # degrades to "no command" and the run proceeds with nothing verifying it.
+# A runner at the top wins outright. Failing that, the repository is asked for its
+# TRACKED runners and exactly ONE is accepted, so a plugin or package monorepo that
+# keeps <project>/tests/run-tests.sh is still found.
+#
+# Deliberately no command assembled from several runners. Step 0 cannot enumerate
+# projects honestly: it probes THIS checkout, while the gates run in a worktree Step 1
+# cuts from `origin/$base` afterwards, so any enumeration can disagree with the tree
+# under test - and one stale link then either hides a red suite or kills the whole
+# command. Two or more runners therefore stay ambiguous on purpose: no test command is
+# reported and `pin-config.sh` is the documented way to name the right one. The
+# multi-suite case and what it would take is #23.
+#
+# Tracked, because an ignored scratch project or an untracked leftover is not in the
+# worktree the gates run in, so a command naming it dies there at 127. The top-level
+# probe below keeps its long-standing behaviour and accepts an untracked runner too.
+harness_entry() { # dir relative to det_root ("" = its top) -> the runner path, or nothing
+  local d=$1 h p
+  for h in tests/run-tests.sh test/run-tests.sh scripts/run-tests.sh run-tests.sh; do
+    p=${d:+$d/}$h
+    if [ -f "$det_root/$p" ]; then printf '%s' "$p"; return 0; fi
+  done
+  return 1
+}
 det_source_test=""
 if [ -z "$det_test" ]; then
-  for h in tests/run-tests.sh test/run-tests.sh scripts/run-tests.sh run-tests.sh; do
-    [ -f "$h" ] || continue
-    det_test="bash $h"
-    det_source_test=$h
-    break
-  done
+  if harness=$(harness_entry ""); then
+    det_test="bash $harness"
+    det_source_test=$harness
+  else
+    mapfile -t _runners < <(
+      git -C "$det_root" ls-files --cached -- '*/run-tests.sh' 2>/dev/null | sort
+    )
+    # Emitted BARE, and only when the path cannot change how a shell reads it. The value
+    # is evaluated twice - run-gates.sh hands it to `bash -c`, and Step 6 substitutes it
+    # into `--gate test='<cmd>'` - so no single quoting scheme survives both: double
+    # quotes let a directory named `$(...)` execute at gate time (a repository you have
+    # merely cloned is enough), and single quotes are ended by the wrapper. A path
+    # carrying anything else is left undetected, which is the honest outcome: Step 6
+    # degrades loudly and pin-config.sh names the command.
+    if [ "${#_runners[@]}" = 1 ]; then
+      case ${_runners[0]} in
+        *[!A-Za-z0-9._/-]*) : ;;
+        *)
+          det_test="bash ${_runners[0]}"
+          det_source_test=${_runners[0]}
+          ;;
+      esac
+    fi
+  fi
 fi
 
 # Config wins over auto-detect; track the source per command.
@@ -291,11 +376,11 @@ if [ "$claim" = 1 ]; then
 fi
 
 # -- worktree state for issue-<N> ---------------------------------------------
-# Same root as the config and the state dir. `git rev-parse --show-toplevel`
-# returns the WORKTREE's own root when preflight runs from inside one, which would
+# `$root` (resolved once above, for the gate probes too) is the MAIN checkout, the
+# same root as the config and the state dir. `git rev-parse --show-toplevel` would
+# return the WORKTREE's own root when preflight runs from inside one, which would
 # compute `<repo>-worktrees/issue-N-worktrees/issue-N` and report `absent` for a
 # worktree the caller is standing in.
-root=$(repo_root)
 wt_state="absent"
 wt_path=""
 if [ -n "$root" ]; then

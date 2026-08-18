@@ -28,13 +28,17 @@ decision. This file is the reference: what to call, when, and how to read the re
 3. **A conflict is a stop, not a fix.** Content conflicts, branch protection, failed checks →
    the script exits 2 and hands control back. Report the exact error; do not auto-resolve.
 
-## preflight.sh — Step 0 probe (run once, from the main checkout)
+## preflight.sh — Step 0 probe (run once, from anywhere in the repository)
 
 `preflight.sh <N> [--claim] [--config <path>]`
 
 Collapses auth, repo identity, base resolution, gate-command detection, issue state, worktree
 state, and board membership into one call. `--claim` assigns the issue to you (warns, does not
-steal, if someone else holds it).
+steal, if someone else holds it). Every probe resolves against the main checkout, so the answer
+does not change with the directory you start in; a relative `--config` you pass yourself is the
+one exception and stays relative to you. The `CMD_*` values are **repository-root-relative and
+must not be split** — run the gates from the root of your checkout (Step 1's `cd WT_PATH`, or
+the repository root in the exit-3 in-place fallback), or a root-relative runner path exits 127.
 
 Keys: `GH_OK SCOPES OWNER REPO DEFAULT_BRANCH BASE START_POINT CMD_TYPECHECK CMD_TEST CMD_VISUAL
 CMD_SMOKE CMD_SOURCE_TEST CMD_SOURCE_TYPECHECK CONFIG_PRESENT ISSUE_STATE ISSUE_TITLE

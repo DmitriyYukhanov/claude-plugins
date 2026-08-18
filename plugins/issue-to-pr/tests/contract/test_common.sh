@@ -133,3 +133,32 @@ test_common_marker_refresh_reports_a_rewrite_that_changed_nothing() {
     fail "marker_refresh reported success after changing nothing"
   fi
 }
+
+# resolve_under is what keeps two cwd-sensitive paths honest: preflight's config file and
+# worktree.sh's --salvage-to destination. A Windows form it fails to recognise as absolute
+# gets silently buried under the repo root, where neither of them is ever found again.
+# Every value is built from one unambiguous backslash rather than written as a literal:
+# counting backslashes through layers of quoting is how the first version of this test
+# came to assert something other than what it meant.
+test_common_resolve_under_keeps_absolute_paths() {
+  source "$ITP_SCRIPTS/lib/common.sh"
+  local bs drive unc
+  bs=$(printf '\\')
+  drive="C:${bs}x.md"                 # C:\x.md
+  unc="$bs$bs""nas${bs}team${bs}x.md" # \\nas\team\x.md
+  assert_eq '/etc/x.md' "$(resolve_under /ROOT /etc/x.md)" 'POSIX absolute'
+  assert_eq 'C:/x.md' "$(resolve_under /ROOT C:/x.md)" 'drive letter, forward slash'
+  assert_eq "$drive" "$(resolve_under /ROOT "$drive")" 'drive letter, backslash'
+  assert_eq "$unc" "$(resolve_under /ROOT "$unc")" 'UNC share'
+  assert_eq '//nas/team/x.md' "$(resolve_under /ROOT //nas/team/x.md)" 'UNC, forward slashes'
+}
+
+test_common_resolve_under_roots_a_relative_path() {
+  source "$ITP_SCRIPTS/lib/common.sh"
+  local bs
+  bs=$(printf '\\')
+  assert_eq '/ROOT/.claude/c.md' "$(resolve_under /ROOT .claude/c.md)"
+  assert_eq '/ROOT/C:not-a-drive/c.md' "$(resolve_under /ROOT C:not-a-drive/c.md)" 'drive-relative is not absolute'
+  # ONE leading backslash is not a UNC share, so it still gets rooted.
+  assert_eq "/ROOT/${bs}single" "$(resolve_under /ROOT "${bs}single")" 'single backslash'
+}
