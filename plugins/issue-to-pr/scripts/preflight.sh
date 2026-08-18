@@ -312,11 +312,21 @@ if [ -z "$det_test" ]; then
     mapfile -t _runners < <(
       git -C "$det_root" ls-files --cached -- '*/run-tests.sh' 2>/dev/null | sort
     )
+    # Emitted BARE, and only when the path cannot change how a shell reads it. The value
+    # is evaluated twice - run-gates.sh hands it to `bash -c`, and Step 6 substitutes it
+    # into `--gate test='<cmd>'` - so no single quoting scheme survives both: double
+    # quotes let a directory named `$(...)` execute at gate time (a repository you have
+    # merely cloned is enough), and single quotes are ended by the wrapper. A path
+    # carrying anything else is left undetected, which is the honest outcome: Step 6
+    # degrades loudly and pin-config.sh names the command.
     if [ "${#_runners[@]}" = 1 ]; then
-      # Quoted: run-gates.sh hands the value to `bash -c`, so a project directory with
-      # a space in its name would otherwise arrive as two arguments.
-      det_test="bash \"${_runners[0]}\""
-      det_source_test=${_runners[0]}
+      case ${_runners[0]} in
+        *[!A-Za-z0-9._/-]*) : ;;
+        *)
+          det_test="bash ${_runners[0]}"
+          det_source_test=${_runners[0]}
+          ;;
+      esac
     fi
   fi
 fi

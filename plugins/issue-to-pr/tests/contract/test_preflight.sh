@@ -258,7 +258,7 @@ test_preflight_detects_package_json_from_a_subdirectory() {
 }
 
 # A plugin or package monorepo keeps its runner under the project, not at the top. The
-# path is quoted because run-gates.sh hands the value to `bash -c`.
+# path is emitted bare, and only when nothing in it could change how a shell reads it.
 test_preflight_finds_a_nested_harness() {
   local repo
   repo=$(init_repo)
@@ -268,7 +268,7 @@ test_preflight_finds_a_nested_harness() {
   git add plugins/foo/tests/run-tests.sh
   use_fake_gh happy
   run_script preflight.sh 6
-  assert_key "$OUT" CMD_TEST 'bash "plugins/foo/tests/run-tests.sh"'
+  assert_key "$OUT" CMD_TEST "bash plugins/foo/tests/run-tests.sh"
   assert_key "$OUT" CMD_SOURCE_TEST plugins/foo/tests/run-tests.sh
 }
 
@@ -339,22 +339,37 @@ test_preflight_reads_the_config_from_a_subdirectory() {
   assert_key "$OUT" BASE dev
 }
 
-# run-gates.sh hands the command to `bash -c`, so a project directory with a space in
-# its name has to come back as one argument or the gate is permanently red on a repo
-# with a perfectly good suite. Asserted by RUNNING it rather than by matching bash's
-# escaping style.
-test_preflight_nested_harness_survives_a_space_in_the_path() {
+# SECURITY. The detected command is evaluated by `bash -c` in run-gates.sh, so a tracked
+# directory named `$(...)` used to execute at gate time on any repository merely cloned
+# and taken through Step 0. Reproduced against the double-quoted form this replaced.
+test_preflight_nested_harness_path_cannot_inject_a_command() {
   local repo cmd
   repo=$(init_repo)
   cd "$repo"
+  mkdir -p 'plugins/$(touch PWNED)/tests'
+  printf '#!/usr/bin/env bash\n' >'plugins/$(touch PWNED)/tests/run-tests.sh'
+  git add 'plugins/$(touch PWNED)/tests/run-tests.sh'
+  use_fake_gh happy
+  run_script preflight.sh 6
+  assert_key "$OUT" CMD_TEST ""
+  cmd=$(printf '%s\n' "$OUT" | grep -m1 '^CMD_TEST=' | sed 's/^CMD_TEST=//')
+  bash -c "$cmd" >/dev/null 2>&1
+  if [ -e PWNED ]; then fail "the detected command executed a substitution from a path"; fi
+}
+
+# A path that needs quoting to be one argument is left undetected instead. The value is
+# evaluated twice (bash -c, and Step 6's --gate test='<cmd>' wrapper), so no quoting
+# scheme survives both; not detecting is the honest outcome and pin-config names it.
+test_preflight_nested_harness_with_a_space_is_not_used() {
+  local repo
+  repo=$(init_repo)
+  cd "$repo"
   mkdir -p "my proj/tests"
-  printf '#!/usr/bin/env bash\nexit 0\n' >"my proj/tests/run-tests.sh"
+  printf '#!/usr/bin/env bash\n' >"my proj/tests/run-tests.sh"
   git add "my proj/tests/run-tests.sh"
   use_fake_gh happy
   run_script preflight.sh 6
-  assert_contains "$OUT" "my proj/tests/run-tests.sh"
-  cmd=$(printf '%s\n' "$OUT" | grep -m1 '^CMD_TEST=' | sed 's/^CMD_TEST=//')
-  if ! bash -c "$cmd"; then fail "the detected command does not run as one path: $cmd"; fi
+  assert_key "$OUT" CMD_TEST ""
 }
 
 # An explicit --config is the caller's instruction and stays relative to the caller; only
@@ -402,7 +417,7 @@ test_preflight_ignores_a_gitignored_project() {
   use_fake_gh happy
   run_script preflight.sh 6
   assert_not_contains "$OUT" aaa-sandbox
-  assert_key "$OUT" CMD_TEST 'bash "plugins/real/tests/run-tests.sh"'
+  assert_key "$OUT" CMD_TEST "bash plugins/real/tests/run-tests.sh"
 }
 
 # Regression: anchoring the probes to "whatever tree cwd is in" meant that starting a run

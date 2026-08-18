@@ -5,15 +5,16 @@ All notable changes to the **issue-to-pr** plugin will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [2.4.0] - 2026-08-17
+## [2.4.1] - 2026-08-18
 
 ### Added
-- A repository whose only test runner sits inside a project rather than at the top is now detected, so long as there is exactly one of them and it is tracked. Two or more stay ambiguous on purpose and are pinned in the config instead ([#23](https://github.com/DmitriyYukhanov/claude-plugins/issues/23))
+- Detect a test runner that lives inside a project, when the repository has exactly one tracked runner and none at the top
+- Leave two or more runners ambiguous and report no test command, so the one you want gets pinned in the config ([#23](https://github.com/DmitriyYukhanov/claude-plugins/issues/23))
 
 ### Fixed
-- Gate-command detection answers the same thing whatever directory you start the run from; it used to read the caller's working directory and report no test command for a project that has one
-- The pinned config is found from anywhere in the repository. Started from a subdirectory, a run used to miss it entirely and quietly replace your pinned test command, base branch and board with guesses
-- A `check:`-only Makefile reports `make check` instead of a `make typecheck` that does not exist and stopped the run on a red gate
+- Resolve every Step-0 probe against the repository, so gate detection no longer depends on the directory you start the run from
+- Find the pinned config from anywhere in the repository; a run started from a subdirectory used to miss it and replace your pinned test command, base branch and board with guesses
+- Report `make check` for a `check:`-only Makefile, instead of a `make typecheck` that no rule defines and that stopped the run on a red gate
 
 ## [2.3.2] - 2026-08-17
 
