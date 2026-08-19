@@ -595,3 +595,214 @@ test_preflight_fetches_the_base_when_the_default_branch_is_missing_on_origin() {
     fail "a missing default branch took the base ref down with it"
   fi
 }
+
+# -- state directory: config location, migration, marker sweep (issue #18) ----
+
+test_preflight_reads_the_canonical_config() {
+  local repo
+  repo=$(init_repo)
+  cd "$repo"
+  mkdir -p .claude/issue-to-pr
+  printf -- '---\nbase_branch: dev\ntest_cmd: make ci\n---\n' >.claude/issue-to-pr/config.md
+  use_fake_gh happy
+  run_script preflight.sh 6
+  assert_rc 0
+  assert_key "$OUT" CONFIG_PRESENT true
+  assert_key "$OUT" CMD_TEST "make ci"
+  assert_key "$OUT" BASE dev
+}
+
+# A project that pinned its config before the state directory existed keeps working: the
+# old sibling file is copied in on the first run and LEFT where it is, so nothing breaks
+# if the user rolls the plugin back. Deleting it is their call, and the warning says so.
+test_preflight_migrates_the_legacy_config() {
+  local repo
+  repo=$(init_repo)
+  cd "$repo"
+  mkdir -p .claude
+  printf -- '---\ntest_cmd: legacy cmd\n---\n' >.claude/issue-to-pr.local.md
+  use_fake_gh happy
+  run_script preflight.sh 6
+  assert_rc 0
+  assert_key "$OUT" CMD_TEST "legacy cmd"
+  [ -f "$repo/.claude/issue-to-pr/config.md" ] || fail "the config was not copied to the state dir"
+  [ -f "$repo/.claude/issue-to-pr.local.md" ] || fail "the original was removed instead of left alone"
+  assert_contains "$OUT" "issue-to-pr.local.md"
+}
+
+test_preflight_canonical_config_wins_over_the_legacy_one() {
+  local repo
+  repo=$(init_repo)
+  cd "$repo"
+  mkdir -p .claude/issue-to-pr
+  printf -- '---\ntest_cmd: canonical\n---\n' >.claude/issue-to-pr/config.md
+  printf -- '---\ntest_cmd: legacy\n---\n' >.claude/issue-to-pr.local.md
+  use_fake_gh happy
+  run_script preflight.sh 6
+  assert_key "$OUT" CMD_TEST canonical
+}
+
+# Whatever writes into the state directory first has to leave the ignore rule behind, or
+# the copied config lands in the repository as an untracked file nobody recognises.
+test_preflight_migration_leaves_the_state_dir_ignoring_itself() {
+  local repo
+  repo=$(init_repo)
+  cd "$repo"
+  mkdir -p .claude
+  printf -- '---\ntest_cmd: legacy cmd\n---\n' >.claude/issue-to-pr.local.md
+  use_fake_gh happy
+  run_script preflight.sh 6
+  [ -f "$repo/.claude/issue-to-pr/.gitignore" ] || fail "the state dir does not ignore itself"
+}
+
+test_preflight_sweeps_an_expired_approval_marker() {
+  local repo
+  repo=$(init_repo)
+  cd "$repo"
+  write_marker "$repo" feat/old "aaaa" false "$(stale_iso)"
+  use_fake_gh happy
+  run_script preflight.sh 6
+  if [ -f "$repo/.claude/issue-to-pr/approval-feat-old.json" ]; then
+    fail "an expired marker was left behind"
+  fi
+}
+
+test_preflight_keeps_a_fresh_approval_marker() {
+  local repo
+  repo=$(init_repo)
+  cd "$repo"
+  write_marker "$repo" feat/live "aaaa" false "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  use_fake_gh happy
+  run_script preflight.sh 6
+  [ -f "$repo/.claude/issue-to-pr/approval-feat-live.json" ] || fail "a fresh approval was swept"
+}
+
+# Regression the issue names: epoch_of returns EMPTY for a timestamp it cannot read, and
+# treating that as "infinitely old" swept every live approval in the repository at once
+# on macOS, where the GNU date form fails. Unreadable means leave it alone.
+test_preflight_never_sweeps_a_marker_it_cannot_date() {
+  local repo m
+  repo=$(init_repo)
+  cd "$repo"
+  # Through the shared fixture, not a third hand-rolled copy of the marker JSON: the
+  # helper exists because two independent copies had already drifted apart once.
+  write_marker "$repo" feat/undated aaaa false not-a-date
+  m="$repo/.claude/issue-to-pr/approval-feat-undated.json"
+  use_fake_gh happy
+  run_script preflight.sh 6
+  [ -f "$m" ] || fail "a marker with an unreadable timestamp was swept"
+}
+
+# A tracked legacy config is a TEAM's file. Copying it into a directory that ignores
+# itself would give every developer a private, frozen snapshot, and a base_branch or
+# board change pushed to the tracked file would never be read again on a machine that
+# had migrated. So it is left alone and it stays the file in force.
+test_preflight_does_not_migrate_a_tracked_legacy_config() {
+  local repo
+  repo=$(init_repo)
+  cd "$repo"
+  mkdir -p .claude
+  printf -- '---\ntest_cmd: team cmd\n---\n' >.claude/issue-to-pr.local.md
+  git add .claude/issue-to-pr.local.md
+  git commit -qm "share the config"
+  use_fake_gh happy
+  run_script preflight.sh 6
+  assert_key "$OUT" CMD_TEST "team cmd"
+  if [ -f "$repo/.claude/issue-to-pr/config.md" ]; then
+    fail "a tracked config was copied into the per-developer state dir"
+  fi
+  assert_contains "$OUT" "is tracked"
+}
+
+# Step 8 pins into the file preflight REPORTS, not a hard-coded path: when the migration
+# could not copy, the run keeps reading the legacy file, and a pin aimed at the canonical
+# path would create a second config that wins next run and drops the base branch and board.
+test_preflight_reports_the_config_path_it_read() {
+  local repo line
+  repo=$(init_repo)
+  cd "$repo"
+  mkdir -p .claude/issue-to-pr
+  printf -- '---\ntest_cmd: canonical\n---\n' >.claude/issue-to-pr/config.md
+  use_fake_gh happy
+  run_script preflight.sh 6
+  # Compared on the tail: the absolute prefix is git's spelling of the path, not the
+  # test's, and on Windows those differ (C:/Users/... against /tmp/...).
+  line=$(printf '%s\n' "$OUT" | grep -m1 '^CONFIG_PATH=')
+  assert_contains "$line" '.claude/issue-to-pr/config.md'
+  assert_not_contains "$line" 'issue-to-pr.local.md'
+}
+
+# The model writes the friction log and epic ledgers here itself with a plain mkdir, and
+# whichever lands first would be an untracked file until some later approval created the
+# rule. Step 0 runs before all of them, so the directory hides itself from the start.
+test_preflight_creates_the_state_dir_even_with_nothing_to_write() {
+  local repo
+  repo=$(init_repo)
+  cd "$repo"
+  use_fake_gh happy
+  run_script preflight.sh 6
+  [ -f "$repo/.claude/issue-to-pr/.gitignore" ] || fail "the state dir was not prepared"
+}
+
+# Regression: with NO config anywhere, the legacy fallback still fired and CONFIG_PATH
+# named the old sibling path. Step 8 pins into whatever this reports, so a first run on a
+# fresh repository would have written the gate commands into an un-ignored
+# `.claude/issue-to-pr.local.md` - and the run after that would offer to migrate a file
+# the user never created.
+test_preflight_with_no_config_reports_the_canonical_path() {
+  local repo line
+  repo=$(init_repo)
+  cd "$repo"
+  use_fake_gh happy
+  run_script preflight.sh 6
+  assert_key "$OUT" CONFIG_PRESENT false
+  line=$(printf '%s\n' "$OUT" | grep -m1 '^CONFIG_PATH=')
+  assert_contains "$line" '.claude/issue-to-pr/config.md'
+  assert_not_contains "$line" 'issue-to-pr.local.md'
+}
+
+# A probe run outside a checkout stays read-only: `${root:-.}` would otherwise resolve to
+# the caller's cwd and create a state directory in whatever folder they stood in.
+test_preflight_outside_a_repository_writes_nothing() {
+  local outside
+  outside="$TEST_TMPDIR/not-a-repo"
+  mkdir -p "$outside"
+  cd "$outside"
+  use_fake_gh happy
+  run_script preflight.sh 6
+  if [ -e "$outside/.claude" ]; then fail "preflight created a state dir outside a repository"; fi
+}
+
+# The outside-a-repo guard has to hold on the path that actually WRITES: a stray legacy
+# config in a plain directory used to be copied into a state dir created right there in the
+# caller's cwd. Reading it is left alone deliberately - that is what preflight did with a
+# cwd-relative config long before this change, there is no repository to read instead, and
+# nothing downstream can run outside a checkout anyway.
+test_preflight_outside_a_repository_ignores_a_stray_legacy_config() {
+  local outside
+  outside="$TEST_TMPDIR/not-a-repo"
+  mkdir -p "$outside/.claude"
+  printf -- '---\ntest_cmd: stray cmd\n---\n' >"$outside/.claude/issue-to-pr.local.md"
+  cd "$outside"
+  use_fake_gh happy
+  run_script preflight.sh 6
+  if [ -e "$outside/.claude/issue-to-pr" ]; then fail "a state dir was created outside a repository"; fi
+}
+
+# Regression: warnings are queued before the two early exits, and degrade/stop flush the
+# buffer and leave. The one saying the config is a shared tracked file was dropped on
+# exactly the runs that also failed to parse it.
+test_preflight_warnings_survive_an_early_degrade() {
+  local repo
+  repo=$(init_repo)
+  cd "$repo"
+  mkdir -p .claude
+  printf -- '---\nnot valid frontmatter at all !!!\n---\n' >.claude/issue-to-pr.local.md
+  git add .claude/issue-to-pr.local.md
+  git commit -qm "share a broken config"
+  use_fake_gh happy
+  run_script preflight.sh 6
+  assert_rc 4
+  assert_key "$OUT" DEGRADED_REASON config-parse-failed
+  assert_contains "$OUT" "is tracked"
+}

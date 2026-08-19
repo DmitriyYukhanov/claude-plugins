@@ -74,7 +74,25 @@ fi
 # A refusal is honoured, not swallowed: the file about to be written carries the
 # project's board URL and gate commands, and without the ignore rule it lands in the
 # repository as an ordinary untracked file that the next `git add -A` commits.
-mkdir -p "$(dirname "$config")" 2>/dev/null || true
+# The ignore rule is written ONLY into the plugin's own directory. `--config` can name
+# anywhere, and dropping a `*` into a directory the caller chose would hide their files
+# from git - a far worse outcome than the untracked config this is meant to prevent.
+# A directory is not a file to write into, and `--config .claude/issue-to-pr` names the
+# state dir itself: dirname would then strip the wrong segment, the check below would miss,
+# and pin-config would try to create a plain file exactly where the state directory goes.
+[ -d "$config" ] && degrade invalid-config "pin-config: --config must name a file, not the directory $config"
+
+# Recognised through the shared predicate rather than re-derived here: this file already
+# shipped one hand-rolled version of that match which missed the relative form.
+config_dir=${config%/*}
+[ "$config_dir" = "$config" ] && config_dir=.
+if is_state_dir_path "$config_dir"; then
+  ensure_state_dir "$config_dir" ||
+    degrade state-dir-failed "pin-config: could not create $config_dir with its ignore rule - refusing to write a config the repository would pick up"
+else
+  mkdir -p "$config_dir" 2>/dev/null ||
+    degrade config-write-failed "pin-config: could not create $config_dir"
+fi
 
 # Persist the block. Both paths write to a temp first and are STATUS-CHECKED: if
 # the write cannot land (parent is a file, or a read-only/full filesystem),

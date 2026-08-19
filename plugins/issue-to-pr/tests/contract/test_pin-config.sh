@@ -103,3 +103,42 @@ test_pin_unwritable_config_degrades() {
   assert_key "$OUT" DEGRADED_REASON config-write-failed
   assert_not_contains "$OUT" "PINNED=test"
 }
+
+# The state dir has to ignore itself from its FIRST file onward, and pin-config can be
+# that first writer when Step 0 ran in an earlier session.
+test_pin_config_leaves_the_state_dir_ignoring_itself() {
+  local cfg
+  cfg="$TEST_TMPDIR/repo/.claude/issue-to-pr/config.md"
+  run_script pin-config.sh --config "$cfg" --test "bash tests/run-tests.sh"
+  assert_rc 0
+  assert_key "$OUT" PINNED test
+  [ -f "$TEST_TMPDIR/repo/.claude/issue-to-pr/.gitignore" ] || fail "pin-config did not leave the ignore rule"
+}
+
+# Regression: the state dir was matched with a glob needing a leading slash, so the
+# relative form a caller can pass landed in the branch with no ignore rule at all.
+test_pin_config_recognises_a_relative_state_dir() {
+  run_script pin-config.sh --config ".claude/issue-to-pr/config.md" --test "bash tests/run-tests.sh"
+  assert_rc 0
+  [ -f "$TEST_TMPDIR/.claude/issue-to-pr/.gitignore" ] || fail "a relative state dir got no ignore rule"
+}
+
+# The state-dir branch must REFUSE, not warn: what is about to be written carries the board
+# URL and the gate commands.
+test_pin_config_degrades_when_the_state_dir_cannot_be_made() {
+  local blocked
+  blocked="$TEST_TMPDIR/repo/.claude/issue-to-pr"
+  mkdir -p "$TEST_TMPDIR/repo/.claude"
+  printf "in the way
+" >"$blocked"
+  run_script pin-config.sh --config "$blocked/config.md" --test "bash tests/run-tests.sh"
+  assert_rc 4
+  assert_key "$OUT" DEGRADED_REASON state-dir-failed
+}
+
+test_pin_config_refuses_a_directory_as_config() {
+  mkdir -p "$TEST_TMPDIR/repo/.claude/issue-to-pr"
+  run_script pin-config.sh --config "$TEST_TMPDIR/repo/.claude/issue-to-pr" --test "bash tests/run-tests.sh"
+  assert_rc 4
+  assert_key "$OUT" DEGRADED_REASON invalid-config
+}

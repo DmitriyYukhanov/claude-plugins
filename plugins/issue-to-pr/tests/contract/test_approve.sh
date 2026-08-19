@@ -117,7 +117,7 @@ test_guard_used_marker_denies() {
 
 test_guard_stale_marker_denies() {
   local repo; repo=$(init_repo); cd "$repo"
-  write_marker "$repo" feat/issue-6-x "$SHA_OK" false "$(date -u -d '-2 hours' +%Y-%m-%dT%H:%M:%SZ)"
+  write_marker "$repo" feat/issue-6-x "$SHA_OK" false "$(stale_iso)"
   use_fake_gh happy
   run_guard "$(hook_json 'gh pr merge feat/issue-6-x --squash')"
   assert_contains "$OUT" '"permissionDecision":"deny"'

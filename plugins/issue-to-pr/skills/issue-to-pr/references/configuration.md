@@ -1,9 +1,13 @@
-# Configuration - `.claude/issue-to-pr.local.md`
+# Configuration - `.claude/issue-to-pr/config.md`
 
-Optional per-project settings, read from `.claude/issue-to-pr.local.md` in the repo root
-(the `.claude/<plugin>.local.md` convention: YAML frontmatter, optional markdown notes below).
-Every field is optional. With no file, `preflight.sh` auto-detects the gate commands and the
-skill runs by the issue argument.
+Optional per-project settings (YAML frontmatter, optional markdown notes below), read from
+`.claude/issue-to-pr/config.md` in the main checkout. That directory is everything this
+plugin writes into a repository, and it carries its own `.gitignore` holding `*`, so a
+teammate without the plugin installed never sees a file they cannot place and the project's
+own `.gitignore` is never edited. A config left at the pre-2.5 path
+(`.claude/issue-to-pr.local.md`) is copied across on the first run and left where it is for
+you to delete. Every field is optional. With no file, `preflight.sh` auto-detects the gate
+commands and the skill runs by the issue argument.
 
 ## Schema
 

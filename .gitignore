@@ -9,9 +9,6 @@ docs/superpowers/
 # issue-to-pr per-task working dirs (worktree-local: progress.md, design.md, state.json)
 tmp/task-*/
 
-# issue-to-pr repo-level runtime state: approval markers, epic ledgers, friction log
-.claude/issue-to-pr/
-
 # Python bytecode — the humanizer plugin vendors a scanner that generates it on run
 __pycache__/
 *.pyc

@@ -57,10 +57,20 @@ evidence, and applies the edits on your approval.
 
 ### Configuration (optional)
 
-`.claude/issue-to-pr.local.md` (YAML frontmatter) sets the board URL, base branch, and
+`.claude/issue-to-pr/config.md` (YAML frontmatter) sets the board URL, base branch, and
 typecheck/test/visual/smoke commands. Everything is optional; with no file the skill
 auto-detects commands from the project. Auto-detected commands that passed get pinned back
 into the config after a successful run.
+
+That directory holds everything the plugin writes into your repository, and it ships its own
+`.gitignore` containing `*`. Nothing of it reaches `git status`, and your project's
+`.gitignore` is left alone. A config at the older `.claude/issue-to-pr.local.md` path is
+copied across on the first run and left in place for you to delete.
+
+Because the directory is ignored, `git clean -x` treats it as disposable and removes it along
+with the pinned config and any approval you are holding. Nothing breaks permanently: the commands
+get detected again and an approval can be given again, but a merge you had just approved will ask
+for approval a second time.
 
 ### Companion skills (optional)
 

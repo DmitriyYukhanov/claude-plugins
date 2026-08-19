@@ -162,3 +162,63 @@ test_common_resolve_under_roots_a_relative_path() {
   # ONE leading backslash is not a UNC share, so it still gets rooted.
   assert_eq "/ROOT/${bs}single" "$(resolve_under /ROOT "${bs}single")" 'single backslash'
 }
+
+# ensure_state_dir is what keeps this plugin out of a repository it is a guest in: the
+# state directory carries its own ignore rule, so a teammate without the plugin never
+# sees a file they cannot place, and the project's own .gitignore is never touched.
+test_common_ensure_state_dir_writes_a_self_ignoring_gitignore() {
+  source "$ITP_SCRIPTS/lib/common.sh"
+  local d first
+  d="$TEST_TMPDIR/state"
+  ensure_state_dir "$d" || fail "ensure_state_dir reported a failure on a writable path"
+  [ -f "$d/.gitignore" ] || fail "no .gitignore was written"
+  # `*` must be the FIRST rule: gitignore lets the last match win, so a `!keep` someone
+  # adds below still works. A `*` at the bottom would override it.
+  first=$(grep -v '^#' "$d/.gitignore" | grep -v '^[[:space:]]*$' | head -1)
+  assert_eq '*' "$first" 'the first rule must be *'
+}
+
+test_common_ensure_state_dir_never_clobbers_an_existing_gitignore() {
+  source "$ITP_SCRIPTS/lib/common.sh"
+  local d
+  d="$TEST_TMPDIR/state-existing"
+  mkdir -p "$d"
+  printf '%s\n' '*' '!keep-me.md' >"$d/.gitignore"
+  ensure_state_dir "$d" || fail "ensure_state_dir reported a failure"
+  assert_contains "$(cat "$d/.gitignore")" 'keep-me.md' 'a hand-edited rule was overwritten'
+}
+
+# The caller has to be able to refuse: the files that land here carry the board URL, the
+# pinned gate commands and live approvals, and without the rule they are ordinary
+# untracked files that the next `git add -A` commits.
+test_common_ensure_state_dir_reports_a_failure() {
+  source "$ITP_SCRIPTS/lib/common.sh"
+  local blocked
+  blocked="$TEST_TMPDIR/not-a-dir"
+  printf 'i am a file\n' >"$blocked"
+  if ensure_state_dir "$blocked/state"; then
+    fail "ensure_state_dir reported success with a file in the way"
+  fi
+}
+
+# A zero-byte .gitignore is the wreckage of an interrupted write, not a rule. Treating it
+# as "already set up" left the directory unignored forever while every caller read the 0
+# return as proof the rule was there.
+test_common_ensure_state_dir_repairs_an_empty_gitignore() {
+  source "$ITP_SCRIPTS/lib/common.sh"
+  local d first
+  d="$TEST_TMPDIR/state-empty"
+  mkdir -p "$d"
+  : >"$d/.gitignore"
+  ensure_state_dir "$d" || fail "ensure_state_dir reported a failure"
+  first=$(grep -v '^#' "$d/.gitignore" | grep -v '^[[:space:]]*$' | head -1)
+  assert_eq '*' "$first" 'the rule was not restored'
+}
+
+test_common_is_state_dir_path_matches_both_rootings() {
+  source "$ITP_SCRIPTS/lib/common.sh"
+  is_state_dir_path '.claude/issue-to-pr' || fail 'the relative form was not recognised'
+  is_state_dir_path '/repo/.claude/issue-to-pr' || fail 'the rooted form was not recognised'
+  if is_state_dir_path '/repo/.claude'; then fail 'the parent was recognised as the state dir'; fi
+  if is_state_dir_path '/repo/docs'; then fail 'an unrelated directory was recognised'; fi
+}
