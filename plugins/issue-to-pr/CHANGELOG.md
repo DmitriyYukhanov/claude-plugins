@@ -5,11 +5,14 @@ All notable changes to the **issue-to-pr** plugin will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [2.5.0] - 2026-08-19
+## [2.5.1] - 2026-08-20
 
 ### Changed
-- Keep everything the plugin writes in one directory that hides itself from git, so a teammate without the plugin installed never finds files they cannot place and your own ignore rules are left alone. The config moves there too, and one left at the previous location is carried over on the first run and left for you to delete
-- A config your team has committed stays where it is and stays the one in force, rather than becoming a private copy on each machine
+- Keep the plugin's repository-level state in `.claude/issue-to-pr/`, a directory that hides itself from git, so a teammate without the plugin installed never finds files they cannot place
+- Read the config from `.claude/issue-to-pr/config.md`
+
+### Removed
+- Support for a config at the older `.claude/issue-to-pr.local.md` path. A run points at it once and leaves it alone, rather than copying it somewhere and deciding which copy wins
 
 ### Added
 - Clear away approval markers once they expire, and never one whose timestamp cannot be read

@@ -62,10 +62,12 @@ typecheck/test/visual/smoke commands. Everything is optional; with no file the s
 auto-detects commands from the project. Auto-detected commands that passed get pinned back
 into the config after a successful run.
 
-That directory holds everything the plugin writes into your repository, and it ships its own
-`.gitignore` containing `*`. Nothing of it reaches `git status`, and your project's
-`.gitignore` is left alone. A config at the older `.claude/issue-to-pr.local.md` path is
-copied across on the first run and left in place for you to delete.
+That directory holds the plugin's repository-level state - the config, approval markers, the
+friction log - and it ships its own `.gitignore` containing `*`, so none of it reaches
+`git status` and your project's `.gitignore` is left alone. (A run's scratch files still live
+in the worktree under `tmp/task-<N>/`, which the worktree teardown clears.) A config at the
+older `.claude/issue-to-pr.local.md` path is not read; the run says so once and leaves it for
+you to move.
 
 Because the directory is ignored, `git clean -x` treats it as disposable and removes it along
 with the pinned config and any approval you are holding. Nothing breaks permanently: the commands

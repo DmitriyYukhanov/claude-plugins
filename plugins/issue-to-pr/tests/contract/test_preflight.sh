@@ -51,8 +51,8 @@ test_preflight_config_overrides_and_base() {
   local repo
   repo=$(init_repo)
   cd "$repo"
-  mkdir -p .claude
-  cat >.claude/issue-to-pr.local.md <<'EOF'
+  mkdir -p .claude/issue-to-pr
+  cat >.claude/issue-to-pr/config.md <<'EOF'
 ---
 base_branch: dev
 test_cmd: pnpm test
@@ -74,8 +74,8 @@ test_preflight_config_nested_commands_alias() {
   local repo
   repo=$(init_repo)
   cd "$repo"
-  mkdir -p .claude
-  cat >.claude/issue-to-pr.local.md <<'EOF'
+  mkdir -p .claude/issue-to-pr
+  cat >.claude/issue-to-pr/config.md <<'EOF'
 ---
 commands:
   test: yarn test
@@ -93,9 +93,9 @@ test_preflight_crlf_config_is_parsed() {
   local repo
   repo=$(init_repo)
   cd "$repo"
-  mkdir -p .claude
+  mkdir -p .claude/issue-to-pr
   # Write the config with CRLF line endings (Windows editor default).
-  printf -- '---\r\nbase_branch: dev\r\ntest_cmd: pnpm test\r\n---\r\n' >.claude/issue-to-pr.local.md
+  printf -- '---\r\nbase_branch: dev\r\ntest_cmd: pnpm test\r\n---\r\n' >.claude/issue-to-pr/config.md
   use_fake_gh happy
   run_script preflight.sh 6
   assert_rc 0
@@ -107,8 +107,8 @@ test_preflight_status_map_is_parsed() {
   local repo
   repo=$(init_repo)
   cd "$repo"
-  mkdir -p .claude
-  cat >.claude/issue-to-pr.local.md <<'EOF'
+  mkdir -p .claude/issue-to-pr
+  cat >.claude/issue-to-pr/config.md <<'EOF'
 ---
 board:
   url: https://github.com/orgs/x/projects/1
@@ -128,8 +128,8 @@ test_preflight_malformed_config_degrades() {
   local repo
   repo=$(init_repo)
   cd "$repo"
-  mkdir -p .claude
-  cat >.claude/issue-to-pr.local.md <<'EOF'
+  mkdir -p .claude/issue-to-pr
+  cat >.claude/issue-to-pr/config.md <<'EOF'
 ---
 this line has no key and is not valid frontmatter !!!
 ---
@@ -327,8 +327,8 @@ test_preflight_reads_the_config_from_a_subdirectory() {
   local repo
   repo=$(init_repo)
   cd "$repo"
-  mkdir -p .claude sub
-  printf -- '---\nbase_branch: dev\ntest_cmd: make ci\n---\n' >.claude/issue-to-pr.local.md
+  mkdir -p .claude/issue-to-pr sub
+  printf -- '---\nbase_branch: dev\ntest_cmd: make ci\n---\n' >.claude/issue-to-pr/config.md
   printf '%s\n' '{ "scripts": { "test": "jest" } }' >package.json
   cd sub
   use_fake_gh happy
@@ -476,8 +476,8 @@ test_preflight_board_scope_missing_warns() {
   local repo
   repo=$(init_repo)
   cd "$repo"
-  mkdir -p .claude
-  cat >.claude/issue-to-pr.local.md <<'EOF'
+  mkdir -p .claude/issue-to-pr
+  cat >.claude/issue-to-pr/config.md <<'EOF'
 ---
 board:
   url: https://github.com/orgs/x/projects/1
@@ -612,48 +612,8 @@ test_preflight_reads_the_canonical_config() {
   assert_key "$OUT" BASE dev
 }
 
-# A project that pinned its config before the state directory existed keeps working: the
-# old sibling file is copied in on the first run and LEFT where it is, so nothing breaks
-# if the user rolls the plugin back. Deleting it is their call, and the warning says so.
-test_preflight_migrates_the_legacy_config() {
-  local repo
-  repo=$(init_repo)
-  cd "$repo"
-  mkdir -p .claude
-  printf -- '---\ntest_cmd: legacy cmd\n---\n' >.claude/issue-to-pr.local.md
-  use_fake_gh happy
-  run_script preflight.sh 6
-  assert_rc 0
-  assert_key "$OUT" CMD_TEST "legacy cmd"
-  [ -f "$repo/.claude/issue-to-pr/config.md" ] || fail "the config was not copied to the state dir"
-  [ -f "$repo/.claude/issue-to-pr.local.md" ] || fail "the original was removed instead of left alone"
-  assert_contains "$OUT" "issue-to-pr.local.md"
-}
 
-test_preflight_canonical_config_wins_over_the_legacy_one() {
-  local repo
-  repo=$(init_repo)
-  cd "$repo"
-  mkdir -p .claude/issue-to-pr
-  printf -- '---\ntest_cmd: canonical\n---\n' >.claude/issue-to-pr/config.md
-  printf -- '---\ntest_cmd: legacy\n---\n' >.claude/issue-to-pr.local.md
-  use_fake_gh happy
-  run_script preflight.sh 6
-  assert_key "$OUT" CMD_TEST canonical
-}
 
-# Whatever writes into the state directory first has to leave the ignore rule behind, or
-# the copied config lands in the repository as an untracked file nobody recognises.
-test_preflight_migration_leaves_the_state_dir_ignoring_itself() {
-  local repo
-  repo=$(init_repo)
-  cd "$repo"
-  mkdir -p .claude
-  printf -- '---\ntest_cmd: legacy cmd\n---\n' >.claude/issue-to-pr.local.md
-  use_fake_gh happy
-  run_script preflight.sh 6
-  [ -f "$repo/.claude/issue-to-pr/.gitignore" ] || fail "the state dir does not ignore itself"
-}
 
 test_preflight_sweeps_an_expired_approval_marker() {
   local repo
@@ -693,26 +653,6 @@ test_preflight_never_sweeps_a_marker_it_cannot_date() {
   [ -f "$m" ] || fail "a marker with an unreadable timestamp was swept"
 }
 
-# A tracked legacy config is a TEAM's file. Copying it into a directory that ignores
-# itself would give every developer a private, frozen snapshot, and a base_branch or
-# board change pushed to the tracked file would never be read again on a machine that
-# had migrated. So it is left alone and it stays the file in force.
-test_preflight_does_not_migrate_a_tracked_legacy_config() {
-  local repo
-  repo=$(init_repo)
-  cd "$repo"
-  mkdir -p .claude
-  printf -- '---\ntest_cmd: team cmd\n---\n' >.claude/issue-to-pr.local.md
-  git add .claude/issue-to-pr.local.md
-  git commit -qm "share the config"
-  use_fake_gh happy
-  run_script preflight.sh 6
-  assert_key "$OUT" CMD_TEST "team cmd"
-  if [ -f "$repo/.claude/issue-to-pr/config.md" ]; then
-    fail "a tracked config was copied into the per-developer state dir"
-  fi
-  assert_contains "$OUT" "is tracked"
-}
 
 # Step 8 pins into the file preflight REPORTS, not a hard-coded path: when the migration
 # could not copy, the run keeps reading the legacy file, and a pin aimed at the canonical
@@ -747,7 +687,7 @@ test_preflight_creates_the_state_dir_even_with_nothing_to_write() {
 # Regression: with NO config anywhere, the legacy fallback still fired and CONFIG_PATH
 # named the old sibling path. Step 8 pins into whatever this reports, so a first run on a
 # fresh repository would have written the gate commands into an un-ignored
-# `.claude/issue-to-pr.local.md` - and the run after that would offer to migrate a file
+# `.claude/issue-to-pr.local.md`, a path nothing reads.
 # the user never created.
 test_preflight_with_no_config_reports_the_canonical_path() {
   local repo line
@@ -792,17 +732,46 @@ test_preflight_outside_a_repository_ignores_a_stray_legacy_config() {
 # Regression: warnings are queued before the two early exits, and degrade/stop flush the
 # buffer and leave. The one saying the config is a shared tracked file was dropped on
 # exactly the runs that also failed to parse it.
-test_preflight_warnings_survive_an_early_degrade() {
+test_preflight_warnings_survive_an_early_stop() {
   local repo
   repo=$(init_repo)
   cd "$repo"
   mkdir -p .claude
-  printf -- '---\nnot valid frontmatter at all !!!\n---\n' >.claude/issue-to-pr.local.md
-  git add .claude/issue-to-pr.local.md
-  git commit -qm "share a broken config"
+  printf -- '---
+test_cmd: from the old path
+---
+' >.claude/issue-to-pr.local.md
+  use_fake_gh auth-fail
+  run_script preflight.sh 6
+  assert_rc 2
+  assert_key "$OUT" STOP_REASON gh-auth-failed
+  assert_contains "$OUT" "not read any more"
+}
+
+# The old sibling path is not read, not copied, and not tidied away. It is mentioned once
+# so the pinned base branch and board do not vanish in silence, and moving it is a job for
+# whoever owns the file.
+test_preflight_says_the_old_config_path_is_not_read() {
+  local repo
+  repo=$(init_repo)
+  cd "$repo"
+  mkdir -p .claude
+  printf -- '---\nbase_branch: from-the-old-path\ntest_cmd: old cmd\n---\n' >.claude/issue-to-pr.local.md
   use_fake_gh happy
   run_script preflight.sh 6
-  assert_rc 4
-  assert_key "$OUT" DEGRADED_REASON config-parse-failed
-  assert_contains "$OUT" "is tracked"
+  assert_key "$OUT" CONFIG_PRESENT false
+  assert_key "$OUT" BASE main
+  assert_contains "$OUT" "not read any more"
+  if [ -f "$repo/.claude/issue-to-pr/config.md" ]; then fail "the old config was copied after all"; fi
+  [ -f "$repo/.claude/issue-to-pr.local.md" ] || fail "the old config was removed"
+}
+
+# The contract lists WARNINGS among the keys that are always present.
+test_preflight_always_emits_the_warnings_key() {
+  local repo
+  repo=$(init_repo_with_remote)
+  cd "$repo"
+  use_fake_gh happy
+  run_script preflight.sh 6
+  assert_key_present "$OUT" WARNINGS
 }

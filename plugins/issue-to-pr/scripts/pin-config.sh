@@ -84,8 +84,9 @@ fi
 
 # Recognised through the shared predicate rather than re-derived here: this file already
 # shipped one hand-rolled version of that match which missed the relative form.
-config_dir=${config%/*}
-[ "$config_dir" = "$config" ] && config_dir=.
+# `dirname`, not ${config%/*}: on Git Bash dirname splits backslashes too, and the
+# parameter expansion silently turned a Windows-native --config into "." - pinning nothing.
+config_dir=$(dirname "$config")
 if is_state_dir_path "$config_dir"; then
   ensure_state_dir "$config_dir" ||
     degrade state-dir-failed "pin-config: could not create $config_dir with its ignore rule - refusing to write a config the repository would pick up"

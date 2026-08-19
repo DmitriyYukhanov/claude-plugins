@@ -15,9 +15,8 @@
 # authenticated; 4 (degraded) when the config file cannot be parsed.
 #
 # The only things it writes are its own state directory (which ignores itself: see
-# ensure_state_dir), a one-time copy of a pre-2.5 config into it, the sweep of
-# approval markers past their validity window, and - with --claim - the issue
-# assignee. It fetches, but never prunes: a probe the model runs on every task must
+# ensure_state_dir), the sweep of approval markers past their validity window, and
+# - with --claim - the issue assignee. It fetches, but never prunes: a probe the model runs on every task must
 # not delete the user's remote-tracking refs.
 set -uo pipefail
 
@@ -27,7 +26,7 @@ source "$SCRIPT_DIR/lib/common.sh"
 
 issue=""
 claim=0
-config_path=".claude/issue-to-pr.local.md"
+config_path=".claude/issue-to-pr/config.md"
 config_from_flag=0
 
 while [ "$#" -gt 0 ]; do
@@ -45,22 +44,22 @@ assert_numeric_issue "$issue" preflight
 warnings=()
 add_warning() { warnings+=("$1"); }
 # A queued warning is part of the answer, and `degrade`/`stop` flush the buffer and leave.
-# Both early exits below (unparseable config, gh not authenticated) sit AFTER the block
-# that queues the migration warnings, so without this the one telling you the config is a
-# shared tracked file was dropped on exactly the runs that also could not parse it.
+# Both early exits sit after warnings have already been queued, so without this the notice
+# that a config is sitting at a path nothing reads was dropped on exactly the runs that
+# also could not authenticate. Emitted even when empty: the contract lists WARNINGS as
+# always present, and a reader keying off it should never see the key vanish.
 emit_warnings() {
-  [ "${#warnings[@]}" -gt 0 ] && emit WARNINGS "$(join_by '; ' "${warnings[@]}")"
+  emit WARNINGS "$(join_by '; ' "${warnings[@]:-}")"
   return 0
 }
 
-# The config now lives inside the self-ignoring state dir, so a repo gains no
-# tracked file from this plugin. The pre-v3 sibling path is still read when the
-# canonical one is absent, so existing projects keep working untouched.
+# The config lives inside the self-ignoring state dir, so a repository gains no tracked
+# file from this plugin.
 #
-# Both are resolved against the MAIN checkout, never the cwd: on a resume the
-# caller is already inside the worktree, which has no state dir at all. A relative
-# path would find nothing there, report CONFIG_PRESENT=false, and let the run
-# proceed with the pinned base branch and board silently missing.
+# Resolved against the MAIN checkout, never the cwd: on a resume the caller is already
+# inside the worktree, which has no state dir at all. A relative path would find nothing
+# there, report CONFIG_PRESENT=false, and let the run proceed with the pinned base branch
+# and board silently missing.
 # -- Config (line-based YAML subset: top-level scalars + one nesting level) ----
 CFG_BASE=""
 CFG_BOARD_URL=""
@@ -116,51 +115,21 @@ root=$(repo_root)
 # the config nor a project to probe: `.git` (a dir in a checkout, a file in a linked
 # worktree) is missing there, so fall back to the tree we are standing in.
 [ -e "${root:-.}/.git" ] || root=$(git rev-parse --show-toplevel 2>/dev/null || printf '')
-# Only the DEFAULT path is re-rooted, and an explicit --config skips the whole dance
-# below: it is a caller's instruction, taken as given, which is also how every in-tree
-# caller already passes it (SKILL Step 8 hands it an absolute path).
+# Only the DEFAULT path is re-rooted; an explicit --config is a caller's instruction and
+# is taken as given.
+#
+# There is no legacy path and no migration. Reading a second location, deciding whether it
+# was a team's file, copying it, and choosing which copy wins came to about forty lines
+# that produced five confirmed defects across two review passes - a malformed file copied
+# before it was parsed and then shadowing the original forever, an ordering hole where a
+# machine that migrated first never saw a config the team committed later, and a pin that
+# edited a tracked shared file. A file nobody reads is mentioned once and left alone;
+# whoever owns it can move what they want to keep.
 if [ "$config_from_flag" = 0 ] && [ -n "$root" ]; then
-  legacy_config=$(resolve_under "$root" "$config_path")
-  config_path="$(state_dir "$root")/config.md"
-  # A project that pinned its config before the state directory existed keeps working:
-  # the old sibling file is copied in once and LEFT where it is. Removing it would be a
-  # one-way door - roll the plugin back and the settings are gone - so the user decides,
-  # and the warning tells them the copy has been made. A failed copy is not fatal: the
-  # legacy path is read directly below, so the run proceeds on the same values.
-  #
-  # A TRACKED legacy config is never migrated. It is a team's file: copying it into a
-  # directory that ignores itself would hand every developer a private, frozen snapshot,
-  # and a `base_branch` or board change someone pushes to the tracked file would never be
-  # read again on a machine that had migrated.
-  if [ ! -f "$config_path" ] && [ -f "$legacy_config" ]; then
-    # Three outcomes, not two. `ls-files --error-unmatch` exits non-zero both for "not
-    # tracked" and for "git could not answer" (a concurrent index write from another
-    # worktree of this same repo, dubious ownership), and reading the second as the first
-    # migrates a team's tracked config into a private directory ONCE - after which the
-    # canonical file exists, this check never runs again, and every later push to the
-    # tracked file goes unread on that machine. Silence means do nothing.
-    legacy_tracked=$(git -C "$root" ls-files -- "$legacy_config" 2>/dev/null)
-    git_answered=$?
-    if [ "$git_answered" -ne 0 ]; then
-      add_warning "could not tell whether ${legacy_config##*/} is tracked - leaving it where it is rather than risk moving a shared file"
-    elif [ -n "$legacy_tracked" ]; then
-      add_warning "${legacy_config##*/} is tracked, so it stays the config this repository reads; move it to $config_path yourself if it was never meant to be shared"
-    # atomic_replace, not cp: cp truncates the destination BEFORE it can fail, and the
-    # fallback below only asks whether the canonical file exists. A half-copied one would
-    # therefore shadow the intact legacy config it was copied from.
-    elif ensure_state_dir "$(state_dir "$root")" && atomic_replace "$config_path" cat "$legacy_config"; then
-      add_warning "config copied to $config_path; the old $legacy_config is still there and yours to delete"
-    else
-      add_warning "could not copy $legacy_config into the state dir - still reading the old path"
-    fi
-  fi
-  # Whichever exists; the canonical one wins when both do. The fallback needs the legacy
-  # file to actually BE there: without that condition a repository with no config at all
-  # reported the legacy path, and Step 8 pins into the path this reports - dropping the
-  # gate commands into an un-ignored `.claude/issue-to-pr.local.md` that the next run
-  # would then offer to migrate. Every first-time user would have hit it.
-  if [ ! -f "$config_path" ] && [ -f "$legacy_config" ]; then
-    config_path=$legacy_config
+  config_path=$(resolve_under "$root" "$config_path")
+  legacy="$root/.claude/issue-to-pr.local.md"
+  if [ -f "$legacy" ] && [ ! -f "$config_path" ]; then
+    add_warning "$legacy is not read any more; move what you want to keep into $config_path"
   fi
 fi
 
