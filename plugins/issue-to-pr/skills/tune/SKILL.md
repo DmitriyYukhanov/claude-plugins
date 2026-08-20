@@ -28,16 +28,14 @@ model. This skill batches that evidence into real changes.
 3. **Propose the cheapest fix that holds.** For each cluster work down this ladder and
    stop at the first rung that answers the friction, quoting the lines as evidence. A
    change with no evidence line does not belong here.
-   1. **Delete the behaviour.** Friction is often a feature nobody needs, defending itself.
+   1. **Delete the behaviour** when nothing depends on it.
    2. **Require explicit input** where the pipeline was guessing.
    3. **Clarify the prose** so the model has what it needs to decide.
-   4. **Add enforcement** — an exit code, a hook, a test — and only at a boundary where
-      being wrong costs something irreversible.
+   4. **Add enforcement**: an exit code, a hook, a test. Only at a boundary where being
+      wrong costs something irreversible.
 
-   Rung 4 used to be the default here ("prefer a mechanical stop over prose that asks the
-   model to remember"), and it is how this plugin came to carry more shell and fixtures
-   than prose, each new script arriving with its own defects. Reach for it last, and say
-   in the proposal why the rungs above it do not answer the friction.
+   Rung 4 is the expensive one, since it adds code to maintain and test. Reach for it
+   last, and say in the proposal why the rungs above do not answer the friction.
 4. **Confirm, then apply.** Show the batched proposal and ask for a go-ahead. On
    approval, make the edits (bump the plugin version + changelog per repo rules),
    run the gates (`tests/run-tests.sh`), and — if the changed area is behavioral —
