@@ -5,6 +5,11 @@ All notable changes to the **issue-to-pr** plugin will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.6.0] - 2026-08-20
+
+### Changed
+- `/issue-to-pr:tune` now tries the cheap answers first: delete the behaviour, ask for explicit input, clarify the wording, and only then add another script or test. The old rule preferred a mechanical stop every time, which is how the plugin came to carry more shell than prose
+
 ## [2.5.1] - 2026-08-20
 
 ### Changed
