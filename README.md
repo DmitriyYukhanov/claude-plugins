@@ -37,7 +37,7 @@ codex plugin list                  # what each marketplace offers, and what is i
 codex plugin marketplace upgrade   # refresh the snapshots after a release
 ```
 
-Skills are the part that crosses over, namespaced by plugin: the install above answers to `humanizer:humanizer`. Subagents and slash commands do not. Neither do plugin hooks; Codex picks those up from a `hooks` path in the plugin manifest, and none of these plugins declare one. `${CLAUDE_PLUGIN_ROOT}` stays unexpanded inside a skill body too, so a skill that references it depends on the model resolving the absolute path Codex shows it.
+Skills are the part that crosses over, namespaced by plugin: the install above answers to `humanizer:humanizer`. Subagents and slash commands do not. Plugin hooks are untested here: Codex is known to load a hook file the manifest points at, none of these plugins do that, and whether it also finds a `hooks/hooks.json` by convention has not been checked. `${CLAUDE_PLUGIN_ROOT}` stays unexpanded inside a skill body too, so a skill that references it depends on the model resolving the absolute path Codex shows it.
 
 Four plugins here drive Claude Code itself and have nothing to do inside Codex: `agent-teams`, `lsp-setup`, `tg-voice`, and `codex-collaboration`, which exists to call Codex from Claude in the first place.
 
@@ -131,7 +131,7 @@ Drive a single GitHub issue from triage to a merge-ready pull request through a 
 
 - One flow for a **bare issue** or a **card on a GitHub Projects (v2) board** — Step 0 resolves the input and decides whether board-status sync applies.
 - Each run works in its own `../<repo>-worktrees/issue-<N>` git worktree, so concurrent local agents on different issues never clash.
-- Hard gates that block forward progress: design hardening (cross-review or a multi-agent fallback), tests green (typecheck + tests, plus visual checks for UI), and a code-review loop that runs until clean or five passes.
+- Hard gates that block forward progress: design hardening (cross-review or a multi-agent fallback), tests green (typecheck + tests, plus visual checks for UI), and a code-review loop that runs until clean, capped by tier at one to three passes (per child on epics).
 - Scales the work to the task's **tier** (trivial through epic): research depth, design (an autonomous design panel for complex work), review level, and report length all size to the issue — and it asks **at most one batched question**, deciding everything else itself and surfacing those decisions in the report and PR.
 - Takes on more than a single issue: a plain request with no number is drafted into an issue and run; a from-scratch, **epic**-sized request is decomposed into dependency-ordered child issues, each shipped through its own gated PR; and after a merge, an optional smoke check on the base opens a *draft* revert PR (never an automatic rollback) if the change broke something.
 - A robust merge gate: it reads any GitHub review first (a changes-requested review or an unresolved thread reroutes as a change request), and a behind-base PR is updated and re-checked automatically — but re-merged without asking again only when the base merge left the PR's own diff untouched.
@@ -212,9 +212,9 @@ TypeScript development workflow with:
 ### unity-dev
 
 Unity C# development workflow with:
-- `/unity-dev` skill orchestrating the full workflow: discovery, architecture, implementation, review, testing
+- `unity-dev` skill orchestrating the full workflow: discovery, architecture, implementation, review, testing
 - `unity-run` skill for CLI execution (builds, tests, method execution, asset imports) with Unity installation auto-detection and log monitoring
-- `/unity-tests-run` skill running Unity Test Framework tests via CLI batchmode
+- `unity-tests-run` skill running Unity Test Framework tests via CLI batchmode
 - Architecture design with Mermaid diagrams, C# coding guidelines following Microsoft conventions, EditMode/PlayMode test patterns
 - Unity-specific review, simplification, and test-runner agents
 
