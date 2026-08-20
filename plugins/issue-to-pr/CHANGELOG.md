@@ -5,6 +5,11 @@ All notable changes to the **issue-to-pr** plugin will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.6.1] - 2026-08-20
+
+### Changed
+- Propose the cheapest fix first when tuning friction: deletion, explicit input, or clearer wording before another script or test
+
 ## [2.5.1] - 2026-08-20
 
 ### Changed

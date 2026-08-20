@@ -25,10 +25,17 @@ model. This skill batches that evidence into real changes.
    absent or empty, say so and stop — nothing to tune.
 2. **Cluster.** Group the lines by root cause, not by surface symptom. Three notes
    about the same confusing exit code are one fix, not three.
-3. **Propose.** For each cluster, propose the smallest concrete change to the SKILL,
-   a script, or a reference — quoting the friction lines as evidence. A change with
-   no evidence line does not belong here. Prefer edits that make a stop mechanical
-   (an exit code / a test) over prose that asks the model to remember.
+3. **Propose the cheapest fix that holds.** For each cluster work down this ladder and
+   stop at the first rung that answers the friction, quoting the lines as evidence. A
+   change with no evidence line does not belong here.
+   1. **Delete the behaviour** when nothing depends on it.
+   2. **Require explicit input** where the pipeline was guessing.
+   3. **Clarify the prose** so the model has what it needs to decide.
+   4. **Add enforcement**: an exit code, a hook, a test. Only at a boundary where being
+      wrong costs something irreversible.
+
+   Rung 4 is the expensive one, since it adds code to maintain and test. Reach for it
+   last, and say in the proposal why the rungs above do not answer the friction.
 4. **Confirm, then apply.** Show the batched proposal and ask for a go-ahead. On
    approval, make the edits (bump the plugin version + changelog per repo rules),
    run the gates (`tests/run-tests.sh`), and — if the changed area is behavioral —
