@@ -5,11 +5,13 @@
 [![License: MIT](https://img.shields.io/github/license/DmitriyYukhanov/claude-plugins)](./LICENSE)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin%20marketplace-d97757)](https://code.claude.com/docs/en/discover-plugins)
 
-Personal collection of Claude Code plugins and skills for structured, high-quality development workflows. Augments the official Claude plugins marketplace.
+Personal collection of Claude Code plugins and skills for structured, high-quality development workflows. Augments the official Claude plugins marketplace. Claude Code is the target these are built and tested against; Codex installs the same marketplace and picks up the skills.
 
 ## Installation
 
-Add this marketplace to Claude Code:
+### Claude Code
+
+Add this marketplace:
 
 ```bash
 /plugin marketplace add DmitriyYukhanov/claude-plugins
@@ -23,6 +25,21 @@ Then install plugins by name. The `@` suffix is the marketplace name `dmitriy-cl
 ```
 
 You can also run `/plugin` to browse and install interactively.
+
+### Codex CLI
+
+Codex reads this repo's `.claude-plugin/marketplace.json` as-is, so the same marketplace installs there. Needs Codex CLI 0.146 or newer:
+
+```bash
+codex plugin marketplace add DmitriyYukhanov/claude-plugins
+codex plugin add humanizer@dmitriy-claude-plugins
+codex plugin list                  # what each marketplace offers, and what is installed
+codex plugin marketplace upgrade   # refresh the snapshots after a release
+```
+
+Skills are the part that crosses over, namespaced by plugin: the install above answers to `humanizer:humanizer`. Subagents and slash commands do not. Neither do plugin hooks; Codex picks those up from a `hooks` path in the plugin manifest, and none of these plugins declare one. `${CLAUDE_PLUGIN_ROOT}` stays unexpanded inside a skill body too, so a skill that references it depends on the model resolving the absolute path Codex shows it.
+
+Four plugins here drive Claude Code itself and have nothing to do inside Codex: `agent-teams`, `lsp-setup`, `tg-voice`, and `codex-collaboration`, which exists to call Codex from Claude in the first place.
 
 ## Plugins
 
