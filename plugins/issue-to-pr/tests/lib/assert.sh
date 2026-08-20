@@ -182,3 +182,10 @@ init_repo_with_remote() {
   done
   printf '%s' "$dir"
 }
+
+# stale_iso - a timestamp far outside any approval window. A LITERAL, not a computed
+# `date -u -d '-2 hours'`: that form is GNU-only, and BSD date reads -d as the
+# daylight-saving flag, so on macOS it yields nothing usable. The marker is then
+# UNDATABLE rather than old, which is a different code path entirely - a staleness test
+# fails there and a sweep test passes for the wrong reason.
+stale_iso() { printf '2000-01-01T00:00:00Z'; }

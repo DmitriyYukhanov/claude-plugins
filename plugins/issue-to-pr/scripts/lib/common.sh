@@ -296,13 +296,62 @@ canonical_branch() {
   printf '%s' "${resolved:-$1}"
 }
 
+# state_dir ROOT - where everything this plugin writes into a repository lives: the
+# pinned config, approval markers, the friction log. One definition, because the path
+# is spliced into a marker name, a config path and an ignore rule that must agree.
+state_dir() { printf '%s/.claude/issue-to-pr' "$1"; }
+
+# is_state_dir_path DIR - true when DIR is a state directory, in any rooting. Lives beside
+# state_dir so the thing that BUILDS the path and the thing that RECOGNISES it cannot drift:
+# a caller that re-derived the two segments as its own string literals already shipped a
+# version that missed the relative form. Matched on segments, never as a glob against the
+# whole string, which is what made that earlier version need a leading slash.
+is_state_dir_path() {
+  case "$1" in
+    .claude/issue-to-pr | */.claude/issue-to-pr) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# ensure_state_dir DIR - create it and make it hide itself. The `.gitignore` carries `*`
+# as its FIRST rule: gitignore lets the LAST match decide, so a `!keep-this` added below
+# still wins, where a `*` at the bottom would silently override it. The project's own
+# .gitignore is never touched - on a team where one person has the plugin installed, the
+# others should never see a file they cannot place, and it is not this plugin's business
+# to edit a tracked file to achieve that.
+#
+# Returns non-zero when the directory or the rule could not be written, and callers MUST
+# check: what lands here carries the board URL, the pinned gate commands and live
+# approvals. Without the rule those are ordinary untracked files that the next
+# `git add -A` sweeps into somebody's commit.
+# `-s` and not `-e`: a zero-byte .gitignore is not a rule, it is the wreckage of a write
+# that died between the redirect truncating the file and anything landing in it. Treating
+# it as "already set up" left the directory permanently unignored while every caller read
+# the 0 as proof the rule was in place. A non-empty file is left alone, edits and all.
+#
+# Written through atomic_replace, like every other file this plugin owns, so the wreckage
+# above cannot be produced here in the first place: the temp is moved into place only
+# after it is whole.
+ensure_state_dir() {
+  local dir=$1 gi="$1/.gitignore"
+  mkdir -p "$dir" 2>/dev/null || return 1
+  [ -s "$gi" ] && return 0
+  atomic_replace "$gi" printf '%s\n' \
+    '# issue-to-pr keeps its runtime state here: pinned config, approval markers, logs.' \
+    '# The star is first so anything you add below can still be un-ignored with a ! rule.' \
+    '*' || return 1
+  return 0
+}
+
 marker_path() { # root branch
-  printf '%s/.claude/issue-to-pr/approval-%s.json' "$1" "$(printf '%s' "$2" | tr '/' '-')"
+  printf '%s/approval-%s.json' "$(state_dir "$1")" "$(printf '%s' "$2" | tr '/' '-')"
 }
 
 marker_write() { # file branch sha quote created_at used(true|false)
   local file=$1
-  mkdir -p "$(dirname "$file")"
+  # Not a bare mkdir: an approval is often the first thing written into the state dir,
+  # and the directory has to ignore itself from its first file onward.
+  ensure_state_dir "$(dirname "$file")" || return 1
   printf '{"branch":"%s","pr_head_sha":"%s","created_at":"%s","used":%s,"quote":"%s"}\n' \
     "$(json_escape "$2")" "$(json_escape "$3")" "$(json_escape "$5")" "$6" "$(json_escape "$4")" >"$file"
 }

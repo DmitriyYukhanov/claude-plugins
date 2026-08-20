@@ -106,7 +106,7 @@ test_wt_merge_used_marker_stops() {
 
 test_wt_merge_stale_marker_stops() {
   local repo wt; repo=$(mk_repo); wt=$(mk_worktree "$repo" feat/issue-6-x); cd "$wt"
-  write_marker "$repo" feat/issue-6-x "$SHA_OK" false "$(date -u -d '-2 hours' +%Y-%m-%dT%H:%M:%SZ)"
+  write_marker "$repo" feat/issue-6-x "$SHA_OK" false "$(stale_iso)"
   use_fake_gh happy
   run_script worktree.sh merge 6 --branch feat/issue-6-x
   assert_rc 2

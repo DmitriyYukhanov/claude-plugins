@@ -14,9 +14,10 @@
 # Exit 0 with the machine block on success; 2 (STOP) only when gh is not
 # authenticated; 4 (degraded) when the config file cannot be parsed.
 #
-# The only things it writes are its own state directory (which ignores itself)
-# and, with --claim, the issue assignee. It fetches, but never prunes: a probe the
-# model runs on every task must not delete the user's remote-tracking refs.
+# The only things it writes are its own state directory (which ignores itself: see
+# ensure_state_dir), the sweep of approval markers past their validity window, and
+# - with --claim - the issue assignee. It fetches, but never prunes: a probe the model runs on every task must
+# not delete the user's remote-tracking refs.
 set -uo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -25,7 +26,7 @@ source "$SCRIPT_DIR/lib/common.sh"
 
 issue=""
 claim=0
-config_path=".claude/issue-to-pr.local.md"
+config_path=".claude/issue-to-pr/config.md"
 config_from_flag=0
 
 while [ "$#" -gt 0 ]; do
@@ -42,15 +43,23 @@ assert_numeric_issue "$issue" preflight
 
 warnings=()
 add_warning() { warnings+=("$1"); }
+# A queued warning is part of the answer, and `degrade`/`stop` flush the buffer and leave.
+# Both early exits sit after warnings have already been queued, so without this the notice
+# that a config is sitting at a path nothing reads was dropped on exactly the runs that
+# also could not authenticate. Emitted even when empty: the contract lists WARNINGS as
+# always present, and a reader keying off it should never see the key vanish.
+emit_warnings() {
+  emit WARNINGS "$(join_by '; ' "${warnings[@]:-}")"
+  return 0
+}
 
-# The config now lives inside the self-ignoring state dir, so a repo gains no
-# tracked file from this plugin. The pre-v3 sibling path is still read when the
-# canonical one is absent, so existing projects keep working untouched.
+# The config lives inside the self-ignoring state dir, so a repository gains no tracked
+# file from this plugin.
 #
-# Both are resolved against the MAIN checkout, never the cwd: on a resume the
-# caller is already inside the worktree, which has no state dir at all. A relative
-# path would find nothing there, report CONFIG_PRESENT=false, and let the run
-# proceed with the pinned base branch and board silently missing.
+# Resolved against the MAIN checkout, never the cwd: on a resume the caller is already
+# inside the worktree, which has no state dir at all. A relative path would find nothing
+# there, report CONFIG_PRESENT=false, and let the run proceed with the pinned base branch
+# and board silently missing.
 # -- Config (line-based YAML subset: top-level scalars + one nesting level) ----
 CFG_BASE=""
 CFG_BOARD_URL=""
@@ -106,15 +115,61 @@ root=$(repo_root)
 # the config nor a project to probe: `.git` (a dir in a checkout, a file in a linked
 # worktree) is missing there, so fall back to the tree we are standing in.
 [ -e "${root:-.}/.git" ] || root=$(git rev-parse --show-toplevel 2>/dev/null || printf '')
-# Only the DEFAULT path is re-rooted. An explicit --config is a caller's instruction and
-# stays relative to the caller, which is also how every in-tree caller already passes it
-# (SKILL Step 8 hands it an absolute path).
-[ "$config_from_flag" = 1 ] || config_path=$(resolve_under "${root:-.}" "$config_path")
+# Only the DEFAULT path is re-rooted; an explicit --config is a caller's instruction and
+# is taken as given.
+#
+# There is no legacy path and no migration. Reading a second location, deciding whether it
+# was a team's file, copying it, and choosing which copy wins came to about forty lines
+# that produced five confirmed defects across two review passes - a malformed file copied
+# before it was parsed and then shadowing the original forever, an ordering hole where a
+# machine that migrated first never saw a config the team committed later, and a pin that
+# edited a tracked shared file. A file nobody reads is mentioned once and left alone;
+# whoever owns it can move what they want to keep.
+if [ "$config_from_flag" = 0 ] && [ -n "$root" ]; then
+  config_path=$(resolve_under "$root" "$config_path")
+  legacy="$root/.claude/issue-to-pr.local.md"
+  if [ -f "$legacy" ] && [ ! -f "$config_path" ]; then
+    add_warning "$legacy is not read any more; move what you want to keep into $config_path"
+  fi
+fi
+
+# Sweep approval markers past the validity window, so a repository does not accumulate
+# spent authorisations. A marker whose timestamp cannot be READ is never swept: epoch_of
+# returns empty for a value it fails to parse, and treating that as infinitely old is
+# exactly how this wiped every live approval at once on macOS, where the GNU date form
+# fails. Unreadable means leave it alone and let the merge gate refuse it instead.
+sweep_markers() {
+  local dir=$1 f created epoch now
+  [ -d "$dir" ] || return 0
+  now=$(now_epoch)
+  for f in "$dir"/approval-*.json; do
+    [ -f "$f" ] || continue
+    created=$(marker_str_field "$f" created_at)
+    epoch=$(epoch_of "$created")
+    [ -n "$epoch" ] || continue
+    [ "$((now - epoch))" -gt "$APPROVAL_TTL" ] && rm -f "$f" 2>/dev/null
+  done
+  return 0
+}
+# Both only inside a repository. `${root:-.}` would otherwise point at the caller's cwd,
+# and a probe run outside a checkout has no business creating `./.claude/issue-to-pr/`
+# in whatever directory someone happened to be standing in.
+if [ -n "$root" ]; then
+  sweep_markers "$(state_dir "$root")"
+  # Unconditionally, not only when something is written here: the model itself writes the
+  # friction log and epic ledgers into this directory with a plain mkdir, and whichever of
+  # those lands first would otherwise be an ordinary untracked file until some later
+  # approval created the rule. Step 0 runs before all of them, so the promise that nothing
+  # from this plugin reaches `git status` holds from the very first write.
+  ensure_state_dir "$(state_dir "$root")" ||
+    add_warning "could not create $(state_dir "$root") with its ignore rule - files this plugin writes there will show up as untracked"
+fi
 
 config_present=false
 if [ -f "$config_path" ]; then
   config_present=true
   if ! parse_frontmatter "$config_path" set_cfg; then
+    emit_warnings
     degrade config-parse-failed "preflight: could not parse $config_path - read it yourself"
   fi
 fi
@@ -122,6 +177,7 @@ fi
 # -- gh auth + scopes ---------------------------------------------------------
 if ! auth_out=$(gh auth status 2>&1); then
   emit GH_OK false
+  emit_warnings
   stop gh-auth-failed "preflight: gh is not authenticated - run 'gh auth login'"
 fi
 scopes=$(printf '%s\n' "$auth_out" | grep -i 'token scopes' | grep -oE "'[^']+'" | tr -d "'" | paste -sd, - || printf '')
@@ -439,6 +495,7 @@ emit CMD_SMOKE "$cmd_smoke"
 emit CMD_SOURCE_TYPECHECK "$src_typecheck"
 emit CMD_SOURCE_TEST "$src_test"
 emit CONFIG_PRESENT "$config_present"
+emit CONFIG_PATH "$config_path"
 emit ISSUE_STATE "$issue_state"
 emit ISSUE_TITLE "$issue_title"
 emit ISSUE_ASSIGNEES "$assignees"
@@ -450,5 +507,5 @@ emit BOARD_STATUS_FIELD "$CFG_BOARD_STATUS_FIELD"
 emit STATUS_MAP_IN_PROGRESS "$CFG_STATUS_MAP_IN_PROGRESS"
 emit STATUS_MAP_IN_REVIEW "$CFG_STATUS_MAP_IN_REVIEW"
 emit CHECKS_TIMEOUT "$CFG_CHECKS_TIMEOUT"
-emit WARNINGS "$(join_by '; ' "${warnings[@]:-}")"
+emit_warnings
 done_ok

@@ -14,8 +14,9 @@ decision. This file is the reference: what to call, when, and how to read the re
 - **Uniform exit codes:** `0` proceed · `2` stop-and-ask (reason in `STOP_REASON=`, a hint on
   stderr) · `3` sandbox/permission fallback (do it in place) · `4` degraded (could not parse/reach
   something — do that part by hand). Exceptions noted per script below.
-- Read config **once in the main checkout** (it is gitignored, absent inside the worktree) and
-  carry the resolved values; never re-read config from inside the worktree.
+- Read config **once in the main checkout** and carry the resolved values; never re-read it from
+  inside the worktree. It lives in `.claude/issue-to-pr/`, which is ignored by a rule the plugin
+  puts there itself, so a worktree normally has no copy at all.
 
 ## Three rules that stay with the model (never in a script)
 
@@ -41,8 +42,9 @@ must not be split** — run the gates from the root of your checkout (Step 1's `
 the repository root in the exit-3 in-place fallback), or a root-relative runner path exits 127.
 
 Keys: `GH_OK SCOPES OWNER REPO DEFAULT_BRANCH BASE START_POINT CMD_TYPECHECK CMD_TEST CMD_VISUAL
-CMD_SMOKE CMD_SOURCE_TEST CMD_SOURCE_TYPECHECK CONFIG_PRESENT ISSUE_STATE ISSUE_TITLE
+CMD_SMOKE CMD_SOURCE_TEST CMD_SOURCE_TYPECHECK CONFIG_PRESENT CONFIG_PATH ISSUE_STATE ISSUE_TITLE
 ISSUE_ASSIGNEES WORKTREE_STATE WORKTREE_PATH BOARD_CONFIGURED BOARD_MEMBER BOARD_STATUS_FIELD
+STATUS_MAP_IN_PROGRESS STATUS_MAP_IN_REVIEW
 CHECKS_TIMEOUT WARNINGS` (and `WARN_CLAIMED_BY` when relevant).
 Exit `2` gh-auth-failed · `4` config-parse-failed / missing-issue.
 `WORKTREE_STATE` ∈ `absent | resumable | registered-missing-dir | stale-dir | pr-merged`.
@@ -160,7 +162,11 @@ it yourself rather than treat the run as clean. A path list on stdin still works
 `pin-config.sh --config <path> [--test <cmd>] [--typecheck <cmd>] [--visual <cmd>] [--smoke <cmd>]`
 Appends a gate command to the config's frontmatter only if unset (checked with preflight's
 shared parser, so a nested `commands:` value counts as set - NEVER overwrites a human value).
-Emits `PINNED=<keys>`. Exit 0; 4 if an existing config cannot be parsed (never corrupts it).
+Emits `PINNED=<keys>` and `CONFIG=<path>`. Pass the `CONFIG_PATH` preflight reported, so a pin
+lands in the file actually in force. Exit 0; 4 if an existing config cannot be parsed (never
+corrupts it), or `state-dir-failed` when `.claude/issue-to-pr/` cannot be created with its own
+ignore rule — writing the board URL and gate commands somewhere the repository would pick them
+up is refused, not warned about.
 
 ## stage-guard.sh - explicit-path staging hook (v1.3.0)
 

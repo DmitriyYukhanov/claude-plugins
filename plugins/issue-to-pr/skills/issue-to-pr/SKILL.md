@@ -38,7 +38,7 @@ own judgment. One todo per step.
 
 ## Config, tier, ask contract, state
 
-- **Config** (`.claude/issue-to-pr.local.md`, optional): `preflight.sh` parses it +
+- **Config** (`.claude/issue-to-pr/config.md`, optional): `preflight.sh` parses it +
   resolves gate commands and base (schema `R/configuration.md`); resolve in the main
   checkout up front (gitignored, absent in the worktree). **Companions** (if installed,
   else inline): `superpowers:*`, `/deep-research`, `/cross-review`, `humanizer`,
@@ -109,8 +109,9 @@ it collects committed, uncommitted and untracked work itself; `SENSITIVE=true` �
 after each fix.
 
 **8. Re-gates + pin config.** Re-run `run-gates.sh` (all green). If auto-detected cmds passed
-and config lacks them, `S/pin-config.sh --config "<ORIGINAL_ROOT>/.claude/issue-to-pr.local.md"
---test '…' …` (the main checkout — NOT the worktree, which Step 12 deletes); note in the report.
+and config lacks them, `S/pin-config.sh --config "<CONFIG_PATH>" --test '…' …` — the path
+preflight reported it READ, so a pin lands in the file that is actually in force, never in a
+second one that shadows it. Note it in the report.
 
 **9. Commit + PR.** `git add <explicit paths>`, conventional subjects; `git push -u origin
 <branch>`; `gh pr create` against `BASE`, `Closes #<N>`, humanized body (autonomous-decisions

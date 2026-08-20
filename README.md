@@ -122,7 +122,7 @@ Drive a single GitHub issue from triage to a merge-ready pull request through a 
 - The PR auto-links the issue (`Closes #N`) to close on merge; board cards advance to *in-progress* at branch cut and *in-review* at PR open, with `Done` left to GitHub's merge-time automation.
 - Graceful by default — missing the `project` token scope degrades to link-only, and a failed status write never blocks the PR.
 - The `/issue-to-pr:tune` skill reads the friction log that runs leave behind and turns it into batched improvements to the pipeline.
-- Optional `.claude/issue-to-pr.local.md` for board URL, base branch, and test commands (auto-detected when unset); companion skills (`superpowers:*`, `/deep-research`, `/cross-review`, `humanizer`, `/code-review`) used if installed, with inline fallbacks otherwise.
+- Optional `.claude/issue-to-pr/config.md` for board URL, base branch, and test commands (auto-detected when unset); companion skills (`superpowers:*`, `/deep-research`, `/cross-review`, `humanizer`, `/code-review`) used if installed, with inline fallbacks otherwise.
 
 [View documentation](./plugins/issue-to-pr/README.md)
 
