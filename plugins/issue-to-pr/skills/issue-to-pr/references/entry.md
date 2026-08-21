@@ -26,8 +26,8 @@ asked, and its acceptance criteria are the user's veto surface.
 
 ## Why the ask must precede creation
 
-`triage-evidence.sh` and `preflight.sh` both take an issue number; with none they degrade
-(`missing-issue`). So an ambiguous free-text scope cannot defer to the normal Step 4.5
+`preflight.sh` takes an issue number; with none it degrades (`missing-issue`). So an
+ambiguous free-text scope cannot defer to the normal Step 4.5
 question slot -- it must be settled before the issue exists. Relocating that one question
 keeps the three-contact-moments contract intact (`R/autonomy.md`): it is the SAME single
 design question, moved earlier for entry-mode, not a fourth contact.
