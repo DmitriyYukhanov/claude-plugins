@@ -38,9 +38,9 @@ own judgment. One todo per step.
 
 ## Config, tier, ask contract, state
 
-- **Config** (`.claude/issue-to-pr/config.md`, optional): `preflight.sh` parses it +
-  resolves gate commands and base (schema `R/configuration.md`); resolve in the main
-  checkout up front (gitignored, absent in the worktree). **Companions** (if installed,
+- **Config** (`.claude/issue-to-pr/config.md`, optional): `preflight.sh` parses it and
+  resolves the base (schema `R/configuration.md`); read it in the main checkout up front
+  (gitignored, absent in the worktree). Gate commands come from it, or from you at Step 6. **Companions** (if installed,
   else inline): `superpowers:*`, `/deep-research`, `/cross-review`, `humanizer`,
   `/code-review` (`R/companions.md`).
 - **Tier** (`R/tier-matrix.md`): you pick it at Step 2, `standard` unless the issue argues
@@ -92,10 +92,14 @@ ONE batched `AskUserQuestion`. Empty ledger → no-op. The only mid-run question
 complex+); TDD: failing test → implement → passing. UI/layout work is verified with
 `<visual_cmd>` or a browser test, never eyeballing.
 
-**6. Gates.** `S/run-gates.sh --log-dir "tmp/task-<N>/logs" --gate typecheck='<typecheck_cmd>'
---gate test='<test_cmd>'` (+ `--gate visual=…` for UI). Never judge a gate from an ad-hoc
-command; only this one surfaces the real failure instead of a summarised "no tests collected".
-An empty gate command degrades (exit 4), never a false green. Red ⇒ STOP and fix.
+**6. Gates.** Config commands are authoritative; each one preflight reported empty you work
+out **in the worktree**, the tree the gates run in, from its manifests and CI workflow — as a
+**literal** (`npm test`, `bash tests/run-tests.sh`), never a string assembled from repository
+filenames, because `run-gates.sh` evaluates it through `bash -c`. Ambiguous ⇒ Step 4.5 asks.
+`S/run-gates.sh --log-dir "tmp/task-<N>/logs" --gate typecheck='<typecheck_cmd>' --gate
+test='<test_cmd>'` (+ `--gate visual=…` for UI). Never judge a gate from an ad-hoc command; only
+this one surfaces the real failure instead of a summarised "no tests collected". An empty gate
+command degrades (exit 4), never a false green. Red ⇒ STOP and fix.
 
 **7. Review loop.** Default to the inline fallback: independent adversarial review
 subagents critique the diff at the tier's level, ≤ tier's max passes. `/code-review
@@ -108,8 +112,8 @@ it collects committed, uncommitted and untracked work itself; `SENSITIVE=true` �
 **escalate a level** on 2+ confirmed bugs/pass or a gate failing twice; re-run gates
 after each fix.
 
-**8. Re-gates + pin config + ponytail.** Re-run `run-gates.sh` (all green). If auto-detected cmds passed
-and config lacks them, `S/pin-config.sh --config "<CONFIG_PATH>" --test '…' …` — the path
+**8. Re-gates + pin config + ponytail.** Re-run `run-gates.sh` (all green). If commands you
+worked out yourself passed and config lacks them, `S/pin-config.sh --config "<CONFIG_PATH>" --test '…' …` — the path
 preflight reported it READ, so a pin lands in the file that is actually in force, never in a
 second one that shadows it. Note it in the report. **Final gate, when ponytail is installed:**
 `/ponytail:ponytail ultra`, then `/ponytail:ponytail-review` over `git diff <BASE>...HEAD`. Apply

@@ -58,9 +58,9 @@ evidence, and applies the edits on your approval.
 ### Configuration (optional)
 
 `.claude/issue-to-pr/config.md` (YAML frontmatter) sets the board URL, base branch, and
-typecheck/test/visual/smoke commands. Everything is optional; with no file the skill
-auto-detects commands from the project. Auto-detected commands that passed get pinned back
-into the config after a successful run.
+typecheck/test/visual/smoke commands. Everything is optional; with no file the run works the
+commands out in the worktree where the gates execute, as literals, and pins back the ones that
+passed after a successful run.
 
 That directory holds the plugin's repository-level state - the config, approval markers, the
 friction log - and it ships its own `.gitignore` containing `*`, so none of it reaches

@@ -19,7 +19,9 @@ test_skill_within_line_budget() {
   local n
   n=$(wc -l <"$(skill_md)")
   n=${n// /}
-  if [ "$n" -gt 170 ]; then fail "SKILL.md is $n lines; the budget is <=170 (sec 5.7, raised for v2.2)"; fi
+  # 180 since v2.8.0: the rebalance moves gate-command detection out of preflight.sh and
+  # into the spine, so a few lines of prose here buy back ~90 lines of shell.
+  if [ "$n" -gt 180 ]; then fail "SKILL.md is $n lines; the budget is <=180"; fi
 }
 
 test_skill_names_spine_scripts() {
