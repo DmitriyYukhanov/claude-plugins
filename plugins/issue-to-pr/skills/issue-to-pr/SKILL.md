@@ -43,9 +43,8 @@ own judgment. One todo per step.
   checkout up front (gitignored, absent in the worktree). **Companions** (if installed,
   else inline): `superpowers:*`, `/deep-research`, `/cross-review`, `humanizer`,
   `/code-review` (`R/companions.md`).
-- **Tier** (`R/tier-matrix.md`): Step 2 pipes `triage-evidence.sh` into `tier-select.sh`
-  → `TIER`, routing research, design, review level/passes, security overlay, and report
-  length. `--tier` overrides.
+- **Tier** (`R/tier-matrix.md`): you pick it at Step 2, `standard` unless the issue argues
+  otherwise; it routes research, design, review level/passes, security overlay, report length.
 - **Autonomy** (`R/autonomy.md`, read once at Step 0): the ask contract (three contact
   moments; log every judgment call to `state.json.ledger[]` before the next tool call;
   auto-decisions rendered in the report + PR body), the `state.json` schema + the append-only
@@ -69,8 +68,9 @@ Exit-code dispatch (bad-checkout, stale dir, invalid start-point, exit-3 in-plac
 `R/contracts.md`. Board-mode: `S/board-sync.sh <owner/repo> <N> in_progress` in the
 background (add `--option "<STATUS_MAP_IN_PROGRESS>"` if preflight reported one).
 
-**2. Triage.** `S/triage-evidence.sh <N> | S/tier-select.sh [--tier …]` → `TIER`; record it.
-`epic` → decompose into child issues first (`R/epic.md`); each child is a full 0–12 run.
+**2. Triage.** Pick `TIER` from the issue against `R/tier-matrix.md`: `standard` unless its
+signals say otherwise, `--tier` pins it. `epic` → decompose first (`R/epic.md`); each child is
+a full 0–12 run.
 
 **3. Research** (tier routes it, complex+ with unknowns): `/deep-research` if installed, else an
 `Explore` subagent handed an explicit question list. Either way you get back a ≤150-line summary
@@ -108,10 +108,12 @@ it collects committed, uncommitted and untracked work itself; `SENSITIVE=true` �
 **escalate a level** on 2+ confirmed bugs/pass or a gate failing twice; re-run gates
 after each fix.
 
-**8. Re-gates + pin config.** Re-run `run-gates.sh` (all green). If auto-detected cmds passed
+**8. Re-gates + pin config + ponytail.** Re-run `run-gates.sh` (all green). If auto-detected cmds passed
 and config lacks them, `S/pin-config.sh --config "<CONFIG_PATH>" --test '…' …` — the path
 preflight reported it READ, so a pin lands in the file that is actually in force, never in a
-second one that shadows it. Note it in the report.
+second one that shadows it. Note it in the report. **Final gate, when ponytail is installed:**
+`/ponytail:ponytail ultra`, then `/ponytail:ponytail-review` over `git diff <BASE>...HEAD`. Apply
+the cuts you agree with and re-run gates; answer the rest in one line each in the report.
 
 **9. Commit + PR.** `git add <explicit paths>`, conventional subjects; `git push -u origin
 <branch>`; `gh pr create` against `BASE`, `Closes #<N>`, humanized body (autonomous-decisions

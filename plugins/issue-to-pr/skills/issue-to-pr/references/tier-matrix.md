@@ -1,9 +1,9 @@
 # Tier matrix — scale the machinery to the task (spec sec 5.2)
 
 The pipeline runs the same gates every time, but the *depth* between them scales to
-a tier. `scripts/tier-select.sh` computes the tier deterministically from
-`triage-evidence.sh` signals (so it is CI-tested and cannot silently drift); the
-SKILL reads `TIER` and routes each step accordingly.
+a tier. You pick it at Step 2 from the issue itself: `standard` unless the signals
+below argue otherwise, `--tier` pins it, and any tier but `standard` is logged in the
+ledger with the signal that moved it.
 
 ## Machinery per tier
 
@@ -19,20 +19,22 @@ SKILL reads `TIER` and routes each step accordingly.
 | Security overlay | if sensitive paths | if sensitive paths | if sensitive paths | mandatory sweep |
 | Report | 3 lines | short | full | dashboard |
 
-## Rubric — signals to tier (implemented in `tier-select.sh`)
+## Rubric — signals to tier
 
-Fed `triage-evidence.sh` output on stdin; `--tier <t>` always overrides; borderline
-picks the **higher** tier. Checked strongest-first:
+`--tier <t>` always overrides; borderline picks the **higher** tier. Read strongest-first:
 
-- **epic:** `NEW_THING_HITS >= 3` AND `REF_PATHS_EXIST = 0` (a new system referencing
-  no existing code). Epic *mode* is active (v2.0): the SKILL runs `epic-decompose.js`,
-  gets one approval on the child breakdown, then drives the children sequentially
-  in dependency order (full lifecycle in `epic.md`).
-- **complex:** `NEW_THING_HITS >= 1` OR `CHECKLIST_ITEMS >= 3` OR `REF_PATHS_EXIST >= 3`
-  OR a `design` / `ux` / `breaking` label.
-- **trivial:** `NEW_THING_HITS = 0` AND `REF_PATHS_EXIST <= 1` AND `CHECKLIST_ITEMS <= 1`
-  AND `BODY_LENGTH < 400` AND no `feature` / `design` / `epic` label.
-- **standard:** everything else (a known-code change).
+- **epic:** a new system or product, written without reference to code that exists yet
+  ("from scratch", a new service). Epic *mode* is active (v2.0): the SKILL runs
+  `epic-decompose.js`, gets one approval on the child breakdown, then drives the children
+  sequentially in dependency order (full lifecycle in `epic.md`).
+- **complex:** new behavior rather than a change to behavior that exists, or several
+  checklist items, or several existing paths in scope, or a `design` / `ux` / `breaking` label.
+- **trivial:** a copy or config change, short, one path at most, no `feature` / `design` /
+  `epic` label.
+- **standard:** everything else, and the answer whenever the signals disagree.
+
+Tier what the run will actually do: a scope the conversation widened past the issue text
+tiers on the wider scope.
 
 Every tier: the test plan for anything UI/layout/browser must be verifiable with the
 project's `visual_cmd` or a dedicated browser test — never eyeballing alone.

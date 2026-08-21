@@ -5,6 +5,14 @@ All notable changes to the **issue-to-pr** plugin will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.7.0] - 2026-08-21
+
+### Added
+- A final over-engineering pass with ponytail before the PR opens, when that plugin is installed
+
+### Removed
+- The tier classifier scripts: a run now reads the issue and picks the tier itself, defaulting to `standard`
+
 ## [2.6.1] - 2026-08-20
 
 ### Changed

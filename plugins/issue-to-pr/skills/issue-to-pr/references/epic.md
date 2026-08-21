@@ -6,9 +6,9 @@ in dependency order. It is no longer "treated as complex".
 
 ## Detect
 
-Epic when any holds: `tier-select.sh` emits `TIER=epic` (its rubric fires on a new-system
-signal - see `tier-matrix.md`); `--tier epic` overrides the invocation; or a large
-free-text request (`entry.md`) triages to epic.
+Epic when any holds: Step 2 tiers the issue `epic` (a new system described without
+reference to code that exists yet - see `tier-matrix.md`); `--tier epic` pins it at the
+invocation; or a large free-text request (`entry.md`) triages to epic.
 
 ## Decompose
 

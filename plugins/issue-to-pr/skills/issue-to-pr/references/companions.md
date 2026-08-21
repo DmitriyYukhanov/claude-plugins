@@ -14,6 +14,7 @@ companion silently degrade quality without saying so.
 | Codebase research (Step 3, complex+) | forked `research` sub-skill (isolated subagent → ≤150-line cited summary); `/deep-research` for external topics | A focused inline exploration distilled to a short summary. |
 | Design generation (Step 4, complex+) | `workflows/design-panel.js` (3 proposers → 2 adversarial critics → opus judge), with `/cross-review` critiquing the produced `design_md` | Inline self-review chain: draft, adversarially self-critique against the code, revise. |
 | Humanizing human-facing text (Step 9–10) | `humanizer` | Self-edit the PR body / report to drop AI-tell phrasing; flag that a humanizer pass would help. |
+| Final over-engineering gate (Step 8) | `ponytail:ponytail ultra` to set the mode, then `ponytail:ponytail-review` over the run's diff | Re-read the diff hunting only for what to delete: reinvented stdlib, one-caller abstractions, config nobody sets, flags nobody passes. |
 | Diff review loop (Step 7) | `/code-review` — only if callable (see note) | Independent adversarial review subagents (2–3 reviewers) critique the diff for correctness, reuse, and regressions; iterate. This is the default in practice. |
 
 ## Install hints (same marketplace)
@@ -22,8 +23,9 @@ companion silently degrade quality without saying so.
   (`DmitriyYukhanov/claude-plugins`): `/plugin install humanizer`,
   `/plugin install codex-collaboration`. `codex-collaboration` additionally needs the Codex
   plugin and `/codex:setup`.
-- `superpowers:*` is the external Superpowers plugin. `/deep-research` and `/code-review`
-  come from your own setup or other plugins.
+- `superpowers:*` is the external Superpowers plugin, `ponytail:*` the external Ponytail one
+  (`DietrichGebert/ponytail`). `/deep-research` and `/code-review` come from your own setup or
+  other plugins.
 
 ## Note: `/code-review` is usually unreachable from inside the pipeline
 

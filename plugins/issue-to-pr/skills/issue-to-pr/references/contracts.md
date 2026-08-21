@@ -133,19 +133,6 @@ count), `UNRESOLVED_THREADS`, `READ_OK`. `changes_requested` / `unresolved_threa
 the change-request path, so an in-session go-ahead never merges over unaddressed GitHub review.
 Best-effort: a failed read reports `clear` + `READ_OK=false` and still exits 0.
 
-## triage-evidence.sh — objective triage signals (no tier decision)
-
-`triage-evidence.sh <N>` — Step 2. Emits `LABELS BODY_LENGTH CHECKLIST_ITEMS
-REF_PATHS_EXIST REF_PATHS_MISSING NEW_THING_HITS LINKED_ISSUES TITLE` from the issue. It reads
-signals and never picks a tier; pipe it into `tier-select.sh`, which does. Exit `4` if the issue
-cannot be read.
-
-## tier-select.sh - map triage signals to a tier (v1.3.0)
-
-`triage-evidence.sh <N> | tier-select.sh [--tier trivial|standard|complex|epic]`
-Emits `TIER` + `TIER_REASON`. Deterministic rubric (full table + boundaries in
-`tier-matrix.md`); `--tier` overrides; borderline picks higher. Always exit 0.
-
 ## sensitive-paths.sh - security overlay trigger (v1.3.0)
 
 `sensitive-paths.sh --base <BASE>` -> `SENSITIVE=true|false` + `MATCHED=`. Run from the
