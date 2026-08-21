@@ -142,17 +142,6 @@ it collects the three sources the overlay needs at Step 7, before the Step 9 com
 tell "changed nothing" from "could not read the diff". Whether any of it is security relevant is
 your call at Step 7, not the script's (`tier-matrix.md`).
 
-## pin-config.sh - self-writing config (v1.3.0)
-
-`pin-config.sh --config <path> [--test <cmd>] [--typecheck <cmd>] [--visual <cmd>] [--smoke <cmd>]`
-Appends a gate command to the config's frontmatter only if unset (checked with preflight's
-shared parser, so a nested `commands:` value counts as set - NEVER overwrites a human value).
-Emits `PINNED=<keys>` and `CONFIG=<path>`. Pass the `CONFIG_PATH` preflight reported, so a pin
-lands in the file actually in force. Exit 0; 4 if an existing config cannot be parsed (never
-corrupts it), or `state-dir-failed` when `.claude/issue-to-pr/` cannot be created with its own
-ignore rule — writing the board URL and gate commands somewhere the repository would pick them
-up is refused, not warned about.
-
 ## stage-guard.sh - explicit-path staging hook (v1.3.0)
 
 PreToolUse hook (in `hooks/hooks.json`, alongside merge-guard): denies `git add -A` / `--all`

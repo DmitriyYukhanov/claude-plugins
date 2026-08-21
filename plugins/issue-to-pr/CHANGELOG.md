@@ -5,6 +5,11 @@ All notable changes to the **issue-to-pr** plugin will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.10.0] - 2026-08-21
+
+### Removed
+- Writing gate commands into the project's config. A run that worked commands out now prints the block for you to paste, instead of appending to a file your team may have committed
+
 ## [2.9.0] - 2026-08-21
 
 ### Changed

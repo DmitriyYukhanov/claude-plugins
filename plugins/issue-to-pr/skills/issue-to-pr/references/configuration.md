@@ -8,7 +8,7 @@ is never edited. (A run's scratch files are separate: they live in the worktree 
 `tmp/task-<N>/` and go with it at teardown.) A config left at the pre-2.5 path
 (`.claude/issue-to-pr.local.md`) is not read: the run says so once and leaves the file
 alone, so move across whatever you want to keep. Every field is optional. With no file, the run works the gate
-commands out at Step 6 and pins back the ones that passed.
+commands out at Step 6 and prints the block for you to paste here.
 
 ## Schema
 

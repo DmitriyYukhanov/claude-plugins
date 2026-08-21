@@ -214,11 +214,3 @@ test_common_ensure_state_dir_repairs_an_empty_gitignore() {
   first=$(grep -v '^#' "$d/.gitignore" | grep -v '^[[:space:]]*$' | head -1)
   assert_eq '*' "$first" 'the rule was not restored'
 }
-
-test_common_is_state_dir_path_matches_both_rootings() {
-  source "$ITP_SCRIPTS/lib/common.sh"
-  is_state_dir_path '.claude/issue-to-pr' || fail 'the relative form was not recognised'
-  is_state_dir_path '/repo/.claude/issue-to-pr' || fail 'the rooted form was not recognised'
-  if is_state_dir_path '/repo/.claude'; then fail 'the parent was recognised as the state dir'; fi
-  if is_state_dir_path '/repo/docs'; then fail 'an unrelated directory was recognised'; fi
-}

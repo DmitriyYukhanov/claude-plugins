@@ -59,8 +59,8 @@ evidence, and applies the edits on your approval.
 
 `.claude/issue-to-pr/config.md` (YAML frontmatter) sets the board URL, base branch, and
 typecheck/test/visual/smoke commands. Everything is optional; with no file the run works the
-commands out in the worktree where the gates execute, as literals, and pins back the ones that
-passed after a successful run.
+commands out in the worktree where the gates execute, as literals, and prints the block to
+paste here once they pass. It never writes this file itself.
 
 That directory holds the plugin's repository-level state - the config, approval markers, the
 friction log - and it ships its own `.gitignore` containing `*`, so none of it reaches
@@ -70,8 +70,8 @@ older `.claude/issue-to-pr.local.md` path is not read; the run says so once and 
 you to move.
 
 Because the directory is ignored, `git clean -x` treats it as disposable and removes it along
-with the pinned config and any approval you are holding. Nothing breaks permanently: the commands
-get detected again and an approval can be given again, but a merge you had just approved will ask
+with the config and any approval you are holding. Nothing breaks permanently: the commands get
+worked out again and an approval can be given again, but a merge you had just approved will ask
 for approval a second time.
 
 ### Companion skills (optional)
