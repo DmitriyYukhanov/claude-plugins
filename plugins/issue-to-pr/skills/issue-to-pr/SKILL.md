@@ -120,7 +120,9 @@ the report for the user to paste. Never write it yourself: the file can be track
 the cuts you agree with and re-run gates; answer the rest in one line each in the report.
 
 **9. Commit + PR.** `git add <explicit paths>`, conventional subjects; `git push -u origin
-<branch>`; `gh pr create` against `BASE`, `Closes #<N>`, humanized body (autonomous-decisions
+<branch>`. **Re-run `run-gates.sh` on the commit**: it leaves the receipt Step 11 checks, and a
+receipt names the HEAD it ran against, so the pre-commit run does not cover the commit. Then
+`gh pr create` against `BASE`, `Closes #<N>`, humanized body (autonomous-decisions
 section + rejected alternatives). Board-mode: `S/board-sync.sh <owner/repo> <N> in_review`.
 **Stop** — merging is Step 11.
 
@@ -132,8 +134,9 @@ review passes/level, which machinery fired). Hand back: ask when to merge, and *
 
 Return to your working tree first: `cd` into the `WT_PATH` you recorded at Step 1 (worktree
 mode); in the in-place fallback stay in the main checkout on `<branch>`. Read the reply against
-*this* PR and run `S/review-check.sh <branch>` — a `changes_requested`/`unresolved_threads`
-result routes through change-requests, never a silent merge. **Merge only on an unambiguous
+*this* PR. The merge script reads the GitHub review itself and fails closed on anything but a
+clear one, so a `review-blocked` / `review-unreadable` stop is a real answer, not a hiccup —
+route it through change-requests. **Merge only on an unambiguous
 go-ahead to merge THIS PR; if the reply (or GitHub review) is anything else, do not merge.**
 - **Go-ahead** ("merge it", "lgtm, ship it", "approved", "go ahead and merge") → `S/approve.sh
   <branch> --quote "<verbatim reply>"`, then `S/worktree.sh merge <N> --branch <branch>`. That

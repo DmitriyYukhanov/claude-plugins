@@ -5,6 +5,15 @@ All notable changes to the **issue-to-pr** plugin will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.11.0] - 2026-08-21
+
+### Added
+- The merge now refuses a head no green gate run covers, so "tests green" is checked rather than remembered
+
+### Changed
+- The merge reads the GitHub review itself and fails closed: an unreadable review state stops the merge instead of passing as clear
+- Say plainly what the approval marker proves: freshness, single use and a head-SHA binding, not that a human agreed
+
 ## [2.10.0] - 2026-08-21
 
 ### Removed

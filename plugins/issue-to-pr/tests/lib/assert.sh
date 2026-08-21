@@ -163,6 +163,18 @@ write_marker() {
     "$branch" "$sha" "$created" "$used" >"$root/.claude/issue-to-pr/approval-$slug.json"
 }
 
+# write_receipt ROOT BRANCH SHA - the green-gate receipt run-gates.sh leaves and
+# worktree.sh merge refuses to merge without. Same reason as write_marker: one copy
+# of the on-disk shape, so a schema change cannot leave half the tests exercising
+# a format nothing writes any more.
+write_receipt() {
+  local root=$1 branch=$2 sha=$3 slug
+  slug=${branch//\//-}
+  mkdir -p "$root/.claude/issue-to-pr"
+  printf '{"branch":"%s","head_sha":"%s","gates":"test","created_at":"%s"}\n' \
+    "$branch" "$sha" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >"$root/.claude/issue-to-pr/gates-$slug.json"
+}
+
 # init_repo_with_remote [BRANCHES...] - a repo with a real bare `origin` holding
 # `main` plus any extra branches named. Needed because `git ls-remote` is the whole
 # basis of base resolution: against a repo with no origin it always fails, so a

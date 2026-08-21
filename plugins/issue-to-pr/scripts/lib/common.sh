@@ -331,6 +331,54 @@ ensure_state_dir() {
   return 0
 }
 
+# -- Gate receipt --------------------------------------------------------------
+# run-gates.sh leaves one on an all-green run; worktree.sh merge refuses without one
+# matching the PR head. The binding is the head SHA, not a timestamp: it answers the
+# only question that matters at the merge, whether the gates ran against the content
+# being merged, and nothing else can fake it into agreeing.
+receipt_path() { # root branch
+  printf '%s/gates-%s.json' "$(state_dir "$1")" "$(printf '%s' "$2" | tr '/' '-')"
+}
+
+receipt_write() { # file branch head_sha gates created_at
+  ensure_state_dir "$(dirname "$1")" || return 1
+  printf '{"branch":"%s","head_sha":"%s","gates":"%s","created_at":"%s"}
+'     "$(json_escape "$2")" "$(json_escape "$3")" "$(json_escape "$4")" "$(json_escape "$5")" >"$1"
+}
+
+# review_state BRANCH - clear | changes_requested | unresolved_threads | unreadable.
+# Fails CLOSED: a read that does not come back is `unreadable`, never `clear`. The
+# gate promises no merge lands over a requested change, and a promise that resolves
+# to "probably fine" when the API hiccups is not one.
+#
+# reviewDecision alone is unreliable: GitHub leaves it null on repos WITHOUT a
+# required-review rule, so a real "Request changes" would read as clear. The count of
+# latest reviews in CHANGES_REQUESTED covers that. Unresolved inline threads are
+# GraphQL-only and best-effort - an unreadable thread count is not a blocked merge,
+# because the decision read already answered the blocking question.
+review_state() { # branch
+  local meta decision cr_reviews pr_num slug owner repo unresolved
+  meta=$(gh pr view "$1" --json reviewDecision,latestReviews,number --jq     '"\(.reviewDecision // "")	\([ .latestReviews[]? | select(.state == "CHANGES_REQUESTED") ] | length)	\(.number)"'     2>/dev/null || printf '')
+  if [ -z "$meta" ]; then printf 'unreadable'; return 0; fi
+  decision=$(printf '%s' "$meta" | cut -f1)
+  cr_reviews=$(printf '%s' "$meta" | cut -f2)
+  pr_num=$(printf '%s' "$meta" | cut -f3)
+  [ -n "$cr_reviews" ] || cr_reviews=0
+  if [ "$decision" = CHANGES_REQUESTED ] || [ "$cr_reviews" != 0 ]; then
+    printf 'changes_requested'; return 0
+  fi
+  slug=$(gh repo view --json nameWithOwner --jq .nameWithOwner 2>/dev/null || printf '/')
+  owner=${slug%%/*}
+  repo=${slug#*/}
+  unresolved=0
+  if [ -n "$owner" ] && [ -n "$repo" ] && [ -n "$pr_num" ]; then
+    # shellcheck disable=SC2016  # $o/$r/$n are GraphQL variables, not shell expansions
+    unresolved=$(gh api graphql       -f query='query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){pullRequest(number:$n){reviewThreads(first:100){nodes{isResolved}}}}}'       -F o="$owner" -F r="$repo" -F n="$pr_num"       --jq '[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved == false)] | length'       2>/dev/null || printf '0')
+  fi
+  [ -n "$unresolved" ] || unresolved=0
+  if [ "$unresolved" != 0 ]; then printf 'unresolved_threads'; else printf 'clear'; fi
+}
+
 marker_path() { # root branch
   printf '%s/approval-%s.json' "$(state_dir "$1")" "$(printf '%s' "$2" | tr '/' '-')"
 }

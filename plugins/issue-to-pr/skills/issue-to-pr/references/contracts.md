@@ -105,6 +105,14 @@ revert-push-failed · revert-pr-failed`; degrade `no-merge-commit` if the PR is 
   with a valid marker; denies `gh pr merge --admin`; asks on force-push; passes every other
   command through. The marker is consumed by `worktree.sh merge`, so it is single-use by
   construction. You never call this directly.
+- **What the marker proves, exactly:** freshness, single use, and a head-SHA binding. Not that a
+  human agreed. The same model that runs the pipeline writes it, with whatever quote it decides
+  is a go-ahead, and the hook cannot see the conversation. The ask contract in prose is the part
+  that keeps a merge honest; the marker keeps an honest approval from being reused or from
+  covering a head it never saw.
+- The merge also refuses without a green gate receipt for the PR head (`run-gates.sh` leaves it)
+  and reads the GitHub review itself, failing closed: `gates-unverified`, `review-blocked`,
+  `review-unreadable` are all exit 2.
 
 ## run-gates.sh — gates + install + smoke
 
@@ -124,14 +132,6 @@ left to GitHub's automation on the default-branch merge. Epic mode (sec 6.1) add
 forms (still always exit 0): `board-sync.sh <owner/repo> --create-card "<title>" --board-url U`
 (adds a draft card → `CARD_ID`) and `board-sync.sh <owner/repo> --convert-draft <itemId>`
 (draft → real issue → `ISSUE_URL`).
-
-## review-check.sh — GitHub review ingestion (v2.0)
-
-`review-check.sh <b>` — Step 11 entry. Emits `REVIEW_STATE=clear | changes_requested |
-unresolved_threads` (from GitHub's own `reviewDecision` plus a best-effort unresolved-thread
-count), `UNRESOLVED_THREADS`, `READ_OK`. `changes_requested` / `unresolved_threads` routes through
-the change-request path, so an in-session go-ahead never merges over unaddressed GitHub review.
-Best-effort: a failed read reports `clear` + `READ_OK=false` and still exits 0.
 
 ## changed-paths.sh - the surface of the change (v2.9.0)
 
