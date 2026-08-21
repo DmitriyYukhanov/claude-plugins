@@ -5,6 +5,12 @@ All notable changes to the **issue-to-pr** plugin will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.9.0] - 2026-08-21
+
+### Changed
+- The security overlay now reads the diff and decides for itself whether a change touches auth, crypto, secrets, sessions, payments or migrations, over a floor of paths it can never argue down
+- `sensitive-paths.sh` is now `changed-paths.sh` and only lists what the branch touched
+
 ## [2.8.0] - 2026-08-21
 
 ### Changed
