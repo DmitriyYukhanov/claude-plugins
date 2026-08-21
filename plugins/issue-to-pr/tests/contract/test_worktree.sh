@@ -494,3 +494,17 @@ test_wt_merge_unreadable_head_stops() {
   if printf '%s' "$(gh_log)" | grep -q 'pr merge'; then fail "merged without knowing the head"; fi
 }
 
+# 3.0.1: with the approval sweep gone, cleanup is the only thing that prunes state.
+# A receipt for a deleted branch can never match a head again, so leaving it behind
+# is how the old markers piled up.
+test_wt_cleanup_prunes_the_gate_receipt() {
+  local repo wt; repo=$(mk_repo); wt=$(mk_worktree "$repo" feat/issue-6-x); cd "$repo"
+  write_receipt "$repo" feat/issue-6-x "$SHA_OK"
+  use_fake_gh pr-merged
+  run_script worktree.sh cleanup 6 --branch feat/issue-6-x
+  assert_rc 0
+  if [ -e "$repo/.claude/issue-to-pr/gates-feat-issue-6-x.json" ]; then
+    fail "cleanup left the gate receipt behind"
+  fi
+}
+
