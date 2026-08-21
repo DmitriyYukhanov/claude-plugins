@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# pin-config.sh - self-writing config (spec sec 5.6). After a run whose auto-detected
+# pin-config.sh - self-writing config (spec sec 5.6). After a run whose worked-out
 # gate commands passed, pin them to .claude/issue-to-pr/config.md so later runs skip
 # detection. NEVER overwrites a human-set value: idempotency is checked with the SAME
 # shared frontmatter parser preflight uses, so a nested `commands:` value counts as

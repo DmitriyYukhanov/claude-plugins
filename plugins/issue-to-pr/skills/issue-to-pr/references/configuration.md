@@ -7,8 +7,8 @@ the plugin installed never sees a file they cannot place and the project's own `
 is never edited. (A run's scratch files are separate: they live in the worktree under
 `tmp/task-<N>/` and go with it at teardown.) A config left at the pre-2.5 path
 (`.claude/issue-to-pr.local.md`) is not read: the run says so once and leaves the file
-alone, so move across whatever you want to keep. Every field is optional. With no file, `preflight.sh` auto-detects the gate
-commands and the skill runs by the issue argument.
+alone, so move across whatever you want to keep. Every field is optional. With no file, the run works the gate
+commands out at Step 6 and pins back the ones that passed.
 
 ## Schema
 
@@ -54,15 +54,10 @@ as an alias for the top-level `*_cmd` scalars.)
 
 ## Resolution
 
-`preflight.sh` (Step 0) parses this file and, for any command it does not find, auto-detects one
-from the project's manifests (`package.json` scripts, then `Cargo.toml` / `go.mod` / `pyproject`
-/ `Makefile`), falling back to a shell runner (`tests/run-tests.sh` and its usual spellings).
-No probe reads the directory you happen to run from: everything resolves against the **main
-checkout**, which is where the config lives and the only tree that is certain to exist when
-Step 0 runs. A runner at the top wins outright; failing that, a single **tracked** runner
-inside a project is accepted, so a plugin or package monorepo is still found. Two or more are
-left ambiguous on purpose, and reported as no test command, because Step 0 cannot honestly
-enumerate projects for a worktree Step 1 has not cut yet: pin the command you want
-([#23](https://github.com/DmitriyYukhanov/claude-plugins/issues/23)). Config always wins over auto-detection;
-the reported `CMD_SOURCE_*` keys say which source each command came from. If neither a config value nor a detected command exists, ask the
-user once and suggest saving it here. Never invent a command.
+`preflight.sh` (Step 0) parses this file and reports the commands it names. It is read from
+the **main checkout**, where it lives and the only tree certain to exist that early.
+
+A command this file does not name comes back empty, and the run works it out at Step 6 in the
+worktree the gates execute in, always as a literal such as `npm test`. A repository whose suite
+is genuinely ambiguous, a monorepo with one per package, gets asked about rather than guessed
+at, and the answer belongs here. Never invent a command.

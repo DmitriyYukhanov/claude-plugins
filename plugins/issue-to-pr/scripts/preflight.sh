@@ -5,8 +5,8 @@
 # answer does not depend on the directory you started in. The commands it reports
 # are relative to the repository root, which is where the gates run. Reports
 # auth/scopes, repo
-# identity, resolved base + start-point, auto-detected gate commands (overridden
-# by config), issue state/assignees, the issue-<N> worktree state, and board
+# identity, resolved base + start-point, the gate commands the config names,
+# issue state/assignees, the issue-<N> worktree state, and board
 # membership. Never mutates anything except `--claim` (assign issue to @me).
 #
 #   preflight.sh <issue-number> [--claim] [--config <path>]
@@ -100,10 +100,8 @@ set_cfg() { # top sub value
 # trim_quotes + parse_frontmatter now live in lib/common.sh (shared with pin-config.sh).
 
 # The config is read from the MAIN checkout, resolved before anything reads it. It was
-# the one cwd-relative path left in this script, and it outranks auto-detect: a run
-# started from a subdirectory found no config at all and silently swapped the pinned
-# test command for whatever auto-detect guessed, taking the pinned base branch and the
-# board with it.
+# the one cwd-relative path left in this script: a run started from a subdirectory found
+# no config at all and lost the pinned test command, base branch and board with it.
 #
 # The main checkout and not the current tree, because the file is usually untracked
 # (`pin-config.sh` writes it there and nothing commits it), so a worktree simply has no
@@ -286,115 +284,14 @@ else
   add_warning "base '$base' resolves to no ref in this clone - Step 1 will stop at invalid-start-point; fetch it or pin a different base_branch"
 fi
 
-# -- gate command auto-detect (config overrides) ------------------------------
-# Every probe below is anchored to a checkout root, never to cwd: a run started from a
-# subdirectory used to report "no test command" for a project that plainly has one, and
-# Step 6 then had nothing left to verify the work with.
-#
-# Probed in the main checkout, never in "whatever tree cwd happens to be in": started
-# from issue-5's worktree, a run for issue 9 would otherwise gate issue 9 on a project
-# that exists only on issue 5's branch. Anchoring this to the worktree the run will
-# actually use is a different job and cannot be done here anyway - Step 0 probes before
-# Step 1 has cut that worktree from `origin/$base`, so the tree the gates will run in
-# does not exist yet.
-det_root=${root:-.}
-det_test="" det_typecheck="" det_visual="" det_smoke="" det_source="none"
-detect_from_package_json() {
-  local pkg="$det_root/package.json"
-  det_source="package.json"
-  grep -qE '"test"[[:space:]]*:' "$pkg" && det_test='npm test'
-  local k
-  for k in typecheck tsc type-check; do
-    if grep -qE "\"$k\"[[:space:]]*:" "$pkg"; then det_typecheck="npm run $k"; break; fi
-  done
-  for k in 'test:visual' visual e2e playwright; do
-    if grep -qE "\"$k\"[[:space:]]*:" "$pkg"; then det_visual="npm run $k"; break; fi
-  done
-  grep -qE '"smoke"[[:space:]]*:' "$pkg" && det_smoke='npm run smoke'
-}
-if [ -f "$det_root/package.json" ]; then
-  detect_from_package_json
-elif [ -f "$det_root/Cargo.toml" ]; then
-  det_source="Cargo.toml"; det_test='cargo test'; det_typecheck='cargo check'
-elif [ -f "$det_root/go.mod" ]; then
-  det_source="go.mod"; det_test='go test ./...'; det_typecheck='go vet ./...'
-elif [ -f "$det_root/pyproject.toml" ] || [ -f "$det_root/setup.py" ]; then
-  det_source="python"; det_test='pytest'
-elif [ -f "$det_root/Makefile" ]; then
-  det_source="Makefile"
-  grep -qE '^test:' "$det_root/Makefile" && det_test='make test'
-  # Emit the target that is actually there. A `check:`-only Makefile (the GNU spelling)
-  # used to yield `make typecheck`, which make then refuses for want of such a rule -
-  # a red gate on a repository with nothing wrong, and nothing telling the model the
-  # command had been invented rather than read.
-  for k in typecheck check; do
-    if grep -qE "^$k:" "$det_root/Makefile"; then det_typecheck="make $k"; break; fi
-  done
-fi
-
-# Shell-harness projects - plugin repos, dotfiles, anything where a runner script
-# IS the suite. Checked after the manifests so a real one still wins, but it also
-# rescues a manifest that declares no test at all; without this the Step 6 gate
-# degrades to "no command" and the run proceeds with nothing verifying it.
-# A runner at the top wins outright. Failing that, the repository is asked for its
-# TRACKED runners and exactly ONE is accepted, so a plugin or package monorepo that
-# keeps <project>/tests/run-tests.sh is still found.
-#
-# Deliberately no command assembled from several runners. Step 0 cannot enumerate
-# projects honestly: it probes THIS checkout, while the gates run in a worktree Step 1
-# cuts from `origin/$base` afterwards, so any enumeration can disagree with the tree
-# under test - and one stale link then either hides a red suite or kills the whole
-# command. Two or more runners therefore stay ambiguous on purpose: no test command is
-# reported and `pin-config.sh` is the documented way to name the right one. The
-# multi-suite case and what it would take is #23.
-#
-# Tracked, because an ignored scratch project or an untracked leftover is not in the
-# worktree the gates run in, so a command naming it dies there at 127. The top-level
-# probe below keeps its long-standing behaviour and accepts an untracked runner too.
-harness_entry() { # dir relative to det_root ("" = its top) -> the runner path, or nothing
-  local d=$1 h p
-  for h in tests/run-tests.sh test/run-tests.sh scripts/run-tests.sh run-tests.sh; do
-    p=${d:+$d/}$h
-    if [ -f "$det_root/$p" ]; then printf '%s' "$p"; return 0; fi
-  done
-  return 1
-}
-det_source_test=""
-if [ -z "$det_test" ]; then
-  if harness=$(harness_entry ""); then
-    det_test="bash $harness"
-    det_source_test=$harness
-  else
-    mapfile -t _runners < <(
-      git -C "$det_root" ls-files --cached -- '*/run-tests.sh' 2>/dev/null | sort
-    )
-    # Emitted BARE, and only when the path cannot change how a shell reads it. The value
-    # is evaluated twice - run-gates.sh hands it to `bash -c`, and Step 6 substitutes it
-    # into `--gate test='<cmd>'` - so no single quoting scheme survives both: double
-    # quotes let a directory named `$(...)` execute at gate time (a repository you have
-    # merely cloned is enough), and single quotes are ended by the wrapper. A path
-    # carrying anything else is left undetected, which is the honest outcome: Step 6
-    # degrades loudly and pin-config.sh names the command.
-    if [ "${#_runners[@]}" = 1 ]; then
-      case ${_runners[0]} in
-        *[!A-Za-z0-9._/-]*) : ;;
-        *)
-          det_test="bash ${_runners[0]}"
-          det_source_test=${_runners[0]}
-          ;;
-      esac
-    fi
-  fi
-fi
-
-# Config wins over auto-detect; track the source per command.
-cmd_test=${CFG_TEST:-$det_test}
-cmd_typecheck=${CFG_TYPECHECK:-$det_typecheck}
-cmd_visual=${CFG_VISUAL:-$det_visual}
-cmd_smoke=${CFG_SMOKE:-$det_smoke}
-pick_source() { if [ -n "$1" ]; then echo config; else echo "$2"; fi; }
-src_test=$(pick_source "$CFG_TEST" "${det_source_test:-$det_source}")
-src_typecheck=$(pick_source "$CFG_TYPECHECK" "$det_source")
+# -- gate commands (config only) ----------------------------------------------
+# The config names them or nothing does. Detection moved to Step 6, in the worktree
+# the gates run in - a tree Step 1 has not cut yet when this runs, which is where
+# every defect in the old probe came from.
+cmd_test=${CFG_TEST:-}
+cmd_typecheck=${CFG_TYPECHECK:-}
+cmd_visual=${CFG_VISUAL:-}
+cmd_smoke=${CFG_SMOKE:-}
 
 # -- issue state / assignees / title ------------------------------------------
 # Same again for the issue, and one field per line for the same reason - here it is
@@ -492,8 +389,6 @@ emit CMD_TYPECHECK "$cmd_typecheck"
 emit CMD_TEST "$cmd_test"
 emit CMD_VISUAL "$cmd_visual"
 emit CMD_SMOKE "$cmd_smoke"
-emit CMD_SOURCE_TYPECHECK "$src_typecheck"
-emit CMD_SOURCE_TEST "$src_test"
 emit CONFIG_PRESENT "$config_present"
 emit CONFIG_PATH "$config_path"
 emit ISSUE_STATE "$issue_state"

@@ -5,6 +5,14 @@ All notable changes to the **issue-to-pr** plugin will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.8.0] - 2026-08-21
+
+### Changed
+- Gate commands now come from the config or from the run itself at Step 6, worked out in the worktree the gates execute in and always as a literal command
+
+### Removed
+- Gate-command detection from `preflight.sh`, roughly 90 lines of shell that guessed a command from a tree the gates never run in
+
 ## [2.7.0] - 2026-08-21
 
 ### Added
