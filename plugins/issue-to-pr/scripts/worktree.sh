@@ -313,6 +313,28 @@ cmd_merge() {
   if [ -z "$cur_sha" ] || [ "$marker_sha" != "$cur_sha" ]; then
     stop no-valid-approval "issue-to-pr: PR head moved since approval (approved $marker_sha, now ${cur_sha:-unknown}); re-approve"
   fi
+  # -- 1b. the gates covered THIS head, and GitHub has no outstanding review ----
+  # Both were promises the model had to keep by remembering to. The receipt is
+  # written by run-gates.sh on an all-green run and names the HEAD it ran against,
+  # so a merge of anything the gates did not see stops here. The review read fails
+  # CLOSED: "could not tell" is not "clear".
+  local receipt receipt_sha rstate
+  receipt=$(receipt_path "$root" "$branch")
+  receipt_sha=""
+  [ -f "$receipt" ] && receipt_sha=$(marker_str_field "$receipt" head_sha)
+  if [ "$receipt_sha" != "$cur_sha" ]; then
+    local covers="none found"
+    [ -n "$receipt_sha" ] && covers="covers ${receipt_sha:0:12}"
+    stop gates-unverified "issue-to-pr: no green gate receipt for ${cur_sha:0:12} (receipt $covers). Re-run run-gates.sh on this head, then re-approve."
+  fi
+  rstate=$(review_state "$branch")
+  case "$rstate" in
+    clear) : ;;
+    changes_requested) stop review-blocked "issue-to-pr: $branch has a review requesting changes. Address it, push, re-run the gates, and re-approve." ;;
+    unresolved_threads) stop review-blocked "issue-to-pr: $branch has unresolved review threads. Resolve them on GitHub, then re-approve." ;;
+    *) stop review-unreadable "issue-to-pr: could not read the review state of $branch. Check it yourself before merging; this gate does not pass on an unread review." ;;
+  esac
+
   # Read the recorded reply HERE, while the marker is known to exist, not after the
   # merge: the ladder can push, update the branch and wait on checks, and any
   # preflight running in another session sweeps markers past the validity window.
@@ -364,6 +386,10 @@ cmd_merge() {
           stop marker-refresh-failed "could not refresh the approval marker after updating $branch to its base. Re-approve."
         fi
         emit LADDER_STEP base-merged-refreshed
+        # The diff is proved untouched, so the approval carries over and is refreshed
+        # above. The gates are a separate promise: they never ran against base+diff,
+        # and a receipt that a base update could walk past would not be a gate at all.
+        stop gates-unverified "updated $branch to its base; the approval carries over, the gate receipt does not. Pull the new head, re-run run-gates.sh, then re-run merge."
       else
         stop content-changed-needs-reapproval "merging the base into $branch changed the PR's own diff. Re-review the updated PR and re-approve - the earlier approval no longer covers it."
       fi

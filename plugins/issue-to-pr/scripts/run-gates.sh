@@ -91,6 +91,22 @@ done
 if [ "$overall_rc" -eq 0 ]; then gates_ok=true; else gates_ok=false; fi
 emit GATES_RUN "$((i < n ? i + 1 : n))"
 emit GATES_OK "$gates_ok"
+
+# An all-green run leaves a receipt bound to the HEAD it ran against, and
+# worktree.sh merge refuses to merge a head no receipt covers. Best-effort by
+# design: run-gates.sh is also useful outside a repository, and a receipt that
+# cannot be written is not a reason to fail a green suite. The merge is where
+# the absence bites, and it says so there.
+if [ "$gates_ok" = true ]; then
+  receipt_root=$(repo_root)
+  receipt_branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || printf '')
+  receipt_head=$(git rev-parse HEAD 2>/dev/null || printf '')
+  if [ -n "$receipt_root" ] && [ -n "$receipt_branch" ] && [ -n "$receipt_head" ]; then
+    if receipt_write "$(receipt_path "$receipt_root" "$receipt_branch")"       "$receipt_branch" "$receipt_head" "$(join_by , "${gate_names[@]}")" "$(now_iso)"; then
+      emit GATES_RECEIPT "$receipt_head"
+    fi
+  fi
+fi
 flush_output
 
 if [ "$overall_rc" -ne 0 ]; then

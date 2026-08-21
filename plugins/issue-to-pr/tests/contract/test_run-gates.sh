@@ -59,3 +59,40 @@ test_gates_log_file_written() {
   assert_contains "$content" "hi-there"
 }
 
+# 2.11.0: a green run leaves the receipt worktree.sh merge checks. Bound to the HEAD
+# it ran against, because the only question at the merge is whether the gates saw the
+# content being merged.
+test_gates_green_leaves_a_receipt_for_this_head() {
+  local repo head
+  repo=$(init_repo "$TEST_TMPDIR/gr")
+  git -C "$repo" switch -qc feat/issue-6-x
+  cd "$repo" || fail "cd failed"
+  run_script run-gates.sh --log-dir "$TEST_TMPDIR/logs" --gate 'test=true'
+  assert_rc 0
+  head=$(git -C "$repo" rev-parse HEAD)
+  assert_key "$OUT" GATES_RECEIPT "$head"
+  assert_contains "$(cat "$repo/.claude/issue-to-pr/gates-feat-issue-6-x.json")" "$head"
+}
+
+test_gates_red_leaves_no_receipt() {
+  local repo
+  repo=$(init_repo "$TEST_TMPDIR/gr-red")
+  git -C "$repo" switch -qc feat/issue-6-x
+  cd "$repo" || fail "cd failed"
+  run_script run-gates.sh --log-dir "$TEST_TMPDIR/logs" --gate 'test=false'
+  assert_rc 1
+  if [ -e "$repo/.claude/issue-to-pr/gates-feat-issue-6-x.json" ]; then
+    fail "a failing suite left a receipt"
+  fi
+}
+
+# run-gates.sh is useful outside a checkout too, and a receipt it cannot write is not
+# a reason to redden a green suite. The merge is where the absence is felt.
+test_gates_outside_a_repo_still_pass() {
+  mkdir -p "$TEST_TMPDIR/norepo-gates"
+  cd "$TEST_TMPDIR/norepo-gates" || fail "cd failed"
+  run_script run-gates.sh --log-dir "$TEST_TMPDIR/logs" --gate 'test=true'
+  assert_rc 0
+  assert_key "$OUT" GATES_OK true
+}
+
