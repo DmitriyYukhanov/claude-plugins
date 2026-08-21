@@ -41,11 +41,16 @@ project's `visual_cmd` or a dedicated browser test — never eyeballing alone.
 
 ## Security overlay
 
-Regardless of tier, run `sensitive-paths.sh --base "<BASE>"` from the worktree;
-if `SENSITIVE=true`, add one `/security-review` pass. Sensitive = a path segment or
-filename stem naming auth/authz, crypto/keys, secrets/credentials/sessions,
-payment/billing, or migrations, plus `.env*`, `*.sql`, and key material. Matching is
-segment/stem-exact, so `authors.py` and `payment_ui_copy.md` do not false-trip.
+Regardless of tier, list the surface with `changed-paths.sh --base "<BASE>"` from the
+worktree, then read the diff and decide: does this change touch authentication or
+authorization, crypto or key material, secrets, credentials or sessions, payments or
+billing, or a schema migration? One `/security-review` pass if it does. Judge the code,
+not the filenames: a file that stores sessions without saying so in its name counts, and
+`authors.py` does not.
+
+These paths are a floor you may escalate from and never argue down: anything under an
+`auth`, `crypto`, `secrets`, or `migrations` directory, plus `.env*`, `*.sql`, `*.pem`,
+`*.key`, and private key material. Their presence settles the question on its own.
 
 ## Escalation ratchet (one-way)
 

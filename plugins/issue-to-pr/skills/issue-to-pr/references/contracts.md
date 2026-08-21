@@ -133,16 +133,14 @@ count), `UNRESOLVED_THREADS`, `READ_OK`. `changes_requested` / `unresolved_threa
 the change-request path, so an in-session go-ahead never merges over unaddressed GitHub review.
 Best-effort: a failed read reports `clear` + `READ_OK=false` and still exits 0.
 
-## sensitive-paths.sh - security overlay trigger (v1.3.0)
+## changed-paths.sh - the surface of the change (v2.9.0)
 
-`sensitive-paths.sh --base <BASE>` -> `SENSITIVE=true|false` + `MATCHED=`. Run from the
-worktree; `--base` collects the changed files itself - committed (three-dot against the base),
-edited-not-committed, and untracked - because the overlay runs at Step 7, before the Step 9
-commit. Segment/stem-exact matching (auth, crypto, secrets, payment, migrations, plus
-`.env*`/`*.sql`/key material), so `authors.py` / `payment_ui_copy.md` do not false-trip.
-`SENSITIVE=true` -> add one `/security-review` pass. Exit 0 on a completed scan; `4`
-(`not-a-git-repo`, `base-unresolvable`) when it could not read the diff at all, which means scan
-it yourself rather than treat the run as clean. A path list on stdin still works.
+`changed-paths.sh --base <BASE>` -> one path per line, no `KEY=value`. Run from the worktree;
+it collects the three sources the overlay needs at Step 7, before the Step 9 commit: committed
+(three-dot against the base), edited-not-committed, and untracked. Exit `4` (`no-base`,
+`not-a-git-repo`, `base-unresolvable`) rather than an empty list, because nothing downstream can
+tell "changed nothing" from "could not read the diff". Whether any of it is security relevant is
+your call at Step 7, not the script's (`tier-matrix.md`).
 
 ## pin-config.sh - self-writing config (v1.3.0)
 

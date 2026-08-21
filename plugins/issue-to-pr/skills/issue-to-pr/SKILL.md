@@ -106,9 +106,10 @@ subagents critique the diff at the tier's level, ≤ tier's max passes. `/code-r
 <level> --fix` is preferred only when it's actually callable — most copies ship
 `disable-model-invocation`, which blocks a skill run from invoking it at all (`R/companions.md`).
 Run them in the **foreground**, never while gates run — a reviewer editing the shared worktree
-mid-gate produces a phantom red. **Security overlay:** `S/sensitive-paths.sh --base "<BASE>"` —
-it collects committed, uncommitted and untracked work itself; `SENSITIVE=true` → +1
-`/security-review`. Track `confirmed_bugs_this_pass`/`gate_fail_streak` in metrics;
+mid-gate produces a phantom red. **Security overlay:** `S/changed-paths.sh --base "<BASE>"` lists
+what this branch touched (committed, uncommitted, untracked); you decide from the diff whether
+it reaches auth, crypto, secrets, sessions, payments or migrations, and add one
+`/security-review` if it does. `R/tier-matrix.md` holds the floor you cannot argue down. Track `confirmed_bugs_this_pass`/`gate_fail_streak` in metrics;
 **escalate a level** on 2+ confirmed bugs/pass or a gate failing twice; re-run gates
 after each fix.
 
