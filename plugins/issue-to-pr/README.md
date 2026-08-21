@@ -38,9 +38,10 @@ progress; everything between them scales to the task.
   run. An epic-sized request is decomposed into dependency-ordered child issues, each
   shipped through its own gated PR. `next` picks the top card from the board.
 - **A careful merge gate.** Merge happens only on your explicit in-session approval, never
-  on the turn the PR opens. GitHub reviews are read first: a changes-requested review or an
-  unresolved thread reroutes into the change-request path with full re-gating. A
-  behind-base PR is updated and re-checked automatically.
+  on the turn the PR opens. What a script can prove, a script proves: the merge refuses a head
+  the gates never ran against, reads the GitHub review itself and stops on a requested change or
+  an unread one, and merges with `--match-head-commit`, so a commit landing after the diff you
+  were shown stops the merge instead of shipping unseen.
 - **Cleanup and a safety net.** After the merge it deletes the branch, tears down the
   worktree, and clears temp artifacts (salvaging important files first). An optional smoke
   check runs on the updated base; if it fails, the skill opens a *draft* revert PR, never
@@ -62,7 +63,7 @@ typecheck/test/visual/smoke commands. Everything is optional; with no file the r
 commands out in the worktree where the gates execute, as literals, and prints the block to
 paste here once they pass. It never writes this file itself.
 
-That directory holds the plugin's repository-level state - the config, approval markers, the
+That directory holds the plugin's repository-level state - the config, gate receipts, the
 friction log - and it ships its own `.gitignore` containing `*`, so none of it reaches
 `git status` and your project's `.gitignore` is left alone. (A run's scratch files still live
 in the worktree under `tmp/task-<N>/`, which the worktree teardown clears.) A config at the
@@ -70,9 +71,8 @@ older `.claude/issue-to-pr.local.md` path is not read; the run says so once and 
 you to move.
 
 Because the directory is ignored, `git clean -x` treats it as disposable and removes it along
-with the config and any approval you are holding. Nothing breaks permanently: the commands get
-worked out again and an approval can be given again, but a merge you had just approved will ask
-for approval a second time.
+with the config and the gate receipt. Nothing breaks permanently: the commands get worked out
+again, but the next merge asks for one more gate run before it will land.
 
 ### Companion skills (optional)
 

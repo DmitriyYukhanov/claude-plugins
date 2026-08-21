@@ -409,45 +409,6 @@ test_preflight_reads_the_canonical_config() {
 
 
 
-test_preflight_sweeps_an_expired_approval_marker() {
-  local repo
-  repo=$(init_repo)
-  cd "$repo"
-  write_marker "$repo" feat/old "aaaa" false "$(stale_iso)"
-  use_fake_gh happy
-  run_script preflight.sh 6
-  if [ -f "$repo/.claude/issue-to-pr/approval-feat-old.json" ]; then
-    fail "an expired marker was left behind"
-  fi
-}
-
-test_preflight_keeps_a_fresh_approval_marker() {
-  local repo
-  repo=$(init_repo)
-  cd "$repo"
-  write_marker "$repo" feat/live "aaaa" false "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  use_fake_gh happy
-  run_script preflight.sh 6
-  [ -f "$repo/.claude/issue-to-pr/approval-feat-live.json" ] || fail "a fresh approval was swept"
-}
-
-# Regression the issue names: epoch_of returns EMPTY for a timestamp it cannot read, and
-# treating that as "infinitely old" swept every live approval in the repository at once
-# on macOS, where the GNU date form fails. Unreadable means leave it alone.
-test_preflight_never_sweeps_a_marker_it_cannot_date() {
-  local repo m
-  repo=$(init_repo)
-  cd "$repo"
-  # Through the shared fixture, not a third hand-rolled copy of the marker JSON: the
-  # helper exists because two independent copies had already drifted apart once.
-  write_marker "$repo" feat/undated aaaa false not-a-date
-  m="$repo/.claude/issue-to-pr/approval-feat-undated.json"
-  use_fake_gh happy
-  run_script preflight.sh 6
-  [ -f "$m" ] || fail "a marker with an unreadable timestamp was swept"
-}
-
-
 # Step 8 pins into the file preflight REPORTS, not a hard-coded path: when the migration
 # could not copy, the run keeps reading the legacy file, and a pin aimed at the canonical
 # path would create a second config that wins next run and drops the base branch and board.

@@ -15,8 +15,7 @@
 # authenticated; 4 (degraded) when the config file cannot be parsed.
 #
 # The only things it writes are its own state directory (which ignores itself: see
-# ensure_state_dir), the sweep of approval markers past their validity window, and
-# - with --claim - the issue assignee. It fetches, but never prunes: a probe the model runs on every task must
+# ensure_state_dir) and - with --claim - the issue assignee. It fetches, but never prunes: a probe the model runs on every task must
 # not delete the user's remote-tracking refs.
 set -uo pipefail
 
@@ -130,29 +129,10 @@ if [ "$config_from_flag" = 0 ] && [ -n "$root" ]; then
   fi
 fi
 
-# Sweep approval markers past the validity window, so a repository does not accumulate
-# spent authorisations. A marker whose timestamp cannot be READ is never swept: epoch_of
-# returns empty for a value it fails to parse, and treating that as infinitely old is
-# exactly how this wiped every live approval at once on macOS, where the GNU date form
-# fails. Unreadable means leave it alone and let the merge gate refuse it instead.
-sweep_markers() {
-  local dir=$1 f created epoch now
-  [ -d "$dir" ] || return 0
-  now=$(now_epoch)
-  for f in "$dir"/approval-*.json; do
-    [ -f "$f" ] || continue
-    created=$(marker_str_field "$f" created_at)
-    epoch=$(epoch_of "$created")
-    [ -n "$epoch" ] || continue
-    [ "$((now - epoch))" -gt "$APPROVAL_TTL" ] && rm -f "$f" 2>/dev/null
-  done
-  return 0
-}
 # Both only inside a repository. `${root:-.}` would otherwise point at the caller's cwd,
 # and a probe run outside a checkout has no business creating `./.claude/issue-to-pr/`
 # in whatever directory someone happened to be standing in.
 if [ -n "$root" ]; then
-  sweep_markers "$(state_dir "$root")"
   # Unconditionally, not only when something is written here: the model itself writes the
   # friction log and epic ledgers into this directory with a plain mkdir, and whichever of
   # those lands first would otherwise be an ordinary untracked file until some later

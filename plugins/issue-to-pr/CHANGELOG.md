@@ -5,6 +5,15 @@ All notable changes to the **issue-to-pr** plugin will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [3.0.0] - 2026-08-21
+
+### Removed
+- The approval marker and `approve.sh`. A merge no longer needs a file written first; the go-ahead you give in the session is the gate, and it never proved more than that anyway
+
+### Changed
+- The merge binds to the head you were shown with GitHub's own `--match-head-commit`, so a commit landing after your go-ahead stops the merge instead of shipping unseen
+- The hook is down to what a hook can enforce: `gh pr merge --admin` denied, force-push asked about
+
 ## [2.11.0] - 2026-08-21
 
 ### Added
