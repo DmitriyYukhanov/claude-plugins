@@ -173,8 +173,8 @@ test_wt_cleanup_dirty_tracked_stops() {
 
 test_wt_cleanup_salvages_then_removes() {
   local repo wt; repo=$(mk_repo); wt=$(mk_worktree "$repo" feat/issue-6-x); cd "$repo"
-  mkdir -p "$wt/tmp/task-6"
-  printf '# design\n' >"$wt/tmp/task-6/design.md"
+  mkdir -p "$repo/.claude/issue-to-pr/runs/task-6"
+  printf '# design\n' >"$repo/.claude/issue-to-pr/runs/task-6/design.md"
   use_fake_gh pr-merged
   run_script worktree.sh cleanup 6 --branch feat/issue-6-x --salvage-to "$TEST_TMPDIR/salvage"
   assert_rc 0
@@ -200,8 +200,8 @@ test_wt_cleanup_resolves_pr_number_to_the_branch() {
 # inside the worktree copied the artifacts into the directory it was about to remove.
 test_wt_cleanup_relative_salvage_resolves_against_the_main_checkout() {
   local repo wt; repo=$(mk_repo); wt=$(mk_worktree "$repo" feat/issue-6-x)
-  mkdir -p "$wt/tmp/task-6"
-  printf '# design\n' >"$wt/tmp/task-6/design.md"
+  mkdir -p "$repo/.claude/issue-to-pr/runs/task-6"
+  printf '# design\n' >"$repo/.claude/issue-to-pr/runs/task-6/design.md"
   cd "$wt"
   use_fake_gh pr-merged
   run_script worktree.sh cleanup 6 --branch feat/issue-6-x --salvage-to salvaged
@@ -215,8 +215,8 @@ test_wt_cleanup_relative_salvage_resolves_against_the_main_checkout() {
 # told, and had no reason to trust the copies it could not see reported.
 test_wt_cleanup_reports_salvage_even_when_removal_stops() {
   local repo wt; repo=$(mk_repo); wt=$(mk_worktree "$repo" feat/issue-6-x); cd "$repo"
-  mkdir -p "$wt/tmp/task-6"
-  printf '# design\n' >"$wt/tmp/task-6/design.md"
+  mkdir -p "$repo/.claude/issue-to-pr/runs/task-6"
+  printf '# design\n' >"$repo/.claude/issue-to-pr/runs/task-6/design.md"
   printf 'changed\n' >>"$wt/README.md" # tracked modification -> removal stops
   use_fake_gh pr-merged
   run_script worktree.sh cleanup 6 --branch feat/issue-6-x --salvage-to "$TEST_TMPDIR/salvage"

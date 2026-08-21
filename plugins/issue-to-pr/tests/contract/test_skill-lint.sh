@@ -64,7 +64,7 @@ test_skill_smoke_gate_passes_a_log_dir_before_cleanup() {
   c=$(cat "$(skill_md)")
   smoke_line=$(printf '%s\n' "$c" | grep -n "gate smoke=" || true)
   [ -n "$smoke_line" ] || fail "SKILL.md no longer runs the post-merge smoke gate"
-  assert_contains "$c" 'run-gates.sh --log-dir "<WT_PATH>/tmp/task-<N>/logs"'
+  assert_contains "$c" 'run-gates.sh --log-dir "<RUN_DIR>/logs"'
   assert_contains "$c" "Smoke runs BEFORE cleanup"
 }
 

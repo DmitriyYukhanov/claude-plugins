@@ -65,8 +65,9 @@ paste here once they pass. It never writes this file itself.
 
 That directory holds the plugin's repository-level state - the config, gate receipts, the
 friction log - and it ships its own `.gitignore` containing `*`, so none of it reaches
-`git status` and your project's `.gitignore` is left alone. (A run's scratch files still live
-in the worktree under `tmp/task-<N>/`, which the worktree teardown clears.) A config at the
+`git status` and your project's `.gitignore` is left alone. (A run's own files -- design notes, state, gate logs --
+live there too, under `runs/task-<N>/`, so nothing a run writes lands in your project tree
+where test discovery or a bundler would pick it up.) A config at the
 older `.claude/issue-to-pr.local.md` path is not read; the run says so once and leaves it for
 you to move.
 

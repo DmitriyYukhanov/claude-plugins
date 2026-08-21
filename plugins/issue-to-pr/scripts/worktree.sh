@@ -116,7 +116,7 @@ salvage_artifacts() {
   dst=$(resolve_under "$root" "$dst")
   mkdir -p "$dst" 2>/dev/null || return 0
   for f in design.md progress.md state.json step.log; do
-    src="$wt/tmp/task-$n/$f"
+    src="$(run_dir "$root" "$n")/$f"
     if [ -f "$src" ]; then cp "$src" "$dst/" 2>/dev/null && copied=$((copied + 1)); fi
   done
   [ "$copied" -gt 0 ] && SALVAGED=$dst
@@ -155,34 +155,18 @@ remove_worktree() {
     return 0
   fi
 
-  # Still registered: refused because the tree is dirty. Classify.
-  local status line p tracked_dirty=0
-  # --untracked-files=all so an untracked tmp/ is listed as individual files
-  # (tmp/task-N/foo), not collapsed to a bare "?? tmp/" that would misclassify.
-  status=$(git -C "$wt" status --porcelain --untracked-files=all 2>/dev/null || printf '')
-  while IFS= read -r line; do
-    [ -n "$line" ] || continue
-    case "$line" in
-      '??'*)
-        p=${line#?? }
-        case "$p" in
-          "tmp/task-$n/"*) : ;; # our own working dir - safe to drop
-          *) tracked_dirty=1 ;;  # unexpected untracked file - do not delete
-        esac
-        ;;
-      *) tracked_dirty=1 ;; # tracked modification / staged change
-    esac
-  done <<EOF
-$status
-EOF
-
-  if [ "$tracked_dirty" = 1 ]; then
+  # Still registered: refused because the tree is dirty. A run keeps its own files
+  # under the state directory now, so anything left in here belongs to somebody else
+  # and is not ours to delete - except a state directory the worktree picked up
+  # itself, from a run that pointed at a relative log dir. That one is ours.
+  local status
+  status=$(git -C "$wt" status --porcelain --untracked-files=all 2>/dev/null |
+    grep -v '^?? \.claude/issue-to-pr/' || printf '')
+  if [ -n "$status" ]; then
     emit DIRTY_FILES "$(printf '%s' "$status" | tr '\n' ';')"
     stop dirty-tracked-files "worktree $wt has tracked or unexpected changes - not removing"
   fi
 
-  # Only our tmp working dir was in the way: remove it explicitly, retry once.
-  rm -rf "${wt:?}/tmp/task-$n" 2>/dev/null || true
   if git -C "$root" worktree remove "$wt" 2>/dev/null; then REMOVED=true; return 0; fi
   # Clean but still un-removable (a lock persists): report, do not STOP - the branch
   # can still be cleaned up. Run cleanup from the main checkout to avoid
@@ -470,6 +454,9 @@ cmd_cleanup() {
   # else prunes them since the approval sweep went with the marker in 3.0.0, and a
   # state directory that only ever grows is how the old markers piled up.
   rm -f "$(receipt_path "$root" "$branch")" 2>/dev/null
+  # The run's own files go the same way. Salvage above already copied out anything
+  # the user asked to keep, and the design lives in the PR body.
+  rm -rf "$(run_dir "$root" "$issue")" 2>/dev/null
 
   emit REMOVED "$REMOVED"
   emit DELETED_LOCAL "$deleted_local"

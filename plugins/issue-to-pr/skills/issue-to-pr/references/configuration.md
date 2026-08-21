@@ -4,8 +4,8 @@ Optional per-project settings (YAML frontmatter, optional markdown notes below),
 `.claude/issue-to-pr/config.md` in the main checkout. That directory holds the plugin's
 repository-level state and carries its own `.gitignore` holding `*`, so a teammate without
 the plugin installed never sees a file they cannot place and the project's own `.gitignore`
-is never edited. (A run's scratch files are separate: they live in the worktree under
-`tmp/task-<N>/` and go with it at teardown.) A config left at the pre-2.5 path
+is never edited. (A run's own files live beside it, under
+`runs/task-<N>/`, and go at cleanup.) A config left at the pre-2.5 path
 (`.claude/issue-to-pr.local.md`) is not read: the run says so once and leaves the file
 alone, so move across whatever you want to keep. Every field is optional. With no file, the run works the gate
 commands out at Step 6 and prints the block for you to paste here.
