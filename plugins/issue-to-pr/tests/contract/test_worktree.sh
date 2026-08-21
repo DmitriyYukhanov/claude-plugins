@@ -17,8 +17,6 @@ mk_worktree() { # repo branch -> worktree path at repo-worktrees/issue-6, pushed
   printf '%s' "$wt"
 }
 
-# write_marker lives in tests/lib/assert.sh - test_approve.sh needs the identical shape.
-
 SHA_OK="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 NL=$'\n' # a real newline, for building a multi-line approval reply
 
@@ -86,78 +84,19 @@ test_wt_ensure_invalid_start_point_stops() {
   assert_key "$OUT" STOP_REASON invalid-start-point
 }
 
-# ── merge ───────────────────────────────────────────────────────────────────
-test_wt_merge_no_marker_stops() {
+test_wt_merge_happy_path() {
   local repo wt; repo=$(mk_repo); wt=$(mk_worktree "$repo" feat/issue-6-x); cd "$wt"
-  use_fake_gh happy
-  write_receipt "$repo" feat/issue-6-x "$SHA_OK"
-  run_script worktree.sh merge 6 --branch feat/issue-6-x
-  assert_rc 2
-  assert_key "$OUT" STOP_REASON no-valid-approval
-}
-
-test_wt_merge_used_marker_stops() {
-  local repo wt; repo=$(mk_repo); wt=$(mk_worktree "$repo" feat/issue-6-x); cd "$wt"
-  write_marker "$repo" feat/issue-6-x "$SHA_OK" true "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  use_fake_gh happy
-  write_receipt "$repo" feat/issue-6-x "$SHA_OK"
-  run_script worktree.sh merge 6 --branch feat/issue-6-x
-  assert_rc 2
-  assert_key "$OUT" STOP_REASON no-valid-approval
-}
-
-test_wt_merge_stale_marker_stops() {
-  local repo wt; repo=$(mk_repo); wt=$(mk_worktree "$repo" feat/issue-6-x); cd "$wt"
-  write_marker "$repo" feat/issue-6-x "$SHA_OK" false "$(stale_iso)"
-  use_fake_gh happy
-  write_receipt "$repo" feat/issue-6-x "$SHA_OK"
-  run_script worktree.sh merge 6 --branch feat/issue-6-x
-  assert_rc 2
-  assert_key "$OUT" STOP_REASON no-valid-approval
-}
-
-test_wt_merge_head_moved_stops() {
-  local repo wt; repo=$(mk_repo); wt=$(mk_worktree "$repo" feat/issue-6-x); cd "$wt"
-  write_marker "$repo" feat/issue-6-x "$SHA_OK" false "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  use_fake_gh head-moved
-  write_receipt "$repo" feat/issue-6-x "$SHA_OK"
-  run_script worktree.sh merge 6 --branch feat/issue-6-x
-  assert_rc 2
-  assert_key "$OUT" STOP_REASON no-valid-approval
-}
-
-test_wt_merge_happy_consumes_marker() {
-  local repo wt; repo=$(mk_repo); wt=$(mk_worktree "$repo" feat/issue-6-x); cd "$wt"
-  write_marker "$repo" feat/issue-6-x "$SHA_OK" false "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   use_fake_gh happy
   write_receipt "$repo" feat/issue-6-x "$SHA_OK"
   run_script worktree.sh merge 6 --branch feat/issue-6-x
   assert_rc 0
   assert_key "$OUT" MERGED true
   assert_key "$OUT" MERGE_METHOD squash
-  # A merged approval is deleted, not merely flagged: cleanup used to be the only
-  # thing that removed it, and cleanup never runs for an abandoned or hand-merged PR.
-  if [ -f "$repo/.claude/issue-to-pr/approval-feat-issue-6-x.json" ]; then fail "marker survived the merge"; fi
-  assert_gh_called "pr merge feat/issue-6-x --squash"
-}
-
-# Regression: cmd_merge keyed the marker off the raw --branch value while approve.sh
-# and merge-guard.sh both canonicalize a PR number first, so `--branch 13` looked for
-# a marker nobody had written and the merge stopped on an approval that existed.
-test_wt_merge_resolves_pr_number_to_marker() {
-  local repo wt; repo=$(mk_repo); wt=$(mk_worktree "$repo" feat/issue-6-x); cd "$wt"
-  write_marker "$repo" feat/issue-6-x "$SHA_OK" false "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  use_fake_gh happy
-  write_receipt "$repo" feat/issue-6-x "$SHA_OK"
-  run_script worktree.sh merge 6 --branch 13
-  assert_rc 0
-  assert_key "$OUT" MERGED true
-  assert_gh_called "pr merge feat/issue-6-x --squash"
+  assert_gh_called "pr merge feat/issue-6-x --squash --match-head-commit"
 }
 
 test_wt_merge_squash_disallowed_falls_back_to_merge() {
   local repo wt; repo=$(mk_repo); wt=$(mk_worktree "$repo" feat/issue-6-x); cd "$wt"
-  write_marker "$repo" feat/issue-6-x "$SHA_OK" false "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   use_fake_gh squash-disallowed
   write_receipt "$repo" feat/issue-6-x "$SHA_OK"
   run_script worktree.sh merge 6 --branch feat/issue-6-x
@@ -168,7 +107,6 @@ test_wt_merge_squash_disallowed_falls_back_to_merge() {
 
 test_wt_merge_rebase_only_fallback() {
   local repo wt; repo=$(mk_repo); wt=$(mk_worktree "$repo" feat/issue-6-x); cd "$wt"
-  write_marker "$repo" feat/issue-6-x "$SHA_OK" false "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   use_fake_gh rebase-only
   write_receipt "$repo" feat/issue-6-x "$SHA_OK"
   run_script worktree.sh merge 6 --branch feat/issue-6-x
@@ -188,7 +126,6 @@ test_wt_missing_branch_value_does_not_hang() {
 
 test_wt_merge_pending_checks_stops() {
   local repo wt; repo=$(mk_repo); wt=$(mk_worktree "$repo" feat/issue-6-x); cd "$wt"
-  write_marker "$repo" feat/issue-6-x "$SHA_OK" false "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   use_fake_gh pending-checks
   write_receipt "$repo" feat/issue-6-x "$SHA_OK"
   run_script worktree.sh merge 6 --branch feat/issue-6-x
@@ -198,7 +135,6 @@ test_wt_merge_pending_checks_stops() {
 
 test_wt_merge_push_rejected_stops() {
   local repo wt; repo=$(mk_repo); wt=$(mk_worktree "$repo" feat/issue-6-x); cd "$wt"
-  write_marker "$repo" feat/issue-6-x "$SHA_OK" false "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   git -C "$wt" remote set-url origin "$TEST_TMPDIR/does-not-exist.git"
   use_fake_gh happy
   write_receipt "$repo" feat/issue-6-x "$SHA_OK"
@@ -251,16 +187,12 @@ test_wt_cleanup_salvages_then_removes() {
 # remote, the marker stayed behind, and the script exited 0 as if it had cleaned up.
 test_wt_cleanup_resolves_pr_number_to_the_branch() {
   local repo wt; repo=$(mk_repo); wt=$(mk_worktree "$repo" feat/issue-6-x); cd "$repo"
-  write_marker "$repo" feat/issue-6-x "$SHA_OK" false "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   use_fake_gh pr-merged
   run_script worktree.sh cleanup 6 --branch 13
   assert_rc 0
   assert_key "$OUT" DELETED_LOCAL true
   if git -C "$repo" show-ref --verify --quiet refs/heads/feat/issue-6-x; then
     fail "cleanup by PR number left the merged branch behind"
-  fi
-  if [ -f "$repo/.claude/issue-to-pr/approval-feat-issue-6-x.json" ]; then
-    fail "cleanup by PR number left the approval marker behind"
   fi
 }
 
@@ -362,7 +294,6 @@ test_wt_merge_ladder_exhausted_caps_before_anything() {
 
 test_wt_merge_checks_failed_stops_before_merge() {
   local repo wt; repo=$(mk_repo); wt=$(mk_worktree "$repo" feat/issue-6-x); cd "$wt"
-  write_marker "$repo" feat/issue-6-x "$SHA_OK" false "$(fresh_iso)"
   use_fake_gh checks-failing
   write_receipt "$repo" feat/issue-6-x "$SHA_OK"
   run_script worktree.sh merge 6 --branch feat/issue-6-x
@@ -374,7 +305,6 @@ test_wt_merge_checks_failed_stops_before_merge() {
 
 test_wt_merge_conflict_stops_without_update() {
   local repo wt; repo=$(mk_repo); wt=$(mk_worktree "$repo" feat/issue-6-x); cd "$wt"
-  write_marker "$repo" feat/issue-6-x "$SHA_OK" false "$(fresh_iso)"
   use_fake_gh merge-conflict-state
   write_receipt "$repo" feat/issue-6-x "$SHA_OK"
   run_script worktree.sh merge 6 --branch feat/issue-6-x
@@ -386,7 +316,6 @@ test_wt_merge_conflict_stops_without_update() {
 
 test_wt_merge_update_branch_failure_is_distinct() {
   local repo wt; repo=$(mk_repo); wt=$(mk_worktree "$repo" feat/issue-6-x); cd "$wt"
-  write_marker "$repo" feat/issue-6-x "$SHA_OK" false "$(fresh_iso)"
   use_fake_gh behind-update-fail
   write_receipt "$repo" feat/issue-6-x "$SHA_OK"
   run_script worktree.sh merge 6 --branch feat/issue-6-x
@@ -396,10 +325,10 @@ test_wt_merge_update_branch_failure_is_distinct() {
   assert_gh_not_called "pr merge"
 }
 
-test_wt_merge_behind_clean_refreshes_then_asks_for_gates() {
+test_wt_merge_behind_clean_asks_for_gates() {
   # Base advances with an UNRELATED file; the update (simulated by fake-gh) merges
   # it into the branch. is_pure_base_merge must see the PR's own diff unchanged
-  # (this FAILS if the unsound two-dot check is used) -> the approval carries over.
+  # (this FAILS if the unsound two-dot check is used) -> the go-ahead still stands.
   # The gates do not: they never ran against base+diff, and a receipt a base update
   # could walk past would not be a gate. So the run stops for one more gate pass.
   local repo wt; repo=$(mk_repo); wt=$(mk_worktree "$repo" feat/issue-6-x); cd "$wt"
@@ -407,12 +336,11 @@ test_wt_merge_behind_clean_refreshes_then_asks_for_gates() {
   git -C "$repo" add unrelated.txt
   git -C "$repo" commit -qm base-advance
   git -C "$repo" push -q origin main
-  write_marker "$repo" feat/issue-6-x "$SHA_OK" false "$(fresh_iso)"
   use_fake_gh behind-clean
   write_receipt "$repo" feat/issue-6-x "$SHA_OK"
   run_script worktree.sh merge 6 --branch feat/issue-6-x
   assert_rc 2
-  assert_key "$OUT" LADDER_STEP base-merged-refreshed
+  assert_key "$OUT" LADDER_STEP base-merged-clean
   assert_key "$OUT" STOP_REASON gates-unverified
   assert_gh_called "pr update-branch"
   if printf '%s' "$(gh_log)" | grep -q 'pr merge'; then fail "merged a head no receipt covers"; fi
@@ -422,7 +350,6 @@ test_wt_merge_behind_unverified_stops() {
   # update-branch succeeds but the branch head could not be observed to advance
   # (stale/failed fetch) — never assume the base merge is pure; stop for re-approval.
   local repo wt; repo=$(mk_repo); wt=$(mk_worktree "$repo" feat/issue-6-x); cd "$wt"
-  write_marker "$repo" feat/issue-6-x "$SHA_OK" false "$(fresh_iso)"
   use_fake_gh behind-noadvance
   write_receipt "$repo" feat/issue-6-x "$SHA_OK"
   run_script worktree.sh merge 6 --branch feat/issue-6-x
@@ -440,7 +367,6 @@ test_wt_merge_behind_content_changed_needs_reapproval() {
   git -C "$repo" add unrelated.txt
   git -C "$repo" commit -qm base-advance
   git -C "$repo" push -q origin main
-  write_marker "$repo" feat/issue-6-x "$SHA_OK" false "$(fresh_iso)"
   use_fake_gh behind-content
   write_receipt "$repo" feat/issue-6-x "$SHA_OK"
   run_script worktree.sh merge 6 --branch feat/issue-6-x
@@ -452,7 +378,6 @@ test_wt_merge_behind_content_changed_needs_reapproval() {
 test_wt_merge_clean_passes_precheck() {
   # Regression: a CLEAN mergeability read must not disturb the normal merge.
   local repo wt; repo=$(mk_repo); wt=$(mk_worktree "$repo" feat/issue-6-x); cd "$wt"
-  write_marker "$repo" feat/issue-6-x "$SHA_OK" false "$(fresh_iso)"
   use_fake_gh happy
   write_receipt "$repo" feat/issue-6-x "$SHA_OK"
   run_script worktree.sh merge 6 --branch feat/issue-6-x
@@ -511,72 +436,12 @@ test_wt_salvage_reports_nothing_when_it_copied_nothing() {
   assert_key "$OUT" SALVAGED ""
 }
 
-test_wt_merge_reports_the_approval_quote_before_consuming() {
-  local repo wt; repo=$(mk_repo); wt=$(mk_worktree "$repo" feat/issue-6-x); cd "$wt"
-  write_marker "$repo" feat/issue-6-x "$SHA_OK" false "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  use_fake_gh happy
-  write_receipt "$repo" feat/issue-6-x "$SHA_OK"
-  run_script worktree.sh merge 6 --branch feat/issue-6-x
-  assert_rc 0
-  # Deleting the marker must not also delete the record of what the user said.
-  assert_key "$OUT" APPROVAL_QUOTE "ship it"
-}
-
-
-# Regression: marker_str_field's `"[^"]*"` match stops at the first escaped quote,
-# so a reply containing one was reported truncated.
-test_wt_merge_quote_survives_embedded_quotes() {
-  local repo wt m; repo=$(mk_repo); wt=$(mk_worktree "$repo" feat/issue-6-x); cd "$wt"
-  m="$repo/.claude/issue-to-pr/approval-feat-issue-6-x.json"
-  mkdir -p "$repo/.claude/issue-to-pr"
-  printf '{"branch":"feat/issue-6-x","pr_head_sha":"%s","created_at":"%s","used":false,"quote":"say \\"ship it\\" now"}\n' \
-    "$SHA_OK" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >"$m"
-  use_fake_gh happy
-  write_receipt "$repo" feat/issue-6-x "$SHA_OK"
-  run_script worktree.sh merge 6 --branch feat/issue-6-x
-  assert_rc 0
-  assert_contains "$OUT" 'say "ship it" now'
-}
-
-
-# Regression: a multi-line approval was reported with a literal backslash-n, and
-# the merge deletes the marker, so that mangled copy was the only one left. Written through
-# approve.sh so the real escape/unescape pair is exercised, not a hand-built fixture.
-# The value must stay on ONE line: the machine block is one KEY=VALUE per line.
-test_wt_merge_quote_survives_newlines() {
-  local repo wt line; repo=$(mk_repo); wt=$(mk_worktree "$repo" feat/issue-6-x); cd "$wt"
-  use_fake_gh happy
-  run_script approve.sh feat/issue-6-x --quote "ship it${NL}but squash it"
-  write_receipt "$repo" feat/issue-6-x "$SHA_OK"
-  run_script worktree.sh merge 6 --branch feat/issue-6-x
-  assert_rc 0
-  line=$(printf '%s
-' "$OUT" | grep '^APPROVAL_QUOTE=')
-  assert_contains "$line" "ship it"
-  assert_contains "$line" "but squash it"
-}
-
-# Regression: json_escape doubles backslashes first, so decoding `\n` before `\`
-# matched the second backslash plus the n and ate both — corrupting the only
-# surviving record of the approval once the marker is deleted.
-test_wt_merge_quote_survives_a_backslash() {
-  local repo wt line; repo=$(mk_repo); wt=$(mk_worktree "$repo" feat/issue-6-x); cd "$wt"
-  use_fake_gh happy
-  run_script approve.sh feat/issue-6-x --quote 'merge it, then update C:\notes.md'
-  write_receipt "$repo" feat/issue-6-x "$SHA_OK"
-  run_script worktree.sh merge 6 --branch feat/issue-6-x
-  assert_rc 0
-  line=$(printf '%s\n' "$OUT" | grep '^APPROVAL_QUOTE=')
-  assert_contains "$line" 'C:\notes.md'
-}
-
 # 2.11.0: the gates were "hard" only because the model ran them. run-gates.sh now
 # leaves a receipt naming the HEAD it ran against, and the merge refuses a head no
 # receipt covers - including the one case that used to slip through, a green run
 # followed by one more commit.
 test_wt_merge_without_a_receipt_stops() {
   local repo wt; repo=$(mk_repo); wt=$(mk_worktree "$repo" feat/issue-6-x); cd "$wt"
-  write_marker "$repo" feat/issue-6-x "$SHA_OK" false "$(fresh_iso)"
   use_fake_gh happy
   run_script worktree.sh merge 6 --branch feat/issue-6-x
   assert_rc 2
@@ -586,7 +451,6 @@ test_wt_merge_without_a_receipt_stops() {
 
 test_wt_merge_with_a_receipt_for_another_head_stops() {
   local repo wt; repo=$(mk_repo); wt=$(mk_worktree "$repo" feat/issue-6-x); cd "$wt"
-  write_marker "$repo" feat/issue-6-x "$SHA_OK" false "$(fresh_iso)"
   write_receipt "$repo" feat/issue-6-x bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
   use_fake_gh happy
   run_script worktree.sh merge 6 --branch feat/issue-6-x
@@ -599,7 +463,6 @@ test_wt_merge_with_a_receipt_for_another_head_stops() {
 # merge reads it, and an unreadable review is a stop.
 test_wt_merge_stops_on_a_changes_requested_review() {
   local repo wt; repo=$(mk_repo); wt=$(mk_worktree "$repo" feat/issue-6-x); cd "$wt"
-  write_marker "$repo" feat/issue-6-x "$SHA_OK" false "$(fresh_iso)"
   write_receipt "$repo" feat/issue-6-x "$SHA_OK"
   use_fake_gh review-changes-requested
   run_script worktree.sh merge 6 --branch feat/issue-6-x
@@ -610,12 +473,24 @@ test_wt_merge_stops_on_a_changes_requested_review() {
 
 test_wt_merge_stops_when_the_review_cannot_be_read() {
   local repo wt; repo=$(mk_repo); wt=$(mk_worktree "$repo" feat/issue-6-x); cd "$wt"
-  write_marker "$repo" feat/issue-6-x "$SHA_OK" false "$(fresh_iso)"
   write_receipt "$repo" feat/issue-6-x "$SHA_OK"
   use_fake_gh review-read-fail
   run_script worktree.sh merge 6 --branch feat/issue-6-x
   assert_rc 2
   assert_key "$OUT" STOP_REASON review-unreadable
   if printf '%s' "$(gh_log)" | grep -q 'pr merge'; then fail "merged on an unread review"; fi
+}
+
+# The head SHA is read once and used for both the receipt check and
+# --match-head-commit, so an unreadable head is a stop rather than a merge with an
+# empty binding - which gh would accept as "no constraint".
+test_wt_merge_unreadable_head_stops() {
+  local repo wt; repo=$(mk_repo); wt=$(mk_worktree "$repo" feat/issue-6-x); cd "$wt"
+  write_receipt "$repo" feat/issue-6-x "$SHA_OK"
+  use_fake_gh head-empty
+  run_script worktree.sh merge 6 --branch feat/issue-6-x
+  assert_rc 2
+  assert_key "$OUT" STOP_REASON pr-head-unreadable
+  if printf '%s' "$(gh_log)" | grep -q 'pr merge'; then fail "merged without knowing the head"; fi
 }
 

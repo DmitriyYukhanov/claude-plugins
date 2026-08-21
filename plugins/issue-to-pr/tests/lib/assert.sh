@@ -150,21 +150,8 @@ init_repo() {
   printf '%s' "$dir"
 }
 
-# write_marker ROOT BRANCH SHA USED CREATED_ISO - an approval marker on disk, without
-# going through approve.sh (which needs a live PR head). Shared, because 25 call sites
-# across two test files depended on two independent copies of this exact JSON shape -
-# and the marker's format, escaping and write path all changed in v3, so a schema change
-# could update one copy and leave the other silently exercising a stale format.
-write_marker() {
-  local root=$1 branch=$2 sha=$3 used=$4 created=$5 slug
-  slug=${branch//\//-}
-  mkdir -p "$root/.claude/issue-to-pr"
-  printf '{"branch":"%s","pr_head_sha":"%s","created_at":"%s","used":%s,"quote":"ship it"}\n' \
-    "$branch" "$sha" "$created" "$used" >"$root/.claude/issue-to-pr/approval-$slug.json"
-}
-
 # write_receipt ROOT BRANCH SHA - the green-gate receipt run-gates.sh leaves and
-# worktree.sh merge refuses to merge without. Same reason as write_marker: one copy
+# worktree.sh merge refuses to merge without. One copy
 # of the on-disk shape, so a schema change cannot leave half the tests exercising
 # a format nothing writes any more.
 write_receipt() {
@@ -195,9 +182,3 @@ init_repo_with_remote() {
   printf '%s' "$dir"
 }
 
-# stale_iso - a timestamp far outside any approval window. A LITERAL, not a computed
-# `date -u -d '-2 hours'`: that form is GNU-only, and BSD date reads -d as the
-# daylight-saving flag, so on macOS it yields nothing usable. The marker is then
-# UNDATABLE rather than old, which is a different code path entirely - a staleness test
-# fails there and a sweep test passes for the wrong reason.
-stale_iso() { printf '2000-01-01T00:00:00Z'; }

@@ -14,7 +14,7 @@
 #   | 4 degraded (could not parse/reach X - do it by hand) | anything else = bug.
 #
 # No system `jq` dependency: gh JSON is read through gh's bundled `--jq`, and
-# config/marker parsing is hand-rolled bash, so the scripts run on any Git Bash.
+# config/JSON parsing is hand-rolled bash, so the scripts run on any Git Bash.
 
 # Source-once guard: re-sourcing must not re-run readonly declarations.
 [ -n "${_ITP_COMMON_SOURCED:-}" ] && return 0
@@ -133,7 +133,7 @@ join_by() {
 }
 
 # slugify STRING - lowercase, non-alnum runs to '-', trimmed. Used for branch
-# slugs and the approval-marker filename (branch '/' -> '-').
+# slugs and the gate-receipt filename (branch '/' -> '-').
 slugify() {
   local s=${1-}
   s=$(printf '%s' "$s" | tr '[:upper:]' '[:lower:]')
@@ -191,7 +191,7 @@ parse_frontmatter() {
 
 # repo_root - the main working tree (first `git worktree list` entry), falling
 # back to the toplevel of cwd. Empty string if not inside a git repository. The
-# approval marker lives under this root, so it is shared across worktrees.
+# gate receipt lives under this root, so it is shared across worktrees.
 repo_root() {
   local r
   r=$(git worktree list --porcelain 2>/dev/null | sed -n 's/^worktree //p' | head -1)
@@ -229,9 +229,9 @@ assert_numeric_issue() {
 # atomic_replace FILE CMD... - run CMD with stdout to a temp file beside FILE and,
 # only if it succeeded, move it into place. Returns non-zero and leaves FILE alone
 # otherwise. Five sites hand-rolled this dance and two of them used a `.tmp` name
-# with no PID, so two concurrent runs on one marker clobbered each other's temp.
-# Every writer of a file this plugin owns goes through here now: marker_set_used,
-# marker_refresh and the state-dir ignore rule.
+# with no PID, so two concurrent runs on one file clobbered each other's temp.
+# Every writer of a file this plugin owns goes through here now: the gate receipt
+# and the state-dir ignore rule.
 atomic_replace() {
   local file=$1 tmp="$1.tmp.$$"
   shift
@@ -245,51 +245,14 @@ atomic_replace() {
 }
 
 # -- Time helpers ------------------------------------------------------------
-now_epoch() { date +%s; }
 now_iso() { date -u +%Y-%m-%dT%H:%M:%SZ; }
-# epoch_of ISO8601 - epoch seconds, or empty if the timestamp cannot be parsed.
-#
-# Two dialects, because the merge gate treats an unparseable timestamp as fatal:
-# GNU (Linux, Git Bash) and BSD `date -j -f` (macOS). With only the GNU form, every
-# approval on macOS would be undatable and Step 11 would refuse every merge forever,
-# re-approving into the identical stop.
-#
-# `--date=` and not `-d`, which is why the fallback can be trusted to fire: BSD's `-d`
-# is the daylight-saving flag, so `date -d <iso> +%s` there does not reliably fail - it
-# can consume the timestamp as a DST value and print the CURRENT epoch, which would date
-# every marker to "now" (approvals that never expire and are never swept). BSD has no
-# `--date` at all, so the long form errors out cleanly and the BSD branch below runs.
-# GNU accepts both spellings, so this costs nothing on the platform that runs it most.
-#
-# The empty string is rejected up front: `date --date=''` does NOT fail, it returns
-# today's midnight, so a marker whose created_at could not be read would be handed
-# a plausible-looking epoch - old enough to be swept as stale for most of the day,
-# and fresh enough to pass the merge gate just after midnight.
-epoch_of() {
-  [ -n "${1:-}" ] || return 0
-  date --date="$1" +%s 2>/dev/null && return 0
-  date -j -u -f '%Y-%m-%dT%H:%M:%SZ' "$1" +%s 2>/dev/null && return 0
-  printf ''
-}
-
-# -- Approval marker (shared by approve.sh, merge-guard.sh, worktree.sh merge) -
-# How long an approval stays valid. One definition: the sweeper that deletes markers
-# and the two gates that validate them have to agree, or preflight deletes approvals
-# the merge gate would still honour (or dead ones pile up).
-# shellcheck disable=SC2034  # read by merge-guard.sh and worktree.sh, which source this file
-APPROVAL_TTL=1800
-# One file per branch under the state dir, branch '/' -> '-'. The marker is
-# single-use and short-lived: a successful merge deletes it (marker_consume) and
-# preflight sweeps anything past the validity window, so none of them pile up.
-# JSON is hand-written/parsed (no jq): quote is escaped and placed last so a
-# hostile quote cannot spoof the scalar fields parsed before it.
 
 # canonical_branch REF - the branch a gh ref names: a PR number resolves to that PR's
 # head branch, a branch name resolves to itself. An unresolvable ref (no such PR,
 # offline, old gh) comes back UNCHANGED so the caller's own error path still fires.
-# All three gates key the marker through here - approve.sh writing it, merge-guard.sh
-# and worktree.sh merge reading it - because `gh pr merge 42` must find the approval
-# that `approve.sh 42` wrote under the branch name, not miss it and re-ask.
+# The merge keys its gate receipt through here, because `merge --branch 42` must find
+# the receipt run-gates.sh wrote under the branch name, not miss it and refuse a head
+# whose gates were green.
 canonical_branch() {
   local resolved
   resolved=$(gh pr view "$1" --json headRefName --jq .headRefName 2>/dev/null) || resolved=""
@@ -297,8 +260,8 @@ canonical_branch() {
 }
 
 # state_dir ROOT - where everything this plugin writes into a repository lives: the
-# pinned config, approval markers, the friction log. One definition, because the path
-# is spliced into a marker name, a config path and an ignore rule that must agree.
+# the config, gate receipts, the friction log. One definition, because the path is
+# spliced into a receipt name, a config path and an ignore rule that must agree.
 state_dir() { printf '%s/.claude/issue-to-pr' "$1"; }
 
 # ensure_state_dir DIR - create it and make it hide itself. The `.gitignore` carries `*`
@@ -325,7 +288,7 @@ ensure_state_dir() {
   mkdir -p "$dir" 2>/dev/null || return 1
   [ -s "$gi" ] && return 0
   atomic_replace "$gi" printf '%s\n' \
-    '# issue-to-pr keeps its runtime state here: pinned config, approval markers, logs.' \
+    '# issue-to-pr keeps its runtime state here: config, gate receipts, logs.' \
     '# The star is first so anything you add below can still be un-ignored with a ! rule.' \
     '*' || return 1
   return 0
@@ -379,129 +342,9 @@ review_state() { # branch
   if [ "$unresolved" != 0 ]; then printf 'unresolved_threads'; else printf 'clear'; fi
 }
 
-marker_path() { # root branch
-  printf '%s/approval-%s.json' "$(state_dir "$1")" "$(printf '%s' "$2" | tr '/' '-')"
-}
-
-marker_write() { # file branch sha quote created_at used(true|false)
-  local file=$1
-  # Not a bare mkdir: an approval is often the first thing written into the state dir,
-  # and the directory has to ignore itself from its first file onward.
-  ensure_state_dir "$(dirname "$file")" || return 1
-  printf '{"branch":"%s","pr_head_sha":"%s","created_at":"%s","used":%s,"quote":"%s"}\n' \
-    "$(json_escape "$2")" "$(json_escape "$3")" "$(json_escape "$5")" "$6" "$(json_escape "$4")" >"$file"
-}
-
-# marker_quote FILE - the recorded verbatim reply, made readable. Read separately
-# from marker_str_field because a quote is the one field that legitimately CONTAINS
-# escaped double quotes, and that helper's `"[^"]*"` match stops at the first one.
-# The quote is written last precisely so everything after the opening `"` up to the
-# final `"}` is the value, however many quotes it contains.
-#
-# Escaped whitespace becomes a SPACE, not the character it stands for: the machine
-# block is one KEY=VALUE per line, so restoring a newline here would split the value
-# across two lines and corrupt every key a reader parses after it. A multi-line
-# approval is reported on one line; the words are what matter.
-marker_quote() {
-  local line s
-  line=$(head -1 "$1" 2>/dev/null) || return 0
-  line=${line%$'\r'}
-  case "$line" in *'"quote":"'*) : ;; *) return 0 ;; esac
-  s=${line#*\"quote\":\"}
-  s=${s%\"\}}
-  # json_escape only escapes backslash, quote, \n, \r and \t, so any OTHER control
-  # byte the user's reply happened to carry is still sitting in the value raw - and
-  # a raw \001 would be indistinguishable from the sentinel below, handing back a
-  # spurious backslash and miscounting any real one next to it. Fold them to spaces
-  # first, on the same principle as \n: this is a one-line report of what was said.
-  s=${s//$'\001'/ }
-  # Escaped backslashes are parked on the (now unambiguous) sentinel BEFORE anything
-  # else is decoded. Substituting escape by escape is not the inverse of escaping
-  # them: json_escape doubles backslashes first, so `C:\notes` is stored `C:\\notes`,
-  # and decoding `\n` first would match the second backslash plus the n and eat both.
-  s=${s//\\\\/$'\001'}
-  s=${s//\\n/ }
-  s=${s//\\r/ }
-  s=${s//\\t/ }
-  s=${s//\\\"/\"}
-  s=${s//$'\001'/\\}
-  printf '%s' "$s"
-}
-
-# marker_str_field FILE FIELD - value of a string field (branch|pr_head_sha|created_at).
-marker_str_field() {
+# json_str_field FILE FIELD - value of a string field (branch|pr_head_sha|created_at).
+json_str_field() {
   grep -oE "\"$2\":\"[^\"]*\"" "$1" 2>/dev/null | head -1 | sed -E "s/.*\"$2\":\"([^\"]*)\".*/\1/"
-}
-
-# marker_used FILE - the boolean `used` value (true|false), empty if absent.
-marker_used() {
-  grep -oE '"used":(true|false)' "$1" 2>/dev/null | head -1 | sed -E 's/.*"used"://'
-}
-
-# marker_set_used FILE - flip used:false -> used:true in place (single-use consume).
-# Returns non-zero unless THIS call performed the transition. Callers MUST check: an
-# approval that cannot be spent is one that authorises every later merge attempt
-# for the rest of its freshness window, which is the opposite of single-use.
-#
-# Both the before and after are read, because a status check alone cannot see either
-# failure. `sed` exits 0 when its pattern matched nothing, so flipping a marker that
-# already said `true` reported success just like a real flip - and the whole point of
-# the caller's `|| hook_deny` is to distinguish "I spent this approval" from "somebody
-# else already did". The read-back also keeps this honest if marker_used's regex and
-# the substitution above ever drift apart; they are two spellings of one field.
-#
-# This narrows the window rather than closing it: two hook processes can still both
-# read `false` before either writes. Truly concurrent merges of one branch need an
-# atomic test-and-set, which this file has no primitive for; the sequential retry -
-# far and away the likelier shape - is now refused.
-marker_set_used() {
-  [ "$(marker_used "$1")" = false ] || return 1
-  atomic_replace "$1" sed 's/"used":false/"used":true/' "$1" || return 1
-  [ "$(marker_used "$1")" = true ]
-}
-
-# sed_repl STRING - STRING made safe to splice into the right-hand side of a `s///`.
-# `&` there means "the whole match" and `\` starts a backreference, so an unescaped
-# value does not fail, it silently writes something else - the one outcome a
-# status-checked writer cannot catch.
-sed_repl() {
-  local s=${1-}
-  s=${s//\\/\\\\}
-  s=${s//&/\\&}
-  s=${s//\//\\/}
-  printf '%s' "$s"
-}
-
-# marker_refresh FILE SHA CREATED - re-stamp the head-SHA and timestamp after a pure
-# base merge. Lives here so approve.sh does not become a second place that knows the
-# marker's on-disk JSON layout; marker_write's format and this rewriter cannot drift.
-#
-# The result is READ BACK, because a status check alone cannot catch the failure that
-# matters here: `sed` exits 0 when its pattern matched nothing, so a marker whose layout
-# differs at all (hand-edited, truncated, written by an older version) would be rewritten
-# to itself and reported REFRESHED. The merge would then stop at "PR head moved since
-# approval" with nothing connecting that to a refresh it was told had worked.
-marker_refresh() {
-  atomic_replace "$1" sed -E \
-    "s/\"pr_head_sha\":\"[^\"]*\"/\"pr_head_sha\":\"$(sed_repl "$2")\"/; s/\"created_at\":\"[^\"]*\"/\"created_at\":\"$(sed_repl "$3")\"/" \
-    "$1" || return 1
-  [ "$(marker_str_field "$1" pr_head_sha)" = "$2" ] &&
-    [ "$(marker_str_field "$1" created_at)" = "$3" ]
-}
-
-# marker_consume FILE - a merge succeeded, so the approval has done its whole job:
-# delete it. Flipping `used` first keeps the single-use check correct for anything
-# already holding the path if the unlink loses a race.
-#
-# Returns non-zero when the approval is still usable afterwards - neither flagged
-# nor removed. The caller cannot undo the merge that already happened, but it must
-# say so: an approval left unused and fresh authorises every further merge attempt
-# in its window, which is the single-use guarantee failing open.
-marker_consume() {
-  local file=$1 flagged=0
-  marker_set_used "$file" && flagged=1
-  rm -f "$file" 2>/dev/null
-  [ ! -e "$file" ] || [ "$flagged" = 1 ]
 }
 
 # -- PreToolUse hook helpers (shared by merge-guard.sh + stage-guard.sh) -------

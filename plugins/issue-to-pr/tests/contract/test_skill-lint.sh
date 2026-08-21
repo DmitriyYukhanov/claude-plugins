@@ -28,7 +28,7 @@ test_skill_names_spine_scripts() {
   local c
   c=$(cat "$(skill_md)")
   local s
-  for s in preflight.sh worktree.sh run-gates.sh approve.sh; do
+  for s in preflight.sh worktree.sh run-gates.sh changed-paths.sh; do
     assert_contains "$c" "$s" "SKILL spine must invoke $s"
   done
 }

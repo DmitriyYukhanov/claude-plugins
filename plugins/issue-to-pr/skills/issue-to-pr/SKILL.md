@@ -23,9 +23,9 @@ own judgment. One todo per step.
 
 - **New task = new branch in its own worktree** (`S/worktree.sh ensure`), cut from the
   resolved base. All work happens there; never two tasks in one tree.
-- **Merge is gated on explicit in-session approval**, runs ONLY in the main session
-  (plugin agents ignore the hook), via `S/approve.sh` + `S/worktree.sh merge` — never a
-  bare `gh pr merge`, never on the turn the PR opens.
+- **Merge is gated on explicit in-session approval**, runs ONLY in the main session, via
+  `S/worktree.sh merge` — never a bare `gh pr merge`, never on the turn the PR opens. No file
+  proves the go-ahead; keeping it is yours.
 - **Ask contract:** contact the user at exactly three moments — (1) ONE batched
   `AskUserQuestion` at Step 4.5 (only if the ledger has open items), (2) the merge gate,
   (3) a hard stop. Decide everything else yourself and log it (see below).
@@ -138,12 +138,11 @@ mode); in the in-place fallback stay in the main checkout on `<branch>`. Read th
 clear one, so a `review-blocked` / `review-unreadable` stop is a real answer, not a hiccup —
 route it through change-requests. **Merge only on an unambiguous
 go-ahead to merge THIS PR; if the reply (or GitHub review) is anything else, do not merge.**
-- **Go-ahead** ("merge it", "lgtm, ship it", "approved", "go ahead and merge") → `S/approve.sh
-  <branch> --quote "<verbatim reply>"`, then `S/worktree.sh merge <N> --branch <branch>`. That
-  script is the only sanctioned merge path; the hook + the script both validate the single-use
-  marker before `gh pr merge` runs. Run the two as **separate** Bash calls: the hook reads the
-  command line before it executes, so chaining them is always denied (no marker yet at check
-  time). On a `STOP_REASON` rung follow `R/merge-ladder.md`; on exit 2, **skip cleanup**.
+- **Go-ahead** ("merge it", "lgtm, ship it", "approved", "go ahead and merge") → `S/worktree.sh
+  merge <N> --branch <branch>`, the only sanctioned merge path. It refuses a head no green gate
+  receipt covers, reads the GitHub review itself, and merges with `--match-head-commit`, so a
+  commit landing after the diff you showed stops the merge rather than shipping unseen. On a
+  `STOP_REASON` rung follow `R/merge-ladder.md`; on exit 2, **skip cleanup**.
 - **Change requests** → implement in the worktree, **re-run the tier gates** (Steps 6–7 on the
   new diff) until clean, push, re-report, wait again. Never merge unverified changes.
 - **Anything else** → do **not** merge. A vague ack ("ok", "looks fine") or a question → ask for

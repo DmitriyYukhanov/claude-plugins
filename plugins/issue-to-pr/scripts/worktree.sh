@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # worktree.sh - the pipeline's git/gh worktree + merge mechanics (spec sec 4.2).
 # SAFETY-CRITICAL. Never uses `git ... --force`, never deletes tracked
-# modifications, never merges without a valid approval marker. Every
+# modifications, never merges a head the gates have not covered. Every
 # human-judgment stop is an exit code (2), not a silent decision.
 #
 #   worktree.sh ensure   <N> --branch <b> --start-point <ref>
@@ -185,7 +185,7 @@ EOF
   rm -rf "${wt:?}/tmp/task-$n" 2>/dev/null || true
   if git -C "$root" worktree remove "$wt" 2>/dev/null; then REMOVED=true; return 0; fi
   # Clean but still un-removable (a lock persists): report, do not STOP - the branch
-  # and marker can still be cleaned up. Run cleanup from the main checkout to avoid
+  # can still be cleaned up. Run cleanup from the main checkout to avoid
   # this (a shell whose cwd is the worktree locks it on Windows).
   LEFTOVER="$wt"
   return 0
@@ -289,31 +289,18 @@ handle_add_error() {
 cmd_merge() {
   [ -n "$branch" ] || degrade missing-branch "worktree merge: --branch required"
   [ "$ladder_attempt" -le "$LADDER_CAP" ] || stop merge-ladder-exhausted "the merge ladder retried $LADDER_CAP times without landing $branch. Resolve the PR state on GitHub by hand, then re-approve."
-  local root marker used created created_epoch age marker_sha cur_sha
+  local root cur_sha
   root=$(repo_root)
   [ -n "$root" ] || degrade not-a-git-repo "worktree merge: not inside a git repository"
 
-  # Every gh call below accepts a PR number, but the marker is keyed by BRANCH NAME.
-  # Resolve the ref the way approve.sh and merge-guard.sh do, or `merge --branch 42`
-  # hunts for an approval that was written under the branch name and stops on it.
+  # Every gh call below accepts a PR number; the receipt is keyed by BRANCH NAME.
+  # Resolve the ref once, or `merge --branch 42` hunts for a receipt written under
+  # the branch name and stops on a run whose gates were green.
   branch=$(canonical_branch "$branch")
-
-  # -- 1. approval marker: exists  and  unused  and  fresh (<30m)  and  head-SHA match ------
-  marker=$(marker_path "$root" "$branch")
-  [ -f "$marker" ] || stop no-valid-approval "issue-to-pr: no approval marker for $branch. Run: bash \"$SCRIPT_DIR/approve.sh\" \"$branch\" --quote \"<verbatim reply>\" after judging the reply a go-ahead, then re-run merge."
-  used=$(marker_used "$marker")
-  [ "$used" = false ] || stop no-valid-approval "issue-to-pr: approval marker already used (single-use) - re-approve to merge again"
-  created=$(marker_str_field "$marker" created_at)
-  created_epoch=$(epoch_of "$created")
-  [ -n "$created_epoch" ] || stop no-valid-approval "issue-to-pr: approval marker timestamp is unparseable - re-approve"
-  age=$(( $(now_epoch) - created_epoch ))
-  [ "$age" -le "$APPROVAL_TTL" ] || stop no-valid-approval "issue-to-pr: approval marker is stale (>$((APPROVAL_TTL / 60)) min) - re-approve"
-  marker_sha=$(marker_str_field "$marker" pr_head_sha)
   cur_sha=$(gh pr view "$branch" --json headRefOid --jq .headRefOid 2>/dev/null || printf '')
-  if [ -z "$cur_sha" ] || [ "$marker_sha" != "$cur_sha" ]; then
-    stop no-valid-approval "issue-to-pr: PR head moved since approval (approved $marker_sha, now ${cur_sha:-unknown}); re-approve"
-  fi
-  # -- 1b. the gates covered THIS head, and GitHub has no outstanding review ----
+  [ -n "$cur_sha" ] || stop pr-head-unreadable "issue-to-pr: could not read the PR head for $branch. Check the PR exists and gh is authenticated."
+
+  # -- 1. the gates covered THIS head, and GitHub has no outstanding review ----
   # Both were promises the model had to keep by remembering to. The receipt is
   # written by run-gates.sh on an all-green run and names the HEAD it ran against,
   # so a merge of anything the gates did not see stops here. The review read fails
@@ -321,7 +308,7 @@ cmd_merge() {
   local receipt receipt_sha rstate
   receipt=$(receipt_path "$root" "$branch")
   receipt_sha=""
-  [ -f "$receipt" ] && receipt_sha=$(marker_str_field "$receipt" head_sha)
+  [ -f "$receipt" ] && receipt_sha=$(json_str_field "$receipt" head_sha)
   if [ "$receipt_sha" != "$cur_sha" ]; then
     local covers="none found"
     [ -n "$receipt_sha" ] && covers="covers ${receipt_sha:0:12}"
@@ -334,13 +321,6 @@ cmd_merge() {
     unresolved_threads) stop review-blocked "issue-to-pr: $branch has unresolved review threads. Resolve them on GitHub, then re-approve." ;;
     *) stop review-unreadable "issue-to-pr: could not read the review state of $branch. Check it yourself before merging; this gate does not pass on an unread review." ;;
   esac
-
-  # Read the recorded reply HERE, while the marker is known to exist, not after the
-  # merge: the ladder can push, update the branch and wait on checks, and any
-  # preflight running in another session sweeps markers past the validity window.
-  # Reading it afterwards is a race whose only symptom is an empty APPROVAL_QUOTE.
-  local quote
-  quote=$(marker_quote "$marker")
 
   # -- 2. push the branch (must already track upstream from Step 9) -------------
   if ! push_out=$(git push 2>&1); then
@@ -382,14 +362,11 @@ cmd_merge() {
         stop base-update-unverified "updated $branch to its base but could not confirm the new head (the fetch may have failed). Re-run merge once the branch is fetched, or re-approve."
       fi
       if is_pure_base_merge "origin/$base_ref" "$old_head" "$new_head"; then
-        if ! bash "$SCRIPT_DIR/approve.sh" --refresh "$branch" >/dev/null 2>&1; then
-          stop marker-refresh-failed "could not refresh the approval marker after updating $branch to its base. Re-approve."
-        fi
-        emit LADDER_STEP base-merged-refreshed
-        # The diff is proved untouched, so the approval carries over and is refreshed
-        # above. The gates are a separate promise: they never ran against base+diff,
-        # and a receipt that a base update could walk past would not be a gate at all.
-        stop gates-unverified "updated $branch to its base; the approval carries over, the gate receipt does not. Pull the new head, re-run run-gates.sh, then re-run merge."
+        emit LADDER_STEP base-merged-clean
+        # The PR's own diff is proved untouched, so the go-ahead still stands. The
+        # gates are a separate promise: they never ran against base+diff, and a
+        # receipt a base update could walk past would not be a gate at all.
+        stop gates-unverified "updated $branch to its base. Pull the new head, re-run run-gates.sh, then re-run merge."
       else
         stop content-changed-needs-reapproval "merging the base into $branch changed the PR's own diff. Re-review the updated PR and re-approve - the earlier approval no longer covers it."
       fi
@@ -398,13 +375,13 @@ cmd_merge() {
 
   # -- 4. squash-merge, with fallbacks ------------------------------------------
   local merge_method=squash merge_out
-  if merge_out=$(gh pr merge "$branch" --squash 2>&1); then
+  if merge_out=$(gh pr merge "$branch" --squash --match-head-commit "$cur_sha" 2>&1); then
     :
   elif printf '%s' "$merge_out" | grep -qiE 'squash.*not allowed|not allowed.*squash|squash merging is not allowed'; then
     # Squash disallowed: fall back to the repo's other allowed method (merge, then rebase).
-    if merge_out=$(gh pr merge "$branch" --merge 2>&1); then
+    if merge_out=$(gh pr merge "$branch" --merge --match-head-commit "$cur_sha" 2>&1); then
       merge_method=merge
-    elif merge_out=$(gh pr merge "$branch" --rebase 2>&1); then
+    elif merge_out=$(gh pr merge "$branch" --rebase --match-head-commit "$cur_sha" 2>&1); then
       merge_method=rebase
     else
       emit MERGE_ERROR "$(printf '%s' "$merge_out" | tr '\n' ' ')"
@@ -422,20 +399,6 @@ cmd_merge() {
     stop merge-failed "gh pr merge failed - see MERGE_ERROR"
   fi
 
-  # -- 5. consume the marker + honest outcome check -----------------------------
-  # Delete rather than merely flag it: the approval has served its whole purpose,
-  # and cleanup (which used to be the only thing that removed it) never runs for a
-  # PR that gets torn down, abandoned, or merged by hand. The verbatim reply was
-  # captured back in step 1 so deleting the file does not also delete the record of
-  # what was said - the model puts APPROVAL_QUOTE in the Step 12 report.
-  emit APPROVAL_QUOTE "$quote"
-  # The merge already happened and cannot be undone, so this is not a stop - but an
-  # approval that survives unspent authorises every further merge attempt in its
-  # window, and the human has to be told rather than left with a silent failure.
-  if ! marker_consume "$marker"; then
-    emit APPROVAL_NOT_CONSUMED true
-    warn "worktree merge: the approval at $marker could not be spent - delete it by hand before the next merge"
-  fi
   local issue_state pr_url
   issue_state=$(gh issue view "$issue" --json state --jq .state 2>/dev/null || printf '')
   pr_url=$(gh pr view "$branch" --json url --jq .url 2>/dev/null || printf '')
@@ -454,7 +417,7 @@ cmd_cleanup() {
 
   # Same resolution as merge, and for a sharper reason: everything past the gh
   # precondition below is git, which knows nothing about PR numbers. Given a raw
-  # number, `gh pr view` would report MERGED and then `git branch -D` and the marker
+  # number, `gh pr view` would report MERGED and then `git branch -D`
   # lookup would both silently miss, exiting 0 with the merged branch still there.
   branch=$(canonical_branch "$branch")
 
@@ -502,12 +465,6 @@ cmd_cleanup() {
   if git push origin --delete "$branch" >/dev/null 2>&1; then
     deleted_remote=true
   fi
-
-  # Remove the consumed approval marker if present: merge already deletes it, so this
-  # covers a PR merged outside the sanctioned path.
-  local marker
-  marker=$(marker_path "$root" "$branch")
-  [ -f "$marker" ] && rm -f "$marker"
 
   emit REMOVED "$REMOVED"
   emit DELETED_LOCAL "$deleted_local"

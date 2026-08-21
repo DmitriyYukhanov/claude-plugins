@@ -23,7 +23,7 @@ decision. This file is the reference: what to call, when, and how to read the re
 1. **Approval interpretation (Step 11).** Only a script can be told a reply is a go-ahead — *you*
    judge that. Merge only on an unambiguous instruction to merge THIS PR ("merge it", "lgtm ship
    it", "approved"). A change request → implement, re-run the gates, re-report, wait again.
-   Anything vague → ask for an explicit confirmation. Then, and only then, run `approve.sh`.
+   Anything vague → ask for an explicit confirmation. Then, and only then, run the merge.
 2. **Merge only in the main session.** Plugin agents ignore hooks, so the merge-approval hook
    guards the main session only. Never delegate a merge command to a subagent or workflow agent.
 3. **A conflict is a stop, not a fix.** Content conflicts, branch protection, failed checks →
@@ -60,14 +60,15 @@ exit `3` → cut the branch in place with `git switch -c <b> <ref>`.
 
 `worktree.sh merge <N> --branch <b> [--ladder-attempt <n>]` — Step 11. The **only** path that
 runs `gh pr merge`. `<b>` may be a PR number; it resolves to that PR's branch first, so it keys
-the same marker `approve.sh` wrote whichever form either was given. Self-validates the approval marker (present · unused · fresh <30m · head-SHA
-matches), pushes, then runs the merge-failure ladder (sec 6.3): a structured pre-check classifies
-the PR and emits a typed stop per rung; a clean base merge auto-updates + refreshes the marker +
-merges in one call (`LADDER_STEP=base-merged-refreshed`). On success consumes the marker and
-reports the honest outcome. Keys: `MERGED MERGE_METHOD ISSUE_STATE PR_URL` (+ `FAILING_CHECKS`,
-`LADDER_STEP`). Stops: `no-valid-approval · push-rejected · checks-failed · merge-conflict ·
-update-branch-failed · base-update-unverified · content-changed-needs-reapproval ·
-marker-refresh-failed · checks-pending · merge-ladder-exhausted · merge-failed` — the model's response to each rung is in `merge-ladder.md`.
+the same receipt `run-gates.sh` wrote whichever form either was given. Refuses a head no green
+receipt covers, reads the GitHub review itself and fails closed, then pushes and runs the
+merge-failure ladder (sec 6.3): a structured pre-check classifies the PR and emits a typed stop
+per rung. The merge carries `--match-head-commit`, so GitHub itself refuses if the head moved
+between the read and the merge. Keys: `MERGED MERGE_METHOD ISSUE_STATE PR_URL` (+
+`FAILING_CHECKS`, `LADDER_STEP`). Stops: `pr-head-unreadable · gates-unverified · review-blocked ·
+review-unreadable · push-rejected · checks-failed · merge-conflict · update-branch-failed ·
+base-update-unverified · content-changed-needs-reapproval · checks-pending ·
+merge-ladder-exhausted · merge-failed` — the model's response to each rung is in `merge-ladder.md`.
 `--ladder-attempt` (the model increments it each loop; caps at 3) backstops a livelock. On any
 stop, nothing is cleaned up.
 
@@ -77,12 +78,12 @@ Hard precondition: the PR is `MERGED` (else stop `pr-not-merged` — deleting an
 mechanically impossible). Salvages `tmp/task-<N>/{design.md,progress.md,state.json,step.log}` first — a relative
 `--salvage-to` lands under the **main checkout**, not cwd, so it survives the removal — removes the
 worktree (never `--force`; tracked dirtiness → stop `dirty-tracked-files`), deletes the local +
-remote branch, removes the marker. Keys: `REMOVED DELETED_LOCAL DELETED_REMOTE SALVAGED`, plus
+remote branch. Keys: `REMOVED DELETED_LOCAL DELETED_REMOTE SALVAGED`, plus
 `LEFTOVER_DIR` if a directory could not be removed. **Run it with your shell's cwd in
 `<original-root>`, not the worktree** — a shell sitting inside the worktree locks it on Windows so
 `git worktree remove` only partially succeeds. Cleanup never auto-deletes an unregistered
 directory (same protection as `ensure`): it reports the path as `LEFTOVER_DIR` and still removes
-the marker + remote branch. Check `DELETED_LOCAL` — if a still-registered locked worktree remains
+the remote branch. Check `DELETED_LOCAL` — if a still-registered locked worktree remains
 it stays `false`; delete that branch and the leftover yourself once whatever holds it is gone.
 
 `worktree.sh teardown <N> [--salvage-to <dir>]` — user self-merges / abandons. Removes the
@@ -95,24 +96,19 @@ gate fails on the updated base, opens a **draft** revert PR of the squash commit
 `REVERT_BRANCH REVERT_PR_URL REVERT_COMMIT`. Stops: `revert-branch-failed · revert-conflict ·
 revert-push-failed · revert-pr-failed`; degrade `no-merge-commit` if the PR is not merged.
 
-## Merge-approval gate — the physics
+## Merge gate — what is enforced, and by what
 
-- `approve.sh <b> --quote "<verbatim reply>"` — Step 11. Run ONLY after you judge the reply an
-  unambiguous go-ahead (rule 1). Writes the single-use marker
-  `<root>/.claude/issue-to-pr/approval-<b-slug>.json`. `approve.sh --refresh <b>` re-stamps the
-  head-SHA after a pure base merge. Keys: `APPROVED|REFRESHED MARKER_PATH PR_HEAD_SHA CREATED_AT`.
-- `merge-guard.sh` (hook, `hooks/hooks.json`, PreToolUse on Bash) — allows a merge command only
-  with a valid marker; denies `gh pr merge --admin`; asks on force-push; passes every other
-  command through. The marker is consumed by `worktree.sh merge`, so it is single-use by
-  construction. You never call this directly.
-- **What the marker proves, exactly:** freshness, single use, and a head-SHA binding. Not that a
-  human agreed. The same model that runs the pipeline writes it, with whatever quote it decides
-  is a go-ahead, and the hook cannot see the conversation. The ask contract in prose is the part
-  that keeps a merge honest; the marker keeps an honest approval from being reused or from
-  covering a head it never saw.
-- The merge also refuses without a green gate receipt for the PR head (`run-gates.sh` leaves it)
-  and reads the GitHub review itself, failing closed: `gates-unverified`, `review-blocked`,
-  `review-unreadable` are all exit 2.
+- **The go-ahead is prose, and only prose.** No file proves a human agreed. An approval marker
+  used to sit here; the same model that runs the pipeline wrote it, with whatever quote it judged
+  a go-ahead, and the hook could not see the conversation. It proved freshness, single use and a
+  head SHA, never intent. Rule 1 above is the whole gate, and it is yours to keep.
+- **The gates are enforced by the receipt.** `run-gates.sh` leaves one naming the HEAD it ran
+  against; the merge refuses a head no receipt covers (`gates-unverified`).
+- **The review is enforced by the merge, failing closed** (`review-blocked`, `review-unreadable`).
+- **The head is enforced by GitHub.** `gh pr merge --match-head-commit` refuses if a commit landed
+  after the diff you were shown.
+- `merge-guard.sh` (hook, `hooks/hooks.json`, PreToolUse on Bash) — denies `gh pr merge --admin`,
+  asks on a force-push, passes everything else through. You never call it directly.
 
 ## run-gates.sh — gates + install + smoke
 

@@ -5,8 +5,9 @@ before any `gh pr merge` and emits a typed `STOP_REASON` (exit 2) for each failu
 script owns detection and the safe base-merge refresh; the model owns the bounded CI wait and
 the re-merge loop. On any stop nothing is merged and nothing is cleaned up: read the
 `STOP_REASON`, act per its rung, then re-run `merge` - the pre-check re-reads live state each
-call. The marker-validity stops (`no-valid-approval`, `push-rejected`, `merge-failed`) hand
-back the same way; they are not part of the ladder loop.
+call. The pre-merge stops (`gates-unverified`, `review-blocked`, `review-unreadable`,
+`pr-head-unreadable`, `push-rejected`, `merge-failed`) hand back the same way; they are not
+part of the ladder loop.
 
 ## The rungs
 
@@ -20,19 +21,17 @@ back the same way; they are not part of the ladder loop.
   and re-approve."
 
 - **`checks-pending`** - required checks are still running. This is the model's watch rung:
-  run the watch loop below, then re-run `merge`. The approval stays valid (the marker is not
-  consumed on a stop). "required checks are still pending on <b>. Watch them to green
+  run the watch loop below, then re-run `merge`. Nothing was spent, so the go-ahead still
+  stands. "required checks are still pending on <b>. Watch them to green
   (references/merge-ladder.md), then re-run merge - the approval stays valid."
 
 - **`content-changed-needs-reapproval`** - after `gh pr update-branch`, the base merge changed
-  the PR's OWN diff, so the marker is left stale (the head-SHA check plus the merge hook block
-  a merge). Report the delta versus what was approved and request FRESH approval; only after
-  the user re-approves do you run `approve.sh` again. "merging the base into <b> changed the
-  PR's own diff. Re-review the updated PR and re-approve - the earlier approval no longer
-  covers it."
+  the PR's OWN diff. Report the delta versus what was approved and request FRESH approval before
+  re-running `merge`. "merging the base into <b> changed the PR's own diff. Re-review the updated
+  PR and re-approve - the earlier approval no longer covers it."
 
-- **`update-branch-failed`** / **`marker-refresh-failed`** - the auto base-merge or the
-  marker re-stamp failed. Report and hand back; do the update or re-approval by hand.
+- **`update-branch-failed`** - the auto base-merge failed. Report and hand back; do the update
+  by hand.
 - **`base-update-unverified`** - the base merge ran but the new head could not be observed
   (a stale or failed fetch), so purity cannot be proven. Fetch the branch and re-run `merge`,
   or re-approve; never assume the base merge was clean.
@@ -61,14 +60,14 @@ and hand back (`merge-ladder-exhausted`).
 
 ## The behind-base loop
 
-When the PR is behind its base, the script handles the clean case itself - update + refresh +
-merge in one call (`LADDER_STEP=base-merged-refreshed`), nothing for the model to do. The only
-behind-base rung the model acts on is `content-changed-needs-reapproval`: the base merge
-altered the PR's own diff, so request fresh approval before re-running `merge`.
+When the PR is behind its base, the script updates it and proves the PR's own diff untouched
+(`LADDER_STEP=base-merged-clean`), then stops at `gates-unverified`: the new head is base+diff,
+which the gates never ran against. Pull it, re-run `run-gates.sh`, re-run `merge`. If the base
+merge altered the PR's own diff instead, the rung is `content-changed-needs-reapproval` and the
+user re-approves first.
 
 ## Invariant
 
-The merge gate is never weakened. Every rung either merges with a valid single-use marker or
-stops and hands control back; no rung merges on a stale, used, or SHA-mismatched marker, and
-the model never runs a bare `gh pr merge` - only `worktree.sh merge` does, and only after its
-pre-check passes.
+The merge gate is never weakened. Every rung either merges a head a green receipt covers or
+stops and hands control back, and the model never runs a bare `gh pr merge` - only
+`worktree.sh merge` does, and only after its pre-check passes.
