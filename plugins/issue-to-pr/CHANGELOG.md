@@ -5,6 +5,11 @@ All notable changes to the **issue-to-pr** plugin will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [4.0.0] - 2026-08-22
+
+### Changed
+- The main skill answers to `/issue-to-pr:run`, which is shorter to type and no longer loses the completion race to `/issue-to-pr:tune`
+
 ## [3.1.0] - 2026-08-22
 
 ### Changed

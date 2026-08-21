@@ -1,7 +1,7 @@
 # Non-issue entry -- free-text mode (spec sec 6.2)
 
 The pipeline normally takes an issue number. This mode covers the case where the user
-describes work but no issue exists yet, e.g. `/issue-to-pr "add rate limiting to the
+describes work but no issue exists yet, e.g. `/issue-to-pr:run "add rate limiting to the
 public API"`. Keep the frontmatter `description` trigger scoped to "no issue exists yet"
 so it does not over-fire on a normal "take issue N".
 

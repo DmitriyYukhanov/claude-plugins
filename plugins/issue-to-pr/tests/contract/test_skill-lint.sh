@@ -13,7 +13,7 @@
 # detail back out of the references: a new paragraph of DETAIL still belongs in
 # `references/`, and that is what this number is here to force.
 
-skill_md() { printf '%s' "$ITP_SCRIPTS/../skills/issue-to-pr/SKILL.md"; }
+skill_md() { printf '%s' "$ITP_SCRIPTS/../skills/run/SKILL.md"; }
 
 test_skill_within_line_budget() {
   local n
