@@ -97,14 +97,13 @@ set_cfg() { # top sub value
   esac
 }
 
-# trim_quotes + parse_frontmatter now live in lib/common.sh (shared with pin-config.sh).
 
 # The config is read from the MAIN checkout, resolved before anything reads it. It was
 # the one cwd-relative path left in this script: a run started from a subdirectory found
 # no config at all and lost the pinned test command, base branch and board with it.
 #
 # The main checkout and not the current tree, because the file is usually untracked
-# (`pin-config.sh` writes it there and nothing commits it), so a worktree simply has no
+# (the user keeps it there and nothing commits it), so a worktree simply has no
 # copy. A repository that DOES commit it is read from the main checkout too, which means
 # a branch changing the config is gated by the version on the base - a wart, not a
 # hazard, and one the pinned values being explicit makes visible.

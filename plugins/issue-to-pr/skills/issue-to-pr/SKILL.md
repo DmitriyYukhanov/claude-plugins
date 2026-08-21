@@ -113,10 +113,9 @@ it reaches auth, crypto, secrets, sessions, payments or migrations, and add one
 **escalate a level** on 2+ confirmed bugs/pass or a gate failing twice; re-run gates
 after each fix.
 
-**8. Re-gates + pin config + ponytail.** Re-run `run-gates.sh` (all green). If commands you
-worked out yourself passed and config lacks them, `S/pin-config.sh --config "<CONFIG_PATH>" --test '…' …` — the path
-preflight reported it READ, so a pin lands in the file that is actually in force, never in a
-second one that shadows it. Note it in the report. **Final gate, when ponytail is installed:**
+**8. Re-gates + ponytail.** Re-run `run-gates.sh` (all green). If commands you worked out
+yourself passed and config lacks them, **print the frontmatter block** for `<CONFIG_PATH>` in
+the report for the user to paste. Never write it yourself: the file can be tracked and shared. **Final gate, when ponytail is installed:**
 `/ponytail:ponytail ultra`, then `/ponytail:ponytail-review` over `git diff <BASE>...HEAD`. Apply
 the cuts you agree with and re-run gates; answer the rest in one line each in the report.
 

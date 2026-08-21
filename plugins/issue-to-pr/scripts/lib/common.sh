@@ -147,7 +147,7 @@ gh_field() {
   gh "$@" 2>/dev/null || printf ''
 }
 
-# -- Frontmatter parser (shared by preflight.sh + pin-config.sh) --------------
+# -- Frontmatter parser -------------------------------------------------------
 # trim_quotes STRING - strip surrounding whitespace and one layer of matching quotes.
 trim_quotes() {
   local v=$1
@@ -164,7 +164,7 @@ trim_quotes() {
 # (top-level scalars + one nesting level; CRLF-tolerant) and invoke
 # `CALLBACK <top> <sub> <value>` per key (sub="" for a top-level scalar). Returns
 # 1 on a structurally-invalid frontmatter line, 0 otherwise. Sharing this keeps
-# preflight (read config) and pin-config (idempotent append) from diverging.
+# the config reader honest about what counts as a set value.
 parse_frontmatter() {
   local file=$1 cb=$2 in_fm=0 cur_top="" line val
   while IFS= read -r line || [ -n "$line" ]; do
@@ -231,7 +231,7 @@ assert_numeric_issue() {
 # otherwise. Five sites hand-rolled this dance and two of them used a `.tmp` name
 # with no PID, so two concurrent runs on one marker clobbered each other's temp.
 # Every writer of a file this plugin owns goes through here now: marker_set_used,
-# marker_refresh and both of pin-config's config writes.
+# marker_refresh and the state-dir ignore rule.
 atomic_replace() {
   local file=$1 tmp="$1.tmp.$$"
   shift
@@ -300,18 +300,6 @@ canonical_branch() {
 # pinned config, approval markers, the friction log. One definition, because the path
 # is spliced into a marker name, a config path and an ignore rule that must agree.
 state_dir() { printf '%s/.claude/issue-to-pr' "$1"; }
-
-# is_state_dir_path DIR - true when DIR is a state directory, in any rooting. Lives beside
-# state_dir so the thing that BUILDS the path and the thing that RECOGNISES it cannot drift:
-# a caller that re-derived the two segments as its own string literals already shipped a
-# version that missed the relative form. Matched on segments, never as a glob against the
-# whole string, which is what made that earlier version need a leading slash.
-is_state_dir_path() {
-  case "$1" in
-    .claude/issue-to-pr | */.claude/issue-to-pr) return 0 ;;
-    *) return 1 ;;
-  esac
-}
 
 # ensure_state_dir DIR - create it and make it hide itself. The `.gitignore` carries `*`
 # as its FIRST rule: gitignore lets the LAST match decide, so a `!keep-this` added below
