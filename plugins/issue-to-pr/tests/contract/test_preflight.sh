@@ -548,3 +548,17 @@ test_preflight_never_detects_a_gate_command() {
   assert_key "$OUT" CMD_TEST ""
   assert_key "$OUT" CMD_TYPECHECK ""
 }
+
+# 3.1.0: a run's own files (design, notes, state, gate logs) live under the state
+# directory, not in the worktree, where test discovery and bundlers pick them up and
+# where an abandoned run's leftovers were read by the next run as ground truth.
+test_preflight_reports_a_run_dir_under_the_state_dir() {
+  local repo
+  repo=$(init_repo)
+  cd "$repo"
+  use_fake_gh happy
+  run_script preflight.sh 6
+  assert_contains "$OUT" "RUN_DIR="
+  assert_contains "$OUT" ".claude/issue-to-pr/runs/task-6"
+}
+

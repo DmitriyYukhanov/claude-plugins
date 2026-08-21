@@ -78,7 +78,7 @@ citing `path:line`; the raw file reads stay in its context, not yours.
 
 **4. Design** (tier routes it). Complex+: `Workflow({scriptPath:
 "S/../workflows/design-panel.js", args:{issue,title,contextFiles,constraints,openQuestions}})`
-→ `design_md` (→ `tmp/task-<N>/design.md`) + rejected alternatives + open questions. Accept
+→ `design_md` (→ `<RUN_DIR>/design.md`) + rejected alternatives + open questions. Accept
 only if `received_issue` matches `<N>` **and** `design_md` is non-empty **and**
 `rejected_alternatives.length >= 1`. Any other outcome (including a thrown panel) → design
 inline; on a `received_issue` mismatch the panel never saw its args, so design the **whole**
@@ -96,7 +96,7 @@ complex+); TDD: failing test → implement → passing. UI/layout work is verifi
 out **in the worktree**, the tree the gates run in, from its manifests and CI workflow — as a
 **literal** (`npm test`, `bash tests/run-tests.sh`), never a string assembled from repository
 filenames, because `run-gates.sh` evaluates it through `bash -c`. Ambiguous ⇒ Step 4.5 asks.
-`S/run-gates.sh --log-dir "tmp/task-<N>/logs" --gate typecheck='<typecheck_cmd>' --gate
+`S/run-gates.sh --log-dir "<RUN_DIR>/logs" --gate typecheck='<typecheck_cmd>' --gate
 test='<test_cmd>'` (+ `--gate visual=…` for UI). Never judge a gate from an ad-hoc command; only
 this one surfaces the real failure instead of a summarised "no tests collected". An empty gate
 command degrades (exit 4), never a false green. Red ⇒ STOP and fix.
@@ -155,12 +155,12 @@ Only after Step 11 merges. Confirm honestly: GitHub closes the issue / advances 
 **only on a merge into the default branch** — on a non-default base the issue stays open, so
 say so. **`cd` your shell into the main checkout first** (a shell whose cwd is the worktree
 locks it on Windows). **Smoke runs BEFORE cleanup**, which deletes the log dir it writes to:
-if `smoke_cmd` is set, pull the base and run `S/run-gates.sh --log-dir "<WT_PATH>/tmp/task-<N>/logs"
+if `smoke_cmd` is set, pull the base and run `S/run-gates.sh --log-dir "<RUN_DIR>/logs"
 --gate smoke='<smoke_cmd>'`; red → `S/worktree.sh revert <N> --branch <branch>` opens a **draft**
 revert PR (never auto-reverts) — report it loudly.
 Then `S/worktree.sh cleanup <N> --branch <branch>` (removes the worktree, deletes the merged
 local + remote branch + marker). Add `--salvage-to "<dir>"` only when the user named somewhere
-to keep a `tmp/task-<N>/` file; the design already lives in the PR body, so the default is not
+to keep a `<RUN_DIR>` file; the design already lives in the PR body, so the default is not
 to salvage. Report from its keys — `DELETED_LOCAL=false` or a `LEFTOVER_DIR` means a locked dir
 remains; say so, remove it by hand once the lock clears. In-place fallback (no worktree):
 switch off `<branch>`, delete it local+remote, sweep the scratchpad temp (keep committed

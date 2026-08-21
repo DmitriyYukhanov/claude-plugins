@@ -5,6 +5,11 @@ All notable changes to the **issue-to-pr** plugin will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [3.1.0] - 2026-08-22
+
+### Changed
+- A run keeps its design, notes, state and gate logs beside the plugin's other state instead of inside your project tree, where test discovery and bundlers were picking them up
+
 ## [3.0.1] - 2026-08-22
 
 ### Fixed

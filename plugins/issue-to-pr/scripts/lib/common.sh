@@ -299,6 +299,15 @@ ensure_state_dir() {
 # matching the PR head. The binding is the head SHA, not a timestamp: it answers the
 # only question that matters at the merge, whether the gates ran against the content
 # being merged, and nothing else can fake it into agreeing.
+# run_dir ROOT ISSUE - where a run keeps its own files: design, notes, state, gate
+# logs. Under the state directory, which already ignores itself, and NOT in the
+# worktree: scratch inside the project tree gets picked up by test discovery, linters
+# and bundlers, and whatever an abandoned run left behind was read by the next run of
+# the same issue as ground truth.
+run_dir() { # root issue
+  printf '%s/runs/task-%s' "$(state_dir "$1")" "$2"
+}
+
 receipt_path() { # root branch
   printf '%s/gates-%s.json' "$(state_dir "$1")" "$(printf '%s' "$2" | tr '/' '-')"
 }

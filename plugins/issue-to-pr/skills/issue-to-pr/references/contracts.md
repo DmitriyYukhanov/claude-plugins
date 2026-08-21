@@ -42,7 +42,7 @@ must not be split** — run the gates from the root of your checkout (Step 1's `
 the repository root in the exit-3 in-place fallback), or a root-relative runner path exits 127.
 
 Keys: `GH_OK SCOPES OWNER REPO DEFAULT_BRANCH BASE START_POINT CMD_TYPECHECK CMD_TEST CMD_VISUAL
-CMD_SMOKE CONFIG_PRESENT CONFIG_PATH ISSUE_STATE ISSUE_TITLE
+CMD_SMOKE CONFIG_PRESENT CONFIG_PATH RUN_DIR ISSUE_STATE ISSUE_TITLE
 ISSUE_ASSIGNEES WORKTREE_STATE WORKTREE_PATH BOARD_CONFIGURED BOARD_MEMBER BOARD_STATUS_FIELD
 STATUS_MAP_IN_PROGRESS STATUS_MAP_IN_REVIEW
 CHECKS_TIMEOUT WARNINGS` (and `WARN_CLAIMED_BY` when relevant).
@@ -75,7 +75,7 @@ stop, nothing is cleaned up.
 `worktree.sh cleanup <N> --branch <b> [--salvage-to <dir>]` — Step 12, after a successful merge.
 `<b>` may be a PR number here too (everything past the precondition is git, which cannot read one).
 Hard precondition: the PR is `MERGED` (else stop `pr-not-merged` — deleting an open PR's branch is
-mechanically impossible). Salvages `tmp/task-<N>/{design.md,progress.md,state.json,step.log}` first — a relative
+mechanically impossible). Salvages `<RUN_DIR>/{design.md,progress.md,state.json,step.log}` first — a relative
 `--salvage-to` lands under the **main checkout**, not cwd, so it survives the removal — removes the
 worktree (never `--force`; tracked dirtiness → stop `dirty-tracked-files`), deletes the local +
 remote branch. Keys: `REMOVED DELETED_LOCAL DELETED_REMOTE SALVAGED`, plus

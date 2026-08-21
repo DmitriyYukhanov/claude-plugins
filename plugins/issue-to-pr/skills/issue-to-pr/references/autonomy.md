@@ -30,7 +30,7 @@ the PR body — the human reviews them at the merge gate they already attend.
 
 ## state.json (schema v1) + step.log
 
-`tmp/task-<N>/state.json` and the append-only `tmp/task-<N>/step.log`. **Both are yours** —
+`<RUN_DIR>/state.json` and the append-only `<RUN_DIR>/step.log`. **Both are yours** —
 no script writes either one. After each side-effecting call, append one flat `KEY=VALUE`
 line to `step.log` naming the step and the keys you got back, then update `state.json`.
 Doing the cheap write first is what makes the log the tie-breaker below: an append cannot
