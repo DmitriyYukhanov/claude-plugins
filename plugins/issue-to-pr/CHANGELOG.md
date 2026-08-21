@@ -5,6 +5,11 @@ All notable changes to the **issue-to-pr** plugin will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [3.0.1] - 2026-08-22
+
+### Fixed
+- Cleanup now removes the branch's gate receipt, so the plugin's state directory stops growing after every merge
+
 ## [3.0.0] - 2026-08-21
 
 ### Removed

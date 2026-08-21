@@ -466,6 +466,11 @@ cmd_cleanup() {
     deleted_remote=true
   fi
 
+  # The branch is gone, so its gate receipt can never match a head again. Nothing
+  # else prunes them since the approval sweep went with the marker in 3.0.0, and a
+  # state directory that only ever grows is how the old markers piled up.
+  rm -f "$(receipt_path "$root" "$branch")" 2>/dev/null
+
   emit REMOVED "$REMOVED"
   emit DELETED_LOCAL "$deleted_local"
   emit DELETED_REMOTE "$deleted_remote"
