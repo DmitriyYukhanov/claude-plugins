@@ -1,5 +1,5 @@
 ---
-name: issue-to-pr
+name: run
 description: >-
   Drive a GitHub issue — bare or tracked on a Project board — from triage to a
   merge-ready PR through a gated pipeline (design hardening, tests green,

@@ -16,7 +16,7 @@ as work progresses.
 
 ### Skill: `issue-to-pr`
 
-Invoked by the model or by you (`/issue-to-pr [issue-number | next | "free text"]
+Invoked by the model or by you (`/issue-to-pr:run [issue-number | next | "free text"]
 [--tier trivial|standard|complex|epic]`). The pipeline runs triage, research, design,
 implementation, review, PR, approval-gated merge, and cleanup. Hard gates block forward
 progress; everything between them scales to the task.
@@ -90,11 +90,11 @@ The skill activates when you ask to pick up a task ("take task 4", "work on issu
 test"). Or via the slash command:
 
 ```text
-/issue-to-pr 4
+/issue-to-pr:run 4
 
-/issue-to-pr next
+/issue-to-pr:run next
 
-/issue-to-pr "add dark mode to the settings page" --tier standard
+/issue-to-pr:run "add dark mode to the settings page" --tier standard
 ```
 
 ## License
