@@ -5,6 +5,14 @@ All notable changes to the **issue-to-pr** plugin will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [4.1.0] - 2026-08-25
+
+### Changed
+- Set ponytail's lazy mode before the design instead of after the code, so it prevents over-engineering rather than reporting it
+
+### Fixed
+- Point the final over-engineering review at the work in progress; it was diffing two commits and seeing nothing
+
 ## [4.0.0] - 2026-08-22
 
 ### Changed

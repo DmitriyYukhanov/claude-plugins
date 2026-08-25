@@ -76,7 +76,8 @@ a full 0–12 run.
 `Explore` subagent handed an explicit question list. Either way you get back a ≤150-line summary
 citing `path:line`; the raw file reads stay in its context, not yours.
 
-**4. Design** (tier routes it). Complex+: `Workflow({scriptPath:
+**4. Design** (tier routes it). **Ponytail installed → `/ponytail:ponytail full` first**, ledgered:
+design and implementation then run under the ladder. Complex+: `Workflow({scriptPath:
 "S/../workflows/design-panel.js", args:{issue,title,contextFiles,constraints,openQuestions}})`
 → `design_md` (→ `<RUN_DIR>/design.md`) + rejected alternatives + open questions. Accept
 only if `received_issue` matches `<N>` **and** `design_md` is non-empty **and**
@@ -106,7 +107,9 @@ subagents critique the diff at the tier's level, ≤ tier's max passes. `/code-r
 <level> --fix` is preferred only when it's actually callable — most copies ship
 `disable-model-invocation`, which blocks a skill run from invoking it at all (`R/companions.md`).
 Run them in the **foreground**, never while gates run — a reviewer editing the shared worktree
-mid-gate produces a phantom red. **Security overlay:** `S/changed-paths.sh --base "<BASE>"` lists
+mid-gate produces a phantom red. Ponytail rides in with them: their prompt says it governs how a
+confirmed bug gets fixed, never whether it counts as one.
+**Security overlay:** `S/changed-paths.sh --base "<BASE>"` lists
 what this branch touched (committed, uncommitted, untracked); you decide from the diff whether
 it reaches auth, crypto, secrets, sessions, payments or migrations, and add one
 `/security-review` if it does. `R/tier-matrix.md` holds the floor you cannot argue down. Track `confirmed_bugs_this_pass`/`gate_fail_streak` in metrics;
@@ -115,9 +118,11 @@ after each fix.
 
 **8. Re-gates + ponytail.** Re-run `run-gates.sh` (all green). If commands you worked out
 yourself passed and config lacks them, **print the frontmatter block** for `<CONFIG_PATH>` in
-the report for the user to paste. Never write it yourself: the file can be tracked and shared. **Final gate, when ponytail is installed:**
-`/ponytail:ponytail ultra`, then `/ponytail:ponytail-review` over `git diff <BASE>...HEAD`. Apply
-the cuts you agree with and re-run gates; answer the rest in one line each in the report.
+the report for the user to paste. Never write it yourself: the file can be tracked and shared.
+**Final gate, when ponytail is installed:** `/ponytail:ponytail-review` over `git diff <BASE>`
+(two dots — Step 9 has not committed yet, so `<BASE>...HEAD` compares two commits and shows an
+empty diff here) plus any untracked file `S/changed-paths.sh --base "<BASE>"` names. Apply the
+cuts you agree with and re-run gates; answer the rest in one line each in the report.
 
 **9. Commit + PR.** `git add <explicit paths>`, conventional subjects; `git push -u origin
 <branch>`. **Re-run `run-gates.sh` on the commit**: it leaves the receipt Step 11 checks, and a

@@ -74,3 +74,34 @@ test_skill_keeps_merge_gate_rule() {
   c=$(cat "$(skill_md)")
   assert_contains "$c" "main session"
 }
+
+# Ponytail used to enter at Step 8, after the code was written, and its first act was to
+# switch the session to `ultra`. Both halves were wrong: the over-engineering it hunts was
+# designed in at Step 4 and typed at Step 5, and `ponytail-review` is a separate skill that
+# never reads the session mode, so the switch changed nothing. The mode now goes on at Step 4,
+# and ponytail's own SubagentStart hook carries it into every implementation subagent.
+test_skill_sets_ponytail_mode_at_design_not_at_the_final_gate() {
+  local c
+  c=$(cat "$(skill_md)")
+  # Placement, not just presence: a `full` that drifted down to Step 8 would still satisfy a
+  # bare "contains" check while setting the mode after the design it was meant to shape.
+  printf '%s\n' "$c" | grep '^\*\*4\. Design\*\*' | grep -q '/ponytail:ponytail full' ||
+    fail "Step 4's own line must be where ponytail's mode is set"
+  assert_not_contains "$c" "ponytail:ponytail ultra" \
+    "the final gate must not switch modes; ponytail-review ignores the session mode"
+}
+
+# `git diff <BASE>...HEAD` compares two commits, and Step 8 runs before Step 9 commits, so on a
+# fresh branch it showed the ponytail gate an empty diff while the whole run sat uncommitted in
+# the worktree. The gate reviewed nothing and reported clean.
+test_skill_final_review_reads_the_uncommitted_worktree() {
+  local c
+  c=$(cat "$(skill_md)")
+  assert_contains "$c" 'ponytail-review` over `git diff <BASE>`' \
+    "the final review diffs the base against the working tree, not one commit against another"
+  # Two dots still miss a file git has never seen, and a run that adds one is the common case.
+  # Anchored on "untracked file" because the bare command string also appears in Step 7, where
+  # it would satisfy a looser assertion no matter what Step 8 said.
+  assert_contains "$c" 'untracked file `S/changed-paths.sh --base "<BASE>"` names' \
+    "the final review is handed the untracked files too"
+}
