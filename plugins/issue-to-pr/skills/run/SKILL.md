@@ -9,7 +9,7 @@ description: >-
   N", "work on issue #N", "do the next task", "build/fix X" when no issue exists yet, and —
   for the merge gate later — "merge it", "approve the PR", "ship it", "lgtm merge".
 user-invocable: true
-argument-hint: "[issue-number | next | \"free text\"] [--tier trivial|standard|complex|epic]"
+argument-hint: "[issue-number | next | \"free text\"] [--tier trivial|standard|complex|epic] [--drill]"
 ---
 
 # issue-to-pr — issue → merge-ready PR pipeline
@@ -26,7 +26,7 @@ own judgment. One todo per step.
 - **Merge is gated on explicit in-session approval**, runs ONLY in the main session, via
   `S/worktree.sh merge` — never a bare `gh pr merge`, never on the turn the PR opens. No file
   proves the go-ahead; keeping it is yours.
-- **Ask contract:** contact the user at exactly three moments — (1) ONE batched
+- **Ask contract:** three moments, four with `--drill` (`R/autonomy.md`) — (1) ONE batched
   `AskUserQuestion` at Step 4.5 (only if the ledger has open items), (2) the merge gate,
   (3) a hard stop. Decide everything else yourself and log it (see below).
 - Stage with **explicit paths** (`git add path1 path2`); never `git add -A`/`.` (a hook
@@ -46,8 +46,8 @@ own judgment. One todo per step.
   `ponytail:*` — all in `R/companions.md`.
 - **Tier** (`R/tier-matrix.md`): you pick it at Step 2, `standard` unless the issue argues
   otherwise; it routes research, design, review level/passes, security overlay, report length.
-- **Autonomy** (`R/autonomy.md`, read once at Step 0): the ask contract (three contact
-  moments; log every judgment call to `state.json.ledger[]` before the next tool call;
+- **Autonomy** (`R/autonomy.md`, read once at Step 0): the ask contract (three contact moments,
+  a fourth only with `--drill`; log every judgment call to `state.json.ledger[]` before the next call;
   auto-decisions rendered in the report + PR body), the `state.json` schema + the append-only
   `step.log` you write beside it, and the resume path (log wins over stale state).
 
@@ -78,17 +78,18 @@ a full 0–12 run.
 citing `path:line`; the raw file reads stay in its context, not yours.
 
 **4. Design** (tier routes it). **Ponytail installed → `/ponytail:ponytail full` first**, ledgered:
-design and implementation then run under the ladder. Complex+: `Workflow({scriptPath:
-"S/../workflows/design-panel.js", args:{issue,title,contextFiles,constraints,openQuestions}})`
-→ `design_md` (→ `<RUN_DIR>/design.md`) + rejected alternatives + open questions. Accept
-only if `received_issue` matches `<N>` **and** `design_md` is non-empty **and**
-`rejected_alternatives.length >= 1`. Any other outcome (including a thrown panel) → design
-inline; on a `received_issue` mismatch the panel never saw its args, so design the **whole**
-issue, not just the part a proposer reconstructed. `/cross-review` critiques the result.
-Preference-bound questions → ledger. Standard: a mini-design in the PR body.
+design and implementation then run under the ladder. Complex+: run the design panel
+(`S/../workflows/design-panel.js`) for `design_md` (→ `<RUN_DIR>/design.md`) + rejected
+alternatives — its args, the acceptance test its output must pass, and the design-inline
+fallback are in `R/contracts.md`. `/cross-review` critiques the result. Preference-bound
+questions → ledger. Standard: a mini-design in the PR body. **`--drill` → write the design to
+`<RUN_DIR>/design.md` whatever the tier**, including trivial: there is nothing to drill otherwise.
 
-**4.5. Checkpoint (unconditional slot).** If the ledger has open `asked` items, ask them in
-ONE batched `AskUserQuestion`. Empty ledger → no-op. The only mid-run question.
+**4.5. Checkpoint (unconditional slot).** `--drill` → hand `<RUN_DIR>/design.md` to `/drill:me`
+**first** (no plugin: hand the file over to read), appending each objection to
+`state.json.ledger[]` as it is raised, never at the end — a drill is long enough to compact
+(`R/autonomy.md`). Then ask any open `asked` items in ONE batched `AskUserQuestion`; a `--drill`
+run asks even on an empty ledger, or the design goes unanswered. The only mid-run question.
 
 **5. Plan + implement.** Turn the design into a plan (`superpowers:writing-plans` for
 complex+); TDD: failing test → implement → passing. UI/layout work is verified with
@@ -106,10 +107,9 @@ command degrades (exit 4), never a false green. Red ⇒ STOP and fix.
 **7. Review loop.** Claude Code's built-in `code-review` skill at the tier's level, ≤ tier's max
 passes, and **without `--fix`** — that flag applies findings in one sweep, past the per-fix re-gate
 and the bug count the ratchet reads. Add adversarial subagents when the diff earns a second
-opinion (`R/companions.md`). Run
-reviewers in the **foreground**, never while gates run — one editing the shared worktree mid-gate
-produces a phantom red. Ponytail rides in with them: their prompt says it governs how a confirmed
-bug gets fixed, never whether it counts as one.
+opinion (`R/companions.md`). Run reviewers in the **foreground**, never while gates run — one
+editing the shared worktree mid-gate produces a phantom red. Ponytail rides in with them: their
+prompt says it governs how a confirmed bug gets fixed, never whether it counts as one.
 **Security overlay:** `S/changed-paths.sh --base "<BASE>"` lists
 what this branch touched (committed, uncommitted, untracked); you decide from the diff whether
 it reaches auth, crypto, secrets, sessions, payments or migrations, and add one

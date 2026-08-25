@@ -142,3 +142,16 @@ your call at Step 7, not the script's (`tier-matrix.md`).
 
 PreToolUse hook (in `hooks/hooks.json`, alongside merge-guard): denies `git add -A` / `--all`
 / `.` and passes everything else through, so staging stays explicit. You never call it directly.
+
+## workflows/design-panel.js — Step 4 design, complex+ only
+
+Called as `Workflow({scriptPath: "S/../workflows/design-panel.js", args:{issue, title,
+contextFiles, constraints, openQuestions}})`. Three proposers, two adversarial critics, an
+opus judge; it returns `design_md`, `rejected_alternatives` and open questions.
+
+**Accept the result only if all three hold:** `received_issue` equals the issue number you
+passed, `design_md` is non-empty, and `rejected_alternatives.length >= 1`. Anything else,
+including a panel that throws, means design inline instead.
+
+A `received_issue` mismatch looks like partial success and is not: the panel never saw its args,
+so design the **whole** issue yourself, not the part a proposer reconstructed.

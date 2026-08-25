@@ -160,3 +160,46 @@ test_skill_review_loop_uses_the_builtin_code_review() {
   assert_not_contains "$tiers" '--fix' \
     "the tier table sets the review level; it must not hand the reviewer a fix sweep"
 }
+
+# `--drill` is the one way a run spends the human's time on purpose instead of saving it: it
+# hands the design to /drill:me at the checkpoint. Ordering is the contract, not decoration —
+# the drill runs BEFORE the batched question so an objection it surfaces still fits in that
+# same slot rather than needing a second one. A flag nobody can discover is a flag nobody
+# passes, so the frontmatter has to advertise it too.
+test_skill_drill_is_opt_in_and_precedes_the_batched_question() {
+  local blk d a
+  grep -q 'argument-hint:.*--drill' "$(skill_md)" ||
+    fail "argument-hint must advertise --drill"
+  blk=$(skill_step 4.5)
+  d=$(printf '%s\n' "$blk" | grep -n '/drill:me' | head -1 | cut -d: -f1)
+  a=$(printf '%s\n' "$blk" | grep -n 'AskUserQuestion' | head -1 | cut -d: -f1)
+  [ -n "$d" ] || fail "Step 4.5 must run /drill:me when the flag asked for it"
+  [ -n "$a" ] || fail "Step 4.5 lost its batched AskUserQuestion"
+  [ "$d" -le "$a" ] ||
+    fail "the drill must come before the batched question, not after it"
+  # The flag was inert on the two commonest tiers until Step 4 wrote the design unconditionally:
+  # standard keeps its mini-design in the PR body, which does not exist yet at 4.5, and trivial
+  # designs nothing. Both branches of 4.5 hand over a file, so that file has to be produced.
+  assert_contains "$(skill_step 4)" '`<RUN_DIR>/design.md` whatever the tier' \
+    "a --drill run must write the design at every tier, or there is nothing to drill"
+  # And the fallback needs a slot to collect objections in. Step 4.5 skips the question on an
+  # empty ledger, which is exactly the state a no-plugin drill run is in.
+  assert_contains "$blk" 'even on an empty ledger' \
+    "a --drill run must ask even when nothing else queued a question"
+}
+
+# The ask contract says "three moments only". A drill the user opted into is a fourth, and a
+# contract that contradicts the step it governs is worse than no contract.
+test_autonomy_accounts_for_the_drill() {
+  local a
+  a=$(cat "$ITP_SCRIPTS/../skills/run/references/autonomy.md")
+  assert_contains "$a" '--drill' \
+    "autonomy.md must name the opt-in fourth contact moment it now allows"
+  # And no copy of the contract may still state the old absolute. The spine carried
+  # "contact the user at exactly three moments" under **Hard rules (never violate)** while the
+  # step below it described a fourth: a rule the pipeline breaks by design is worse than none.
+  assert_not_contains "$a" 'exactly three' \
+    "autonomy.md still asserts the three-moment absolute a --drill run breaks"
+  assert_not_contains "$(cat "$(skill_md)")" 'exactly three' \
+    "the spine's hard rules still assert the three-moment absolute a --drill run breaks"
+}

@@ -17,6 +17,7 @@ companion silently degrade quality without saying so.
 | Lazy design and build (Steps 4–5) | `ponytail:ponytail full`, set once before the design | Design and build against the same ladder by hand: does this need to exist, does the stdlib or the platform already do it, can it be one line. |
 | Deletion lens (Step 8) | `ponytail:ponytail-review` over the run's diff | Re-read the diff hunting only for what to delete: reinvented stdlib, one-caller abstractions, config nobody sets, flags nobody passes. |
 | Simplification lens (Step 8) | `simplify`, built into Claude Code: four angles (reuse, simplification, efficiency, altitude) over the same diff, and it applies what it finds | Re-read the diff for what survives but reads worse than it has to: a branch that only ever takes one path, a loop the stdlib has a name for, a comment explaining a name that should have been the name. |
+| Human drill on the design (Step 4.5, `--drill` only) | `drill:me` — the tutor drills the user on the design before it is built | Hand them `<RUN_DIR>/design.md`, say the drill plugin would have made this interactive, and take objections in the same batched question. |
 | Diff review loop (Step 7) | `code-review`, built into Claude Code: takes a level and reports findings. It also takes `--fix`; Step 7 does not use it (see the note) | Independent adversarial review subagents (2–3 reviewers) critique the diff for correctness, reuse, and regressions; iterate. |
 
 ## Install hints
