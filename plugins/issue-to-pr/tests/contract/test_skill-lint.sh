@@ -203,3 +203,39 @@ test_autonomy_accounts_for_the_drill() {
   assert_not_contains "$(cat "$(skill_md)")" 'exactly three' \
     "the spine's hard rules still assert the three-moment absolute a --drill run breaks"
 }
+
+setup_md() { printf '%s' "$ITP_SCRIPTS/../skills/setup/SKILL.md"; }
+
+# A companion nobody knows about is a companion nobody installs, and the run degrades to its
+# inline fallback in silence. `setup` is the one place that says what each one buys, so a
+# companion the run knows and setup does not is a lie by omission.
+#
+# The first cut of this test guarded each name with `case "$comps" in *"$c"*)` and skipped on
+# no match. With no `set -e` in the harness an unreadable companions.md left `comps` empty, so
+# every name skipped and the test passed against a one-byte setup skill. Both files are read
+# up front and a short read is a failure, not a skip.
+test_setup_walks_every_companion_the_run_knows() {
+  local s c comps
+  [ -f "$(setup_md)" ] || fail "the setup skill is missing"
+  s=$(cat "$(setup_md)")
+  comps=$(cat "$ITP_SCRIPTS/../skills/run/references/companions.md")
+  [ ${#s} -gt 500 ] || fail "the setup skill is too short to be walking anyone through anything"
+  [ ${#comps} -gt 500 ] || fail "companions.md came back short; the comparison would be vacuous"
+  for c in superpowers ponytail humanizer drill deep-research cross-review code-review simplify; do
+    assert_contains "$comps" "$c" "companions.md must still know the $c companion"
+    assert_contains "$s" "$c" "setup must account for the $c companion the run relies on"
+  done
+}
+
+# Preflight already fails on a missing scope, but it fails mid-run, after the user has asked
+# for work. Setup is where that check is cheap and early. Assert the load-bearing strings: a
+# bare `project` was satisfied by "changes their environment for every project" in the prose.
+test_setup_checks_the_hard_requirements_and_installs_nothing() {
+  local s
+  s=$(cat "$(setup_md)")
+  assert_contains "$s" 'gh auth status' "setup must verify the one hard dependency the run has"
+  assert_contains "$s" 'gh auth refresh -s project' \
+    "board mode needs the project scope; setup must print the command that adds it"
+  assert_contains "$s" 'never run' \
+    "setup prints install commands for a human to run; it must say it installs nothing itself"
+}
