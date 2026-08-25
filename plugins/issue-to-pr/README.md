@@ -52,6 +52,14 @@ progress; everything between them scales to the task.
   at PR open; `Done` is left to GitHub's merge-time automation. A missing `project` token
   scope degrades to link-only and never blocks the PR.
 
+### Skill: `/issue-to-pr:setup`
+
+Run once before your first task. It checks the one hard requirement (`gh`, logged in, with
+the `repo` scope, plus `project` for board mode), reports which companion skills are present
+and what each missing one would sharpen, and prints the install command for each. It changes
+nothing on its own: the commands are yours to run. It also notes that `code-review` and
+`simplify` are built into Claude Code and need no install at all.
+
 ### Skill: `/issue-to-pr:tune`
 
 Runs leave one-line notes in a friction log when a step fought back. This skill batches
