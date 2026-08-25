@@ -58,6 +58,8 @@ as an alias for the top-level `*_cmd` scalars.)
 the **main checkout**, where it lives and the only tree certain to exist that early.
 
 A command this file does not name comes back empty, and the run works it out at Step 6 in the
-worktree the gates execute in, always as a literal such as `npm test`. A repository whose suite
+worktree the gates execute in, always as a literal such as `npm test`. Step 8 then prints the
+frontmatter block for you to paste, and never writes this file itself: the path is gitignored by
+default, but nothing stops a project from tracking and sharing it. A repository whose suite
 is genuinely ambiguous, a monorepo with one per package, gets asked about rather than guessed
 at, and the answer belongs here. Never invent a command.
