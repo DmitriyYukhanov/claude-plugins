@@ -46,7 +46,7 @@ can land on the wrong one.
   "ledger": [{"question": "…", "decision": "…", "rationale": "…", "kind": "auto"}],
   "metrics": {"gate_runs": 3, "gate_fail_streak": {}, "confirmed_bugs_this_pass": 0,
     "review_passes": 2, "review_level": "medium", "design_panel_ran": false,
-    "started_at": "…"} }
+    "simplify_passes": 1, "started_at": "…"} }
 ```
 
 - `tier` is written after Step 2 (null/pending before that).

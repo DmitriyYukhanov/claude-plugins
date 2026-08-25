@@ -15,7 +15,7 @@ ledger with the signal that moved it.
 | Design | - | mini-design in the PR body | **design-panel** or `/cross-review` | **decompose** into children (`epic.md`) |
 | Plan | - | inline checklist | writing-plans | per child |
 | Tests / gates | always | always | always | per child |
-| `/code-review` | `low --fix`, 1 pass | `medium --fix`, <=2 passes | `high --fix`, <=3 passes (may raise to `max` on escalation) | per child + `ultra` on integrator PRs |
+| `code-review` level | `low`, 1 pass | `medium`, <=2 passes | `high`, <=3 passes (may raise to `max` on escalation) | per child + `max` on integrator PRs |
 | Security overlay | if sensitive paths | if sensitive paths | if sensitive paths | mandatory sweep |
 | Report | 3 lines | short | full | dashboard |
 
@@ -54,7 +54,7 @@ These paths are a floor you may escalate from and never argue down: anything und
 
 ## Escalation ratchet (one-way)
 
-Track in `state.json.metrics`: `confirmed_bugs_this_pass` (count of `/code-review`
+Track in `state.json.metrics`: `confirmed_bugs_this_pass` (count of `code-review`
 CONFIRMED verdicts) and `gate_fail_streak.<gate>`. When **2+ confirmed bugs land in
 one review pass**, or **the same gate fails twice**, escalate the review level one
 notch (never down); trivial->standard also re-enters the design step. Surface the raw

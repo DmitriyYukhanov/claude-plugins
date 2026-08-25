@@ -40,9 +40,10 @@ own judgment. One todo per step.
 
 - **Config** (`.claude/issue-to-pr/config.md`, optional): `preflight.sh` parses it and
   resolves the base (schema `R/configuration.md`); read it in the main checkout up front
-  (gitignored, absent in the worktree). Gate commands come from it, or from you at Step 6. **Companions** (if installed,
-  else inline): `superpowers:*`, `/deep-research`, `/cross-review`, `humanizer`,
-  `/code-review` (`R/companions.md`).
+  (gitignored, absent in the worktree). Gate commands come from it, or from you at Step 6.
+  **Built in, no install:** `code-review` (Step 7), `simplify` (Step 8). **Companions** (if
+  installed, else inline): `superpowers:*`, `/deep-research`, `/cross-review`, `humanizer`,
+  `ponytail:*` — all in `R/companions.md`.
 - **Tier** (`R/tier-matrix.md`): you pick it at Step 2, `standard` unless the issue argues
   otherwise; it routes research, design, review level/passes, security overlay, report length.
 - **Autonomy** (`R/autonomy.md`, read once at Step 0): the ask contract (three contact
@@ -102,13 +103,13 @@ test='<test_cmd>'` (+ `--gate visual=…` for UI). Never judge a gate from an ad
 this one surfaces the real failure instead of a summarised "no tests collected". An empty gate
 command degrades (exit 4), never a false green. Red ⇒ STOP and fix.
 
-**7. Review loop.** Default to the inline fallback: independent adversarial review
-subagents critique the diff at the tier's level, ≤ tier's max passes. `/code-review
-<level> --fix` is preferred only when it's actually callable — most copies ship
-`disable-model-invocation`, which blocks a skill run from invoking it at all (`R/companions.md`).
-Run them in the **foreground**, never while gates run — a reviewer editing the shared worktree
-mid-gate produces a phantom red. Ponytail rides in with them: their prompt says it governs how a
-confirmed bug gets fixed, never whether it counts as one.
+**7. Review loop.** Claude Code's built-in `code-review` skill at the tier's level, ≤ tier's max
+passes, and **without `--fix`** — that flag applies findings in one sweep, past the per-fix re-gate
+and the bug count the ratchet reads. Add adversarial subagents when the diff earns a second
+opinion (`R/companions.md`). Run
+reviewers in the **foreground**, never while gates run — one editing the shared worktree mid-gate
+produces a phantom red. Ponytail rides in with them: their prompt says it governs how a confirmed
+bug gets fixed, never whether it counts as one.
 **Security overlay:** `S/changed-paths.sh --base "<BASE>"` lists
 what this branch touched (committed, uncommitted, untracked); you decide from the diff whether
 it reaches auth, crypto, secrets, sessions, payments or migrations, and add one
@@ -116,13 +117,13 @@ it reaches auth, crypto, secrets, sessions, payments or migrations, and add one
 **escalate a level** on 2+ confirmed bugs/pass or a gate failing twice; re-run gates
 after each fix.
 
-**8. Re-gates + ponytail.** Re-run `run-gates.sh` (all green). If commands you worked out
-yourself passed and config lacks them, **print the frontmatter block** for `<CONFIG_PATH>` in
-the report for the user to paste. Never write it yourself: the file can be tracked and shared.
-**Final gate, when ponytail is installed:** `/ponytail:ponytail-review` over `git diff <BASE>`
-(two dots — Step 9 has not committed yet, so `<BASE>...HEAD` compares two commits and shows an
-empty diff here) plus any untracked file `S/changed-paths.sh --base "<BASE>"` names. Apply the
-cuts you agree with and re-run gates; answer the rest in one line each in the report.
+**8. Re-gates + simplification gate.** Re-run `run-gates.sh` (all green). For any gate command you
+worked out yourself, **print** (never write) the `<CONFIG_PATH>` frontmatter block in the report.
+Then the **simplification gate**, at most two passes: `/ponytail:ponytail-review` (when installed)
+for what to delete, built-in `simplify` for what stays but gets simpler, over `git diff <BASE>` (two dots, never
+three) plus any untracked file `S/changed-paths.sh --base "<BASE>"` names. Apply the cuts you
+agree with, re-run gates, stop as soon as a pass finds nothing; the rest gets one line each in
+the report. Lenses, fallbacks, why two dots and why the cap is two: `R/companions.md`.
 
 **9. Commit + PR.** `git add <explicit paths>`, conventional subjects; `git push -u origin
 <branch>`. **Re-run `run-gates.sh` on the commit**: it leaves the receipt Step 11 checks, and a

@@ -15,6 +15,26 @@
 
 skill_md() { printf '%s' "$ITP_SCRIPTS/../skills/run/SKILL.md"; }
 
+# The spine is one file, so a bare assert_contains on it passes when the string it wants has
+# drifted into some other step. Tests about one step read that step's own block.
+#
+# Steps come in two shapes: `**7. Review loop.**` inline, and `## Step 11 — ...` as a heading.
+# Both start and end a block. The terminator matches a NUMBERED heading only, never any bold run
+# that happens to lead with a digit: `**2+ confirmed bugs**` mid-paragraph used to end the slice
+# early and silently shrink whatever the test was checking.
+#
+# An empty slice is NOT self-announcing: assert_contains fails on it, assert_not_contains passes.
+# So the caller gets a hard failure instead, and no assertion ever runs against nothing.
+skill_step() { # step-number
+  local out
+  out=$(awk -v n="$1" '
+    index($0, "**" n ". ")==1 || index($0, "## Step " n " ")==1 {f=1; print; next}
+    /^\*\*[0-9]+(\.[0-9]+)?\. / || /^## Step [0-9]/ {f=0}
+    f' "$(skill_md)")
+  [ -n "$out" ] || fail "SKILL.md has no Step $1 block; the heading was renamed or removed"
+  printf '%s\n' "$out"
+}
+
 test_skill_within_line_budget() {
   local n
   n=$(wc -l <"$(skill_md)")
@@ -85,8 +105,8 @@ test_skill_sets_ponytail_mode_at_design_not_at_the_final_gate() {
   c=$(cat "$(skill_md)")
   # Placement, not just presence: a `full` that drifted down to Step 8 would still satisfy a
   # bare "contains" check while setting the mode after the design it was meant to shape.
-  printf '%s\n' "$c" | grep '^\*\*4\. Design\*\*' | grep -q '/ponytail:ponytail full' ||
-    fail "Step 4's own line must be where ponytail's mode is set"
+  assert_contains "$(skill_step 4)" '/ponytail:ponytail full' \
+    "Step 4's own block must be where ponytail's mode is set"
   assert_not_contains "$c" "ponytail:ponytail ultra" \
     "the final gate must not switch modes; ponytail-review ignores the session mode"
 }
@@ -96,12 +116,47 @@ test_skill_sets_ponytail_mode_at_design_not_at_the_final_gate() {
 # the worktree. The gate reviewed nothing and reported clean.
 test_skill_final_review_reads_the_uncommitted_worktree() {
   local c
-  c=$(cat "$(skill_md)")
-  assert_contains "$c" 'ponytail-review` over `git diff <BASE>`' \
+  c=$(skill_step 8)
+  assert_contains "$c" 'over `git diff <BASE>`' \
     "the final review diffs the base against the working tree, not one commit against another"
   # Two dots still miss a file git has never seen, and a run that adds one is the common case.
-  # Anchored on "untracked file" because the bare command string also appears in Step 7, where
-  # it would satisfy a looser assertion no matter what Step 8 said.
+  # Step 7 names the same script for the security overlay, which is why this reads Step 8 alone.
   assert_contains "$c" 'untracked file `S/changed-paths.sh --base "<BASE>"` names' \
     "the final review is handed the untracked files too"
+}
+
+# Step 8 ran `ponytail-review` once. One pass only hunts what to delete, never what to make
+# simpler in place, and nothing re-reads the diff after its own cuts land, so a cut that broke a
+# neighbouring path reached the gates at best and nobody at worst. The gate is now two lenses
+# over two passes, capped at two: pass 2 pays for itself by reading what pass 1 edited, a third
+# would spend tokens on a diff that has stopped moving.
+test_skill_simplification_gate_is_two_passes() {
+  local c
+  c=$(skill_step 8)
+  assert_contains "$c" "at most two passes" \
+    "Step 8 must state the cap out loud; an uncapped loop is what the cap exists to prevent"
+  assert_contains "$c" 'built-in `simplify`' \
+    "the simplification lens is the skill Claude Code ships, not a hand-rolled pass"
+  # Both lenses, and the deletion one keeps its plugin namespace. A bare `ponytail-review` does
+  # not resolve, so the gate would quietly run on one lens while still claiming two.
+  assert_contains "$c" '/ponytail:ponytail-review' \
+    "the deletion lens needs its plugin prefix or the call finds no such skill"
+}
+
+# companions.md claimed `/code-review` was unreachable from a skill run because most copies ship
+# `disable-model-invocation`. True of plugin commands by that name, false of the skill Claude Code
+# registers itself, and acting on it sent Step 7 to an inline fallback for several releases while
+# the real reviewer sat one call away. The built-in does take `--fix`; the pipeline declines it,
+# because one sweep of applied fixes lands past the per-fix re-gate and past the bug count the
+# escalation ratchet reads. The tier table is where `--fix` used to live, so guard it there too.
+test_skill_review_loop_uses_the_builtin_code_review() {
+  local c tiers
+  c=$(skill_step 7)
+  assert_contains "$c" 'built-in `code-review` skill' \
+    "Step 7 must reach for the reviewer Claude Code ships instead of defaulting to a fallback"
+  assert_contains "$c" 'without `--fix`' \
+    "Step 7 must say it declines the reviewer's own fix sweep, and why"
+  tiers=$(cat "$ITP_SCRIPTS/../skills/run/references/tier-matrix.md")
+  assert_not_contains "$tiers" '--fix' \
+    "the tier table sets the review level; it must not hand the reviewer a fix sweep"
 }

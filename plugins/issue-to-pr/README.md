@@ -77,11 +77,17 @@ again, but the next merge asks for one more gate run before it will land.
 
 ### Companion skills (optional)
 
+Two of the sharpest tools need no install: Claude Code's own `code-review` reviews the
+diff at Step 7, and its `simplify` is one of the two lenses of the Step 8 gate. The CLI
+registers both, so no marketplace is involved. (An earlier version of this README claimed
+the pipeline could not reach `code-review` because copies ship `disable-model-invocation`.
+That is a plugin command of the same name, not the built-in skill, and the claim cost
+Step 7 a real reviewer for several releases.)
+
 Optional companions that sharpen specific steps: `superpowers:*`, `/deep-research`,
-`/cross-review` (from `codex-collaboration`), `humanizer`, and `/code-review`. Each is
-used if installed, with an inline fallback otherwise. `/code-review` commonly ships
-`disable-model-invocation`, which blocks the pipeline from calling it mid-run regardless
-of install state — the adversarial-subagent fallback is the realistic default for Step 7.
+`/cross-review` (from `codex-collaboration`), `humanizer`, and `ponytail` (whose
+`ponytail-review` is the Step 8 deletion lens, and whose lazy mode shapes the design from
+Step 4 on). Each is used if installed, with an inline fallback otherwise.
 
 ## Usage
 
