@@ -5,6 +5,11 @@ All notable changes to the **issue-to-pr** plugin will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [4.3.0] - 2026-08-25
+
+### Added
+- Add `--drill`, which hands the design to the drill tutor before anything gets built, for runs where you would rather understand the plan than save the time
+
 ## [4.2.0] - 2026-08-25
 
 ### Changed

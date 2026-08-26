@@ -14,10 +14,10 @@ as work progresses.
 
 ## Features
 
-### Skill: `issue-to-pr`
+### Skill: `run`
 
 Invoked by the model or by you (`/issue-to-pr:run [issue-number | next | "free text"]
-[--tier trivial|standard|complex|epic]`). The pipeline runs triage, research, design,
+[--tier trivial|standard|complex|epic] [--drill]`). The pipeline runs triage, research, design,
 implementation, review, PR, approval-gated merge, and cleanup. Hard gates block forward
 progress; everything between them scales to the task.
 
@@ -27,9 +27,11 @@ progress; everything between them scales to the task.
 - **Scaled by tier.** Triage evidence assigns a tier from trivial to epic (`--tier`
   overrides). Research depth, design machinery (an autonomous design panel for complex
   work), review level and passes, the security overlay, and report length all size to it.
-- **Autonomous, one question max.** The skill contacts you at exactly three moments: one
+- **Autonomous, one question max.** The skill contacts you at three moments: one
   batched question mid-run (only if something genuinely needs your preference), the merge
-  gate, and hard stops. It makes every other decision itself, logs it, and surfaces it in
+  gate, and hard stops. Pass `--drill` and it adds a fourth on purpose: the `drill` tutor
+  walks you through the design before anything is built, and whatever you dispute there is
+  folded into that same batched question. It makes every other decision itself, logs it, and surfaces it in
   the report and PR body.
 - **Gates.** Design hardening (cross-review or a multi-agent fallback), tests green
   (typecheck + tests, plus visual checks for UI work), and a code-review loop that runs

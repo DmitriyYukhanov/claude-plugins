@@ -3,14 +3,36 @@
 The pipeline decides what it reasonably can on its own, records every decision, and
 surfaces the automatic ones where the human already looks (the report and the PR body).
 
-## Ask contract — three moments only
+## Ask contract — three moments, plus one the user asks for
 
-Contact the user at exactly three points:
+Contact the user at these three points, and at a fourth only if asked (below):
 1. **Step 4.5 checkpoint** — ONE batched `AskUserQuestion`, only if the ledger has open
    `asked` items. This is the single mid-run question.
 2. **The merge gate** (Step 11) — always.
 3. **A hard stop** — an exit-2 with no safe default (e.g. `WARN_CLAIMED_BY`, a
    gate-critical unknown).
+
+**A fourth moment exists only when the run was started with `--drill`.** Every other rule here
+saves the user's time; this one spends it, because they asked to understand the design while it
+can still change.
+
+Step 4 writes `<RUN_DIR>/design.md` for a `--drill` run at any tier, including trivial. Without
+that the flag is inert on the two commonest tiers: standard keeps its mini-design in the PR body,
+which does not exist until Step 9, and trivial designs nothing at all.
+
+At Step 4.5, before the batched question, hand that file to `/drill:me`. There is no return
+value to collect: the drill runs in this session, so **you** append each objection to the run's
+`state.json.ledger[]` as an `asked` item the moment it is raised. Not at the end — a tutoring
+session is long enough to compact this context, and an objection that lives only in the
+conversation is gone when it does. Note also that drill keeps a "ledger" of its own in
+`~/.drill-me/`; that one is not yours.
+
+The batched question then carries what the drill raised. A `--drill` run asks it even when the
+ledger is empty, since "no open items" after a drill means the design was never put to them.
+
+With the flag and no `drill` plugin installed, say so once, hand over `<RUN_DIR>/design.md` to
+read, and ask for objections in that same batched question — never silently skip what was
+asked for.
 
 A question is for the user (`kind: asked`) only when it is:
 - **preference-bound** — public API naming, user-visible UX/copy, paid/external
