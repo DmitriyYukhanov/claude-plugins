@@ -10,6 +10,18 @@ test_gates_all_pass() {
   assert_key "$OUT" GATES_RUN 2
 }
 
+# Every gate log lands in --log-dir, so a directory that cannot be created means the run has no
+# evidence at all. That must degrade before a single gate runs, not after they have all passed
+# and written nowhere.
+test_gates_unwritable_log_dir_degrades_before_running_anything() {
+  printf 'blocking file
+' > "$TEST_TMPDIR/blocker"
+  run_script run-gates.sh --log-dir "$TEST_TMPDIR/blocker/logs" --gate 'test=true'
+  assert_rc 4
+  assert_key "$OUT" DEGRADED_REASON log-dir-unwritable
+  assert_not_contains "$OUT" "GATE_TEST_EXIT"
+}
+
 test_gates_fail_fast_stops_at_first_failure() {
   run_script run-gates.sh --log-dir "$TEST_TMPDIR/logs" --gate 'boom=exit 7' --gate 'never=true'
   assert_rc 7

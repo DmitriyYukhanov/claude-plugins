@@ -56,6 +56,14 @@ for tf in "$HERE"/contract/test_*.sh; do
       declare -F | awk "{print \$3}" | grep "^test_" | sort
     ' _ "$ASSERT_LIB" "$tf" 2>/dev/null || true
   )
+  # A file that fails to parse yields zero functions, and the loop below then does
+  # nothing at all -- the whole file vanishes from the run while the suite still
+  # prints ALL GREEN. One unbalanced quote used to drop 42 worktree tests silently.
+  if [ "${#fns[@]}" -eq 0 ] || [ -z "${fns[0]:-}" ]; then
+    fail=$((fail + 1))
+    failures="$failures"$'\n'"  $name :: NO TESTS DISCOVERED (parse error?)"
+    continue
+  fi
   for fn in "${fns[@]:-}"; do
     [ -n "${fn:-}" ] || continue
     total=$((total + 1))

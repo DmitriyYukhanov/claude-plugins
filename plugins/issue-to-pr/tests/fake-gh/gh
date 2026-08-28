@@ -18,7 +18,6 @@ scenario=${FAKE_GH_SCENARIO:-happy}
 sub=${1:-}
 
 # Canned identities.
-ME="me-login"
 HEAD_SHA_CURRENT="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 HEAD_SHA_MOVED="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 
@@ -44,86 +43,24 @@ die() { # message exitcode
 }
 
 case "$sub" in
-  auth)
-    # `gh auth status`
-    case "$scenario" in
-      auth-fail)
-        die "You are not logged into any GitHub hosts. Run gh auth login to authenticate." 1
-        ;;
-      scope-missing)
-        cat >&2 <<'EOF'
-github.com
-  + Logged in to github.com account me-login
-  - Token scopes: 'gist', 'read:org', 'repo', 'workflow'
-EOF
-        exit 0
-        ;;
-      *)
-        cat >&2 <<'EOF'
-github.com
-  + Logged in to github.com account me-login
-  - Token scopes: 'gist', 'project', 'read:org', 'repo', 'workflow'
-EOF
-        exit 0
-        ;;
-    esac
-    ;;
-
   api)
-    # `gh api user --jq .login` and graphql. board-sync reads each call through
-    # gh's own --jq, so return the ALREADY-FILTERED value keyed off the query.
-    allargs="$*"
-    if printf '%s' "$allargs" | grep -q 'graphql'; then
-      if printf '%s' "$allargs" | grep -q 'projectItems'; then
-        case "$scenario" in
-          board-not-member) printf '' ;;
-          *) printf 'ITEM_ID\tPROJ_ID\n' ;;
-        esac
-      elif printf '%s' "$allargs" | grep -q 'ProjectV2SingleSelectField'; then
-        case "$scenario" in
-          board-no-field) printf '' ;;
-          *) printf 'FIELD_ID\tIn Progress\tOPT_INPROG\nFIELD_ID\tIn Review\tOPT_INREVIEW\nFIELD_ID\tDone\tOPT_DONE\n' ;;
-        esac
-      elif printf '%s' "$allargs" | grep -q 'updateProjectV2ItemFieldValue'; then
-        case "$scenario" in
-          board-mutation-fail) printf '' ;;
-          *) printf 'UPDATED_ITEM_ID\n' ;;
-        esac
-      elif printf '%s' "$allargs" | grep -q 'addProjectV2DraftIssue'; then
-        case "$scenario" in
-          create-card-fail) printf '' ;;
-          *) printf 'DRAFT_ITEM_ID\n' ;;
-        esac
-      elif printf '%s' "$allargs" | grep -q 'DraftIssue'; then
-        case "$scenario" in
-          convert-draft-missing) printf '' ;;
-          *) printf 'Draft card title\tDraft card body\n' ;;
-        esac
-      elif printf '%s' "$allargs" | grep -q 'reviewThreads'; then
-        case "$scenario" in
-          review-unresolved) printf '2\n' ;;
-          *) printf '0\n' ;;
-        esac
-      else
-        printf '{}\n'
-      fi
-      exit 0
-    fi
-    case "$jqf" in
-      .login) printf '%s\n' "$ME" ;;
-      *) printf '{"login":"%s"}\n' "$ME" ;;
+    # Only `gh api graphql` survives, and only for review_state()'s reviewThreads count.
+    case "$scenario" in
+      review-unresolved) printf '2\n' ;;
+      *) printf '0\n' ;;
     esac
     ;;
 
   repo)
     # `gh repo view --json <f> --jq <filter>`
     case "$jqf" in
-      .owner.login) printf 'octo-owner\n' ;;
-      .name) printf 'demo-repo\n' ;;
       .nameWithOwner) printf 'octo-owner/demo-repo\n' ;;
-      .defaultBranchRef.name) printf 'main\n' ;;
-      # The batched form preflight uses: one call, three fields, one per line.
-      *'.owner.login, .name'*) printf 'octo-owner\ndemo-repo\nmain\n' ;;
+      .defaultBranchRef.name)
+        case "$scenario" in
+          default-branch-unreadable) printf '' ;;
+          *) printf 'main\n' ;;
+        esac
+        ;;
       *) printf '{"owner":{"login":"octo-owner"},"name":"demo-repo","defaultBranchRef":{"name":"main"}}\n' ;;
     esac
     ;;
@@ -131,17 +68,6 @@ EOF
   issue)
     action=${2:-}
     case "$action" in
-      create)
-        # `gh issue create --title ... --body ...`
-        printf 'https://github.com/octo-owner/demo-repo/issues/99\n'
-        ;;
-      edit)
-        # `gh issue edit N --add-assignee @me`
-        case "$scenario" in
-          assign-fail) die "could not assign" 1 ;;
-          *) exit 0 ;;
-        esac
-        ;;
       view)
         [ "$scenario" = issue-unreachable ] && die "issue not found" 1
         case "$jqf" in
@@ -149,65 +75,6 @@ EOF
             case "$scenario" in
               issue-closed) printf 'CLOSED\n' ;;
               *) printf 'OPEN\n' ;;
-            esac
-            ;;
-          .title)
-            case "$scenario" in
-              triage-rich) printf 'Create a new widget service\n' ;;
-              *) printf 'Demo issue\n' ;;
-            esac
-            ;;
-          '.assignees | length' | '.assignees|length')
-            case "$scenario" in
-              assigned-me | assigned-other) printf '1\n' ;;
-              *) printf '0\n' ;;
-            esac
-            ;;
-          '.assignees[].login' | '.assignees[]?.login')
-            case "$scenario" in
-              assigned-me) printf '%s\n' "$ME" ;;
-              assigned-other) printf 'someone-else\n' ;;
-              *) printf '' ;;
-            esac
-            ;;
-          # The batched form preflight uses: state, title and assignees in one call,
-          # one field per line. `backslash-title` carries a Windows path so the tests
-          # can prove the value reaches the caller byte-for-byte.
-          *'.state, .title'*)
-            _st=OPEN; [ "$scenario" = issue-closed ] && _st=CLOSED
-            _ti='Demo issue'
-            [ "$scenario" = triage-rich ] && _ti='Create a new widget service'
-            [ "$scenario" = backslash-title ] && _ti='Fix C:\Users\foo path bug'
-            _as=''
-            case "$scenario" in
-              assigned-me) _as=$ME ;;
-              assigned-other) _as='someone-else' ;;
-            esac
-            printf '%s\n%s\n%s\n' "$_st" "$_ti" "$_as"
-            ;;
-          '.projectItems | length' | '.projectItems|length')
-            case "$scenario" in
-              board-member | board-not-member) printf '1\n' ;;
-              *) printf '0\n' ;;
-            esac
-            ;;
-          .body)
-            case "$scenario" in
-              triage-rich)
-                cat <<'EOF'
-We need to create a new service from scratch.
-- [ ] first task
-- [x] second task
-See src/app.ts and docs/missing-file.md. Related to #12 and #34.
-EOF
-                ;;
-              *) printf 'Issue body text with a reference to src/app.ts and a checklist.\n' ;;
-            esac
-            ;;
-          '.labels[].name' | '.labels[]?.name')
-            case "$scenario" in
-              labeled | triage-rich) printf 'bug\nsecurity\n' ;;
-              *) printf '' ;;
             esac
             ;;
           *) printf '{"state":"OPEN","title":"Demo issue"}\n' ;;
@@ -221,6 +88,17 @@ EOF
     action=${2:-}
     case "$action" in
       list)
+        # `gh pr list --base BRANCH --state open --json number --jq ...` - cleanup asks
+        # whether an open PR is stacked on the branch it is about to delete.
+        if printf '%s' "$*" | grep -q -- '--base'; then
+          case "$scenario" in
+            has-dependent-pr) printf '77\n' ;;
+            # A read that fails is not the same answer as 'no dependents'.
+            dependents-unreadable) exit 1 ;;
+            *) printf '' ;;
+          esac
+          exit 0
+        fi
         # `gh pr list --head BRANCH --json state --jq ...`
         case "$scenario" in
           pr-open) printf 'OPEN\n' ;;
@@ -256,7 +134,7 @@ EOF
         case "$jqf" in
           .state)
             case "$scenario" in
-              pr-merged) printf 'MERGED\n' ;;
+              pr-merged | has-dependent-pr | dependents-unreadable) printf 'MERGED\n' ;;
               pr-open) printf 'OPEN\n' ;;
               pr-closed) printf 'CLOSED\n' ;;
               *) printf 'OPEN\n' ;;
@@ -278,17 +156,21 @@ EOF
               *) printf 'feat/issue-6-x\n' ;;
             esac
             ;;
-          .url) printf 'https://github.com/octo-owner/demo-repo/pull/123\n' ;;
-          .baseRefName) printf 'main\n' ;;
-          .title) printf 'Demo PR title\n' ;;
-          '.mergeCommit.oid')
-            # Return a REAL commit (the current checkout's HEAD) so a test's revert
-            # actually applies; revert-no-merge-commit models an unmerged PR.
+          # The batched form cmd_merge uses: one call, two fields, one per line.
+          *'.url, .baseRefName'*)
+            printf 'https://github.com/octo-owner/demo-repo/pull/123\n'
             case "$scenario" in
-              revert-no-merge-commit) printf '' ;;
-              *) git rev-parse HEAD 2>/dev/null || printf 'cccccccccccccccccccccccccccccccccccccccc\n' ;;
+              stacked-base) printf 'feat/issue-5-parent\n' ;;
+              *) printf 'main\n' ;;
             esac
             ;;
+          .baseRefName)
+            case "$scenario" in
+              stacked-base) printf 'feat/issue-5-parent\n' ;;
+              *) printf 'main\n' ;;
+            esac
+            ;;
+          .title) printf 'Demo PR title\n' ;;
           *) printf '{"state":"OPEN","headRefOid":"%s"}\n' "$HEAD_SHA_CURRENT" ;;
         esac
         ;;
@@ -344,26 +226,8 @@ EOF
       create)
         printf 'https://github.com/octo-owner/demo-repo/pull/123\n'
         ;;
-      checks)
-        case "$scenario" in
-          checks-red) die "some checks failing" 1 ;;
-          *) exit 0 ;;
-        esac
-        ;;
       *) exit 0 ;;
     esac
-    ;;
-
-  project)
-    # `gh project view <num> --owner <login> --format json --jq .id`
-    case "$scenario" in
-      project-missing) printf '' ;;
-      *) printf 'PVT_PROJECT_ID\n' ;;
-    esac
-    ;;
-
-  version)
-    printf 'gh version 2.92.0 (fake)\n'
     ;;
 
   *)

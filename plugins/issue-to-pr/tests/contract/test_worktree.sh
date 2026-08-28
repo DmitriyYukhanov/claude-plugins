@@ -95,6 +95,72 @@ test_wt_merge_happy_path() {
   assert_gh_called "pr merge feat/issue-6-x --squash --match-head-commit"
 }
 
+# A PR stacked on another feature branch merges into THAT branch. GitHub does not close
+# the issue and the work never reaches the default branch, but the run only saw MERGED=true
+# -- and then cleaned up the base underneath it, taking the stacked work with it. Reported
+# now, so Step 11 can refuse to treat it as done.
+test_wt_merge_reports_a_non_default_base() {
+  local repo wt; repo=$(mk_repo); wt=$(mk_worktree "$repo" feat/issue-6-x); cd "$wt"
+  use_fake_gh stacked-base
+  write_receipt "$repo" feat/issue-6-x "$SHA_OK"
+  run_script worktree.sh merge 6 --branch feat/issue-6-x
+  assert_rc 0
+  assert_key "$OUT" MERGED true
+  assert_key "$OUT" MERGED_INTO feat/issue-5-parent
+  assert_key "$OUT" BASE_IS_DEFAULT false
+  assert_contains "$OUT" "WARN_NON_DEFAULT_BASE"
+}
+
+test_wt_merge_into_the_default_base_says_so() {
+  local repo wt; repo=$(mk_repo); wt=$(mk_worktree "$repo" feat/issue-6-x); cd "$wt"
+  use_fake_gh happy
+  write_receipt "$repo" feat/issue-6-x "$SHA_OK"
+  run_script worktree.sh merge 6 --branch feat/issue-6-x
+  assert_key "$OUT" BASE_IS_DEFAULT true
+  assert_not_contains "$OUT" "WARN_NON_DEFAULT_BASE"
+}
+
+# An unreadable default branch used to fall into the same `else` as a confirmed match and
+# report BASE_IS_DEFAULT=true -- a false all-clear on the one key Step 11 gates cleanup on.
+# Not knowing is `unknown`, never `true`.
+test_wt_merge_unknown_base_when_the_default_branch_is_unreadable() {
+  local repo wt; repo=$(mk_repo); wt=$(mk_worktree "$repo" feat/issue-6-x); cd "$wt"
+  use_fake_gh default-branch-unreadable
+  write_receipt "$repo" feat/issue-6-x "$SHA_OK"
+  run_script worktree.sh merge 6 --branch feat/issue-6-x
+  assert_rc 0
+  assert_key "$OUT" MERGED true
+  assert_key "$OUT" BASE_IS_DEFAULT unknown
+}
+
+# Deleting a branch that another open PR is based on strands that PR's work. GitHub only
+# retargets a PR to the default branch once its base is already gone, so the check has to
+# happen here, before the delete, not there.
+test_wt_cleanup_refuses_a_branch_an_open_pr_is_based_on() {
+  local repo wt; repo=$(mk_repo); wt=$(mk_worktree "$repo" feat/issue-6-x); cd "$repo"
+  use_fake_gh has-dependent-pr
+  run_script worktree.sh cleanup 6 --branch feat/issue-6-x
+  assert_rc 2
+  assert_key "$OUT" STOP_REASON base-of-open-pr
+  if ! git -C "$repo" show-ref --verify --quiet refs/heads/feat/issue-6-x; then
+    fail "cleanup deleted a branch an open PR is based on"
+  fi
+}
+
+# And a read that fails is not the answer "no dependents". The first version of this
+# guard swallowed the failure with `|| printf ''`, which made an unreadable list
+# indistinguishable from an empty one -- the exact fail-open shape the guard replaced.
+test_wt_cleanup_stops_when_the_dependents_list_cannot_be_read() {
+  local repo wt; repo=$(mk_repo); wt=$(mk_worktree "$repo" feat/issue-6-x); cd "$repo"
+  use_fake_gh dependents-unreadable
+  run_script worktree.sh cleanup 6 --branch feat/issue-6-x
+  assert_rc 2
+  assert_key "$OUT" STOP_REASON dependents-unreadable
+  if ! git -C "$repo" show-ref --verify --quiet refs/heads/feat/issue-6-x; then
+    fail "cleanup deleted the branch after failing to read whether a PR depends on it"
+  fi
+}
+
 test_wt_merge_squash_disallowed_falls_back_to_merge() {
   local repo wt; repo=$(mk_repo); wt=$(mk_worktree "$repo" feat/issue-6-x); cd "$wt"
   use_fake_gh squash-disallowed
@@ -159,7 +225,13 @@ test_wt_cleanup_happy_removes_and_deletes() {
   assert_rc 0
   assert_key "$OUT" REMOVED true
   assert_key "$OUT" DELETED_LOCAL true
+  # Every fixture in this file builds a bare origin, and until now nothing asserted the
+  # remote branch was ever deleted -- the one thing that remote is here to prove.
+  assert_key "$OUT" DELETED_REMOTE true
   if [ -d "$wt" ]; then fail "worktree dir still exists after cleanup"; fi
+  if git -C "$repo" ls-remote --exit-code --heads origin feat/issue-6-x >/dev/null 2>&1; then
+    fail "the remote branch survived cleanup"
+  fi
 }
 
 test_wt_cleanup_dirty_tracked_stops() {
@@ -169,17 +241,6 @@ test_wt_cleanup_dirty_tracked_stops() {
   run_script worktree.sh cleanup 6 --branch feat/issue-6-x
   assert_rc 2
   assert_key "$OUT" STOP_REASON dirty-tracked-files
-}
-
-test_wt_cleanup_salvages_then_removes() {
-  local repo wt; repo=$(mk_repo); wt=$(mk_worktree "$repo" feat/issue-6-x); cd "$repo"
-  mkdir -p "$repo/.claude/issue-to-pr/runs/task-6"
-  printf '# design\n' >"$repo/.claude/issue-to-pr/runs/task-6/design.md"
-  use_fake_gh pr-merged
-  run_script worktree.sh cleanup 6 --branch feat/issue-6-x --salvage-to "$TEST_TMPDIR/salvage"
-  assert_rc 0
-  assert_key "$OUT" REMOVED true
-  if [ ! -f "$TEST_TMPDIR/salvage/design.md" ]; then fail "design.md not salvaged"; fi
 }
 
 # Regression: cleanup keyed the branch off the raw --branch too. `gh pr view 13` still
@@ -194,35 +255,6 @@ test_wt_cleanup_resolves_pr_number_to_the_branch() {
   if git -C "$repo" show-ref --verify --quiet refs/heads/feat/issue-6-x; then
     fail "cleanup by PR number left the merged branch behind"
   fi
-}
-
-# Regression: a relative --salvage-to was resolved against cwd, so a cleanup run from
-# inside the worktree copied the artifacts into the directory it was about to remove.
-test_wt_cleanup_relative_salvage_resolves_against_the_main_checkout() {
-  local repo wt; repo=$(mk_repo); wt=$(mk_worktree "$repo" feat/issue-6-x)
-  mkdir -p "$repo/.claude/issue-to-pr/runs/task-6"
-  printf '# design\n' >"$repo/.claude/issue-to-pr/runs/task-6/design.md"
-  cd "$wt"
-  use_fake_gh pr-merged
-  run_script worktree.sh cleanup 6 --branch feat/issue-6-x --salvage-to salvaged
-  assert_rc 0
-  if [ ! -f "$repo/salvaged/design.md" ]; then fail "relative salvage did not land in the main checkout"; fi
-  if [ -f "$wt/salvaged/design.md" ]; then fail "salvage landed in the worktree being removed"; fi
-}
-
-# Regression: SALVAGED was emitted after remove_worktree, which flushes the buffer on
-# its way out when the tree is dirty - so a caller whose salvage HAD happened was never
-# told, and had no reason to trust the copies it could not see reported.
-test_wt_cleanup_reports_salvage_even_when_removal_stops() {
-  local repo wt; repo=$(mk_repo); wt=$(mk_worktree "$repo" feat/issue-6-x); cd "$repo"
-  mkdir -p "$repo/.claude/issue-to-pr/runs/task-6"
-  printf '# design\n' >"$repo/.claude/issue-to-pr/runs/task-6/design.md"
-  printf 'changed\n' >>"$wt/README.md" # tracked modification -> removal stops
-  use_fake_gh pr-merged
-  run_script worktree.sh cleanup 6 --branch feat/issue-6-x --salvage-to "$TEST_TMPDIR/salvage"
-  assert_rc 2
-  assert_key "$OUT" STOP_REASON dirty-tracked-files
-  assert_key "$OUT" SALVAGED "$TEST_TMPDIR/salvage"
 }
 
 test_wt_cleanup_in_place_deletes_checked_out_branch() {
@@ -257,25 +289,18 @@ test_wt_cleanup_reports_unregistered_leftover_dir() {
   if [ ! -d "$wt" ]; then fail "unregistered dir must be reported, not deleted"; fi
 }
 
-# ── teardown ────────────────────────────────────────────────────────────────
-test_wt_teardown_removes_but_keeps_branch() {
+# ── cleanup --keep-branch ────────────────────────────────────────────────
+test_wt_cleanup_keep_branch_removes_the_tree_and_keeps_the_branch() {
   local repo wt; repo=$(mk_repo); wt=$(mk_worktree "$repo" feat/issue-6-x); cd "$repo"
-  use_fake_gh happy
-  run_script worktree.sh teardown 6
+  use_fake_gh happy # PR is OPEN: --keep-branch is exempt from the merged precondition
+  run_script worktree.sh cleanup 6 --branch feat/issue-6-x --keep-branch
   assert_rc 0
   assert_key "$OUT" REMOVED true
   assert_key "$OUT" KEPT branch-and-pr
   if ! git -C "$repo" show-ref --verify --quiet refs/heads/feat/issue-6-x; then
-    fail "teardown must not delete the branch"
+    fail "--keep-branch must not delete the branch"
   fi
-}
-
-test_wt_teardown_in_place_when_no_worktree() {
-  local repo; repo=$(mk_repo); cd "$repo"
-  use_fake_gh happy
-  run_script worktree.sh teardown 6
-  assert_rc 0
-  assert_key "$OUT" KEPT in-place
+  assert_gh_not_called "pr list"
 }
 
 # -- merge-failure ladder (sec 6.3) ------------------------------------------
@@ -343,7 +368,7 @@ test_wt_merge_behind_clean_asks_for_gates() {
   assert_key "$OUT" LADDER_STEP base-merged-clean
   assert_key "$OUT" STOP_REASON gates-unverified
   assert_gh_called "pr update-branch"
-  if printf '%s' "$(gh_log)" | grep -q 'pr merge'; then fail "merged a head no receipt covers"; fi
+  assert_gh_not_called "pr merge" "merged a head no receipt covers"
 }
 
 test_wt_merge_behind_unverified_stops() {
@@ -383,31 +408,70 @@ test_wt_merge_clean_passes_precheck() {
   run_script worktree.sh merge 6 --branch feat/issue-6-x
   assert_rc 0
   assert_key "$OUT" MERGED true
+  assert_gh_not_called "pr update-branch" "a CLEAN read must not take the behind-base branch"
 }
 
-# -- draft revert (sec 6.5) --------------------------------------------------
-test_wt_revert_opens_draft_pr_never_merges() {
-  local repo wt; repo=$(mk_repo); wt=$(mk_worktree "$repo" feat/issue-6-x); cd "$repo"
-  # Land the PR's change as a SQUASH (single-parent) commit on main so there is a
-  # normal commit to revert (a real squash-merge is never a 2-parent merge commit).
-  git -C "$repo" merge -q --squash feat/issue-6-x
-  git -C "$repo" commit -qm 'squash: feat/issue-6-x'
-  git -C "$repo" push -q origin main
-  use_fake_gh happy
-  run_script worktree.sh revert 6 --branch feat/issue-6-x
-  assert_rc 0
-  assert_key_present "$OUT" REVERT_PR_URL
-  assert_key_present "$OUT" REVERT_BRANCH
-  assert_gh_called "pr create --draft"
-  assert_gh_not_called "pr merge"
-}
-
-test_wt_revert_no_merge_commit_degrades() {
-  local repo wt; repo=$(mk_repo); wt=$(mk_worktree "$repo" feat/issue-6-x); cd "$repo"
-  use_fake_gh revert-no-merge-commit
-  run_script worktree.sh revert 6 --branch feat/issue-6-x
+# The argument and environment degrades. Each is three lines of guard that nothing exercised,
+# and without them `set -u` decides what happens instead of the script.
+test_wt_no_subcommand_degrades() {
+  local repo; repo=$(mk_repo); cd "$repo"
+  run_script worktree.sh
   assert_rc 4
-  assert_key "$OUT" DEGRADED_REASON no-merge-commit
+  assert_key "$OUT" DEGRADED_REASON missing-subcommand
+}
+
+test_wt_unknown_subcommand_degrades() {
+  local repo; repo=$(mk_repo); cd "$repo"
+  run_script worktree.sh frobnicate 6 --branch feat/issue-6-x
+  assert_rc 4
+  assert_key "$OUT" DEGRADED_REASON unknown-subcommand
+}
+
+test_wt_ensure_without_a_start_point_degrades() {
+  local repo; repo=$(mk_repo); cd "$repo"
+  run_script worktree.sh ensure 6 --branch feat/issue-6-x
+  assert_rc 4
+  assert_key "$OUT" DEGRADED_REASON missing-start-point
+}
+
+# Run from a directory that is not a checkout at all. The guard reads better than whatever
+# `git -C ""` would do downstream.
+test_wt_outside_a_repository_degrades() {
+  mkdir -p "$TEST_TMPDIR/bare-ground"
+  cd "$TEST_TMPDIR/bare-ground"
+  use_fake_gh happy
+  run_script worktree.sh merge 6 --branch feat/issue-6-x
+  assert_rc 4
+  assert_key "$OUT" DEGRADED_REASON not-a-git-repo
+}
+
+# The last arm of the merge dispatch is what reports a failure gh gave no recognised reason for.
+# It had no test, so a mutation turning it into `:` left the run reporting a merge that never
+# happened - the one outcome the whole gate exists to make impossible.
+test_wt_merge_unrecognised_gh_failure_stops_and_reports_it() {
+  local repo wt; repo=$(mk_repo); wt=$(mk_worktree "$repo" feat/issue-6-x); cd "$wt"
+  use_fake_gh protected
+  write_receipt "$repo" feat/issue-6-x "$SHA_OK"
+  run_script worktree.sh merge 6 --branch feat/issue-6-x
+  assert_rc 2
+  assert_key "$OUT" STOP_REASON merge-failed
+  # The raw text too: a stop naming no cause sends the reader back to GitHub to guess.
+  assert_contains "$OUT" "Protected branch update failed"
+  assert_not_contains "$OUT" "MERGED=true"
+}
+
+# Same shape one step earlier: `git worktree add` can fail for a reason the classifier does not
+# name, and an unclassified failure must stop rather than fall through to the resume path.
+test_wt_ensure_unclassified_add_failure_stops() {
+  local repo; repo=$(mk_repo); cd "$repo"
+  # The worktrees sibling directory cannot be created: a regular file already sits there.
+  printf 'not a directory
+' > "$(dirname "$repo")/$(basename "$repo")-worktrees"
+  use_fake_gh happy
+  run_script worktree.sh ensure 6 --branch feat/issue-6-x --start-point main
+  assert_rc 2
+  assert_key "$OUT" STOP_REASON worktree-add-failed
+  assert_key_present "$OUT" ADD_ERROR
 }
 
 # ── v3 run-dir + argument safety ────────────────────────────────────────────
@@ -426,16 +490,6 @@ test_wt_non_numeric_issue_degrades_before_any_path_is_built() {
 
 
 
-# Regression: salvage_artifacts set SALVAGED on mkdir alone, so teardown reported a
-# salvage that copied nothing — and that report is what makes deleting originals feel safe.
-test_wt_salvage_reports_nothing_when_it_copied_nothing() {
-  local repo wt; repo=$(mk_repo); wt=$(mk_worktree "$repo" feat/issue-6-x)
-  cd "$repo"
-  use_fake_gh happy
-  run_script worktree.sh teardown 6 --salvage-to "$repo/docs/design"
-  assert_key "$OUT" SALVAGED ""
-}
-
 # 2.11.0: the gates were "hard" only because the model ran them. run-gates.sh now
 # leaves a receipt naming the HEAD it ran against, and the merge refuses a head no
 # receipt covers - including the one case that used to slip through, a green run
@@ -446,7 +500,7 @@ test_wt_merge_without_a_receipt_stops() {
   run_script worktree.sh merge 6 --branch feat/issue-6-x
   assert_rc 2
   assert_key "$OUT" STOP_REASON gates-unverified
-  if printf '%s' "$(gh_log)" | grep -q 'pr merge'; then fail "merged with no gate receipt"; fi
+  assert_gh_not_called "pr merge" "merged with no gate receipt"
 }
 
 test_wt_merge_with_a_receipt_for_another_head_stops() {
@@ -468,7 +522,7 @@ test_wt_merge_stops_on_a_changes_requested_review() {
   run_script worktree.sh merge 6 --branch feat/issue-6-x
   assert_rc 2
   assert_key "$OUT" STOP_REASON review-blocked
-  if printf '%s' "$(gh_log)" | grep -q 'pr merge'; then fail "merged over a requested change"; fi
+  assert_gh_not_called "pr merge" "merged over a requested change"
 }
 
 test_wt_merge_stops_when_the_review_cannot_be_read() {
@@ -478,7 +532,7 @@ test_wt_merge_stops_when_the_review_cannot_be_read() {
   run_script worktree.sh merge 6 --branch feat/issue-6-x
   assert_rc 2
   assert_key "$OUT" STOP_REASON review-unreadable
-  if printf '%s' "$(gh_log)" | grep -q 'pr merge'; then fail "merged on an unread review"; fi
+  assert_gh_not_called "pr merge" "merged on an unread review"
 }
 
 # The head SHA is read once and used for both the receipt check and
@@ -491,7 +545,7 @@ test_wt_merge_unreadable_head_stops() {
   run_script worktree.sh merge 6 --branch feat/issue-6-x
   assert_rc 2
   assert_key "$OUT" STOP_REASON pr-head-unreadable
-  if printf '%s' "$(gh_log)" | grep -q 'pr merge'; then fail "merged without knowing the head"; fi
+  assert_gh_not_called "pr merge" "merged without knowing the head"
 }
 
 # 3.0.1: with the approval sweep gone, cleanup is the only thing that prunes state.

@@ -1,40 +1,20 @@
-# Autonomy — ask contract, ledger, and state (spec sec 5.1 + 5.5)
+# Autonomy — the ask contract and the ledger
 
 The pipeline decides what it reasonably can on its own, records every decision, and
-surfaces the automatic ones where the human already looks (the report and the PR body).
+surfaces the automatic ones where the human already looks: the report and the PR body.
 
 ## Ask contract — three moments, plus one the user asks for
 
 Contact the user at these three points, and at a fourth only if asked (below):
-1. **Step 4.5 checkpoint** — ONE batched `AskUserQuestion`, only if the ledger has open
+
+1. **Step 4 checkpoint** — ONE batched `AskUserQuestion`, only if the ledger has open
    `asked` items. This is the single mid-run question.
-2. **The merge gate** (Step 11) — always.
+2. **The merge gate** (Step 10) — always.
 3. **A hard stop** — an exit-2 with no safe default (e.g. `WARN_CLAIMED_BY`, a
    gate-critical unknown).
 
-**A fourth moment exists only when the run was started with `--drill`.** Every other rule here
-saves the user's time; this one spends it, because they asked to understand the design while it
-can still change.
-
-Step 4 writes `<RUN_DIR>/design.md` for a `--drill` run at any tier, including trivial. Without
-that the flag is inert on the two commonest tiers: standard keeps its mini-design in the PR body,
-which does not exist until Step 9, and trivial designs nothing at all.
-
-At Step 4.5, before the batched question, hand that file to `/drill:me`. There is no return
-value to collect: the drill runs in this session, so **you** append each objection to the run's
-`state.json.ledger[]` as an `asked` item the moment it is raised. Not at the end — a tutoring
-session is long enough to compact this context, and an objection that lives only in the
-conversation is gone when it does. Note also that drill keeps a "ledger" of its own in
-`~/.drill-me/`; that one is not yours.
-
-The batched question then carries what the drill raised. A `--drill` run asks it even when the
-ledger is empty, since "no open items" after a drill means the design was never put to them.
-
-With the flag and no `drill` plugin installed, say so once, hand over `<RUN_DIR>/design.md` to
-read, and ask for objections in that same batched question — never silently skip what was
-asked for.
-
 A question is for the user (`kind: asked`) only when it is:
+
 - **preference-bound** — public API naming, user-visible UX/copy, paid/external
   resources, a new external dependency or license, or a breaking API/schema change; or
 - **gate-critical unresolvable** — no test command is detectable, so the gates cannot run.
@@ -43,43 +23,20 @@ Everything else is decided autonomously (`kind: auto`) and logged. Forbidden: pr
 past the checkpoint with a gate-critical unknown; asking mid-implementation anything that
 fits moment (1).
 
+## The fourth moment: `--drill`
+
+Append each objection to the ledger **as it is raised**, never in a batch at the end: a
+tutoring session is long enough for the context to compact, and a decision that lived only
+in the drill's transcript is gone when it does.
+
 ## Ledger
 
-`state.json.ledger[]`, each `{question, decision, rationale, kind: asked|auto}`, appended
-**immediately, before the next tool call** (so a compaction can't lose a decision). Render
-the `auto` entries as a **"Decisions made autonomously"** section in the Step 10 report AND
+Keep one entry per judgment call: `{question, decision, rationale, kind: asked|auto}`,
+written down **before the next tool call**, so a compaction cannot lose it. Render the
+`auto` entries as a **"Decisions made autonomously"** section in the Step 9 report AND
 the PR body — the human reviews them at the merge gate they already attend.
 
-## state.json (schema v1) + step.log
+## Resume after an interruption
 
-`<RUN_DIR>/state.json` and the append-only `<RUN_DIR>/step.log`. **Both are yours** —
-no script writes either one. After each side-effecting call, append one flat `KEY=VALUE`
-line to `step.log` naming the step and the keys you got back, then update `state.json`.
-Doing the cheap write first is what makes the log the tie-breaker below: an append cannot
-half-apply, while an `Edit` against a JSON document full of repeated `{done,at}` fragments
-can land on the wrong one.
-
-```json
-{ "schema_version": 1, "issue": 7, "tier": "standard", "branch": "…", "wt_path": "…",
-  "original_root": "…", "base": "dev", "start_point": "origin/dev",
-  "cmds": {"typecheck": "…", "test": "…", "visual": null, "smoke": null},
-  "board": {"project_id": "…", "item_id": "…", "field_id": "…", "options": {…}},
-  "steps": {"preflight": {"done": true, "at": "…"}, "…": {}},
-  "ledger": [{"question": "…", "decision": "…", "rationale": "…", "kind": "auto"}],
-  "metrics": {"gate_runs": 3, "gate_fail_streak": {}, "confirmed_bugs_this_pass": 0,
-    "review_passes": 2, "review_level": "medium", "design_panel_ran": false,
-    "simplify_passes": 1, "started_at": "…"} }
-```
-
-- `tier` is written after Step 2 (null/pending before that).
-- **metrics** is the telemetry the Step 10 report prints so the owner can confirm the tier
-  scaled the work (which machinery fired, review level/passes, a rough spend proxy).
-
-## Resume after compaction
-
-Read `state.json`. If it is absent OR does not parse, treat it as absent and fall back to
-re-running preflight + reading `progress.md` + `step.log`. Otherwise cross-check each
-`steps.<name>.done` against a matching `step.log` line — **the log wins on a mismatch** —
-re-verify cheap outcomes (PR state via `gh pr view`), and jump to the first incomplete step.
-Anchor every `Edit` against state.json on the step name (or another unique key); prefer a
-whole-file `Write` when uniqueness is uncertain (the schema has repeated `{done,at}` fragments).
+`git status`, `gh pr view` and the gate logs under `<RUN_DIR>/logs` answer where the run
+stopped. Trust them over recollection — they are what the outside world actually shows.

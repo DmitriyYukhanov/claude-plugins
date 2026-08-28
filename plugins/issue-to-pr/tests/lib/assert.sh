@@ -44,11 +44,14 @@ assert_not_contains() { # haystack needle [msg]
 # assert_key OUTPUT KEY EXPECTED [msg] - assert a `KEY=EXPECTED` line is present.
 assert_key() {
   local out=$1 key=$2 exp=$3 msg=${4:-assert_key}
-  local line val
-  line=$(printf '%s\n' "$out" | grep -m1 "^${key}=") || {
+  local line val found=0
+  while IFS= read -r line; do
+    case "$line" in "$key="*) found=1; break ;; esac
+  done <<<"$out"
+  if [ "$found" = 0 ]; then
     printf '  ASSERT FAILED: %s\n    key not found: %s\n    output:\n%s\n' "$msg" "$key" "$out" >&2
     exit 1
-  }
+  fi
   val=${line#*=}
   if [ "$val" != "$exp" ]; then
     printf '  ASSERT FAILED: %s\n    key: %s\n    expected: [%s]\n    actual:   [%s]\n' \
@@ -59,7 +62,11 @@ assert_key() {
 
 # assert_key_present OUTPUT KEY [msg]
 assert_key_present() {
-  if ! printf '%s\n' "$1" | grep -q "^${2}="; then
+  local line found=0
+  while IFS= read -r line; do
+    case "$line" in "$2="*) found=1; break ;; esac
+  done <<<"$1"
+  if [ "$found" = 0 ]; then
     printf '  ASSERT FAILED: %s\n    key not present: %s\n    output:\n%s\n' \
       "${3:-assert_key_present}" "$2" "$1" >&2
     exit 1
@@ -84,29 +91,20 @@ fail() { # msg
 
 # run_script SCRIPT ARGS... - run scripts/SCRIPT, capture stdout->OUT, stderr->ERR,
 # exit code->RC. Never aborts the test on a non-zero exit (that is the assertion's
-# job). SCRIPT is a path relative to $ITP_SCRIPTS (e.g. "preflight.sh").
+# job). SCRIPT is a path relative to $ITP_SCRIPTS (e.g. "worktree.sh").
 run_script() {
   local script=$1
   shift
-  local errf
-  errf=$(mktemp)
+  local errf="$TEST_TMPDIR/.stderr"
   OUT=$(bash "$ITP_SCRIPTS/$script" "$@" 2>"$errf")
   RC=$?
-  ERR=$(cat "$errf")
-  rm -f "$errf"
+  ERR=$(<"$errf")
   export OUT ERR RC
 }
 
-# run_guard STDIN_JSON - feed hook JSON to merge-guard.sh on stdin; sets OUT/RC.
-run_guard() {
-  local errf
-  errf=$(mktemp)
-  OUT=$(printf '%s' "$1" | bash "$ITP_SCRIPTS/merge-guard.sh" 2>"$errf")
-  RC=$?
-  ERR=$(cat "$errf")
-  rm -f "$errf"
-  export OUT ERR RC
-}
+# run_guard STDIN_JSON - feed hook JSON to merge-guard.sh on stdin; sets OUT/ERR/RC.
+# Command substitution inherits stdin, so the herestring reaches the hook's `input=$(cat)`.
+run_guard() { run_script merge-guard.sh <<<"$1"; }
 
 # -- fake-gh control ---------------------------------------------------------
 

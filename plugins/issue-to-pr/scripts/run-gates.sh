@@ -14,7 +14,9 @@
 # Argument misuse still exits 4 (degraded).
 set -uo pipefail
 
-SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# No fork: every caller (hooks.json, the tests, contracts.md) invokes this by a path
+# with a slash in it, and the value is only ever used to source the line below.
+SCRIPT_DIR=${BASH_SOURCE[0]%/*}
 # shellcheck source=lib/common.sh
 source "$SCRIPT_DIR/lib/common.sh"
 
@@ -102,7 +104,7 @@ if [ "$gates_ok" = true ]; then
   receipt_branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || printf '')
   receipt_head=$(git rev-parse HEAD 2>/dev/null || printf '')
   if [ -n "$receipt_root" ] && [ -n "$receipt_branch" ] && [ -n "$receipt_head" ]; then
-    if receipt_write "$(receipt_path "$receipt_root" "$receipt_branch")"       "$receipt_branch" "$receipt_head" "$(join_by , "${gate_names[@]}")" "$(now_iso)"; then
+    if receipt_write "$(receipt_path "$receipt_root" "$receipt_branch")"       "$receipt_branch" "$receipt_head" "$(IFS=,; printf %s "${gate_names[*]}")" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"; then
       emit GATES_RECEIPT "$receipt_head"
     fi
   fi

@@ -131,15 +131,14 @@ Drive a single GitHub issue from triage to a merge-ready pull request through a 
 
 - One flow for a **bare issue** or a **card on a GitHub Projects (v2) board** — Step 0 resolves the input and decides whether board-status sync applies.
 - Each run works in its own `../<repo>-worktrees/issue-<N>` git worktree, so concurrent local agents on different issues never clash.
-- Hard gates that block forward progress: design hardening (cross-review or a multi-agent fallback), tests green (typecheck + tests, plus visual checks for UI), and a code-review loop that runs until clean, capped by tier at one to three passes (per child on epics).
-- Scales the work to the task's **tier** (trivial through epic): research depth, design (an autonomous design panel for complex work), review level, and report length all size to the issue — and it asks **at most one batched question**, deciding everything else itself and surfacing those decisions in the report and PR.
-- Takes on more than a single issue: a plain request with no number is drafted into an issue and run; a from-scratch, **epic**-sized request is decomposed into dependency-ordered child issues, each shipped through its own gated PR; and after a merge, an optional smoke check on the base opens a *draft* revert PR (never an automatic rollback) if the change broke something.
+- Hard gates that block forward progress: design hardening (cross-review or a multi-agent fallback), tests green (typecheck + tests, plus visual checks for UI), and a code-review loop that runs until clean, capped by tier at one to three passes.
+- Scales the work to the task's **tier** (trivial, standard, complex): research depth, design (an autonomous design panel for complex work), review level, and report length all size to the issue — and it asks **at most one batched question**, deciding everything else itself and surfacing those decisions in the report and PR.
+- Takes on more than a single issue: a plain request with no number is drafted into an issue and run; and after a merge, an optional smoke check on the base opens a *draft* revert PR (never an automatic rollback) if the change broke something.
 - A robust merge gate: it reads any GitHub review first (a changes-requested review or an unresolved thread reroutes as a change request), and a behind-base PR is updated and re-checked automatically — but re-merged without asking again only when the base merge left the PR's own diff untouched.
-- Opens the PR and stops; once you approve it in-session it squash-merges, then deletes the branch, tears down the worktree, and clears the run's temp artifacts (keeping anything important).
-- The PR auto-links the issue (`Closes #N`) to close on merge; board cards advance to *in-progress* at branch cut and *in-review* at PR open, with `Done` left to GitHub's merge-time automation.
+- Opens the PR and stops; once you approve it in-session it squash-merges. Cleanup follows only when the change landed in the default branch: on any other base, or when the landing branch cannot be confirmed, the branch and worktree are kept and the run says why.
+- The PR auto-links the issue (`Closes #N`), which GitHub closes on a merge into the default branch; board cards advance to *in-progress* at branch cut and *in-review* at PR open, with `Done` left to GitHub's merge-time automation.
 - Graceful by default — missing the `project` token scope degrades to link-only, and a failed status write never blocks the PR.
-- The `/issue-to-pr:tune` skill reads the friction log that runs leave behind and turns it into batched improvements to the pipeline.
-- Optional `.claude/issue-to-pr/config.md` for board URL, base branch, and test commands (auto-detected when unset); companion skills (`superpowers:*`, `/deep-research`, `/cross-review`, `humanizer`, `/code-review`) used if installed, with inline fallbacks otherwise.
+- Optional `.claude/issue-to-pr/config.md` for board URL, base branch, and test commands (auto-detected when unset); companion skills (`superpowers:*`, `/deep-research`, `/cross-review`, `humanizer`, `ponytail:*`) used if installed, with inline fallbacks otherwise.
 
 [View documentation](./plugins/issue-to-pr/README.md)
 
