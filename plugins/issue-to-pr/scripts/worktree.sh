@@ -6,17 +6,16 @@
 #
 #   worktree.sh ensure   <N> --branch <b> --start-point <ref>
 #   worktree.sh merge    <N> --branch <b> [--ladder-attempt <n>]
-#   worktree.sh cleanup  <N> --branch <b> [--salvage-to <dir>]
-#   worktree.sh teardown <N>              [--salvage-to <dir>]
-#   worktree.sh revert   <N> --branch <b>            # draft revert PR (sec 6.5)
+#   worktree.sh cleanup  <N> --branch <b> [--keep-branch]
 #
 # Exit: 0 proceed | 2 stop-and-ask (STOP_REASON=) | 3 permission fallback
 # (cut/keep the branch in place) | 4 degraded. `merge` is the ONLY path that
-# runs `gh pr merge`; the model must never call it directly. `revert` NEVER
-# merges - it only opens a draft PR for the human to decide on.
+# runs `gh pr merge`; the model must never call it directly.
 set -uo pipefail
 
-SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# No fork: every caller (hooks.json, the tests, contracts.md) invokes this by a path
+# with a slash in it, and the value is only ever used to source the line below.
+SCRIPT_DIR=${BASH_SOURCE[0]%/*}
 # shellcheck source=lib/common.sh
 source "$SCRIPT_DIR/lib/common.sh"
 
@@ -26,21 +25,22 @@ shift || true
 issue=""
 branch=""
 start_point=""
-salvage_to=""
+keep_branch=0
 ladder_attempt=1
 LADDER_CAP=3
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --branch) branch=${2:-}; shift 2 2>/dev/null || shift "$#" ;;
     --start-point) start_point=${2:-}; shift 2 2>/dev/null || shift "$#" ;;
-    --salvage-to) salvage_to=${2:-}; shift 2 2>/dev/null || shift "$#" ;;
+    --keep-branch) keep_branch=1; shift ;;
     --ladder-attempt) ladder_attempt=${2:-1}; shift 2 2>/dev/null || shift "$#" ;;
     -*) warn "worktree: ignoring unknown flag: $1"; shift ;;
     *) [ -z "$issue" ] && issue=$1; shift ;;
   esac
 done
 
-[ -n "$subcmd" ] || degrade missing-subcommand "worktree: subcommand required (ensure|merge|cleanup|teardown)"
+[ -n "$subcmd" ] || degrade missing-subcommand "worktree: subcommand required (ensure|merge|cleanup)"
+[ -n "$branch" ] || degrade missing-branch "worktree: --branch required"
 [ -n "$issue" ] || degrade missing-issue "worktree: issue number required"
 assert_numeric_issue "$issue" worktree
 
@@ -86,41 +86,6 @@ is_pure_base_merge() {
   d_old=$(git diff "$base...$old" 2>/dev/null) || return 1
   d_new=$(git diff "$base...$new" 2>/dev/null) || return 1
   [ "$d_old" = "$d_new" ]
-}
-
-detect_deps() { # dir -> sets INSTALL_HINT
-  local d=$1
-  if [ -f "$d/pnpm-lock.yaml" ]; then INSTALL_HINT='pnpm install'
-  elif [ -f "$d/yarn.lock" ]; then INSTALL_HINT='yarn install'
-  elif [ -f "$d/package-lock.json" ] || [ -f "$d/package.json" ]; then INSTALL_HINT='npm install'
-  elif [ -f "$d/requirements.txt" ]; then INSTALL_HINT='pip install -r requirements.txt'
-  elif [ -f "$d/pyproject.toml" ]; then INSTALL_HINT='pip install -e .'
-  elif [ -f "$d/Cargo.toml" ]; then INSTALL_HINT='cargo fetch'
-  elif [ -f "$d/go.mod" ]; then INSTALL_HINT='go mod download'
-  else INSTALL_HINT=''
-  fi
-}
-
-# salvage_artifacts wt salvage_dir issue root -> sets SALVAGED. Reports a destination
-# only when something actually landed in it: claiming a salvage that copied nothing is
-# what makes the caller comfortable deleting the originals.
-#
-# A relative destination is resolved against the MAIN CHECKOUT, never cwd: both callers
-# are commonly run from inside the worktree, so a cwd-relative dir would be created in
-# the one directory the very next step deletes - the salvage would be reported and then
-# thrown away with the tree it was rescuing files from.
-salvage_artifacts() {
-  SALVAGED=""
-  local wt=$1 dst=$2 n=$3 root=$4 f src copied=0
-  [ -n "$dst" ] || return 0
-  dst=$(resolve_under "$root" "$dst")
-  mkdir -p "$dst" 2>/dev/null || return 0
-  for f in design.md progress.md state.json step.log; do
-    src="$(run_dir "$root" "$n")/$f"
-    if [ -f "$src" ]; then cp "$src" "$dst/" 2>/dev/null && copied=$((copied + 1)); fi
-  done
-  [ "$copied" -gt 0 ] && SALVAGED=$dst
-  return 0
 }
 
 # remove_worktree wt root issue -> sets REMOVED and (on a stubborn dir) LEFTOVER.
@@ -178,7 +143,6 @@ remove_worktree() {
 # -- subcommands --------------------------------------------------------------
 
 cmd_ensure() {
-  [ -n "$branch" ] || degrade missing-branch "worktree ensure: --branch required"
   [ -n "$start_point" ] || degrade missing-start-point "worktree ensure: --start-point required"
 
   local root reg wt_path add_out state actual_branch
@@ -232,12 +196,10 @@ cmd_ensure() {
     actual_branch=$branch
   fi
 
-  detect_deps "$wt_path"
   emit WT_PATH "$wt_path"
   emit ORIGINAL_ROOT "$root"
   emit STATE "$state"
   emit BRANCH "$actual_branch"
-  emit INSTALL_HINT "$INSTALL_HINT"
   done_ok
 }
 
@@ -261,6 +223,10 @@ handle_add_error() {
       stop invalid-start-point "start-point '$start_point' is not a valid ref"
       ;;
     *"Permission denied"* | *"permission denied"* | *"Operation not permitted"*)
+      # The one branch in this file with no test: provoking a real permission-denied
+      # `worktree add` needs a fixture that behaves the same on Linux and Windows, and
+      # chmod does not. Kept because deleting it turns a graceful in-place fallback
+      # (exit 3) into a stop-and-ask.
       fallback worktree-permission-denied "cannot create a worktree here - cut the branch in place: git switch -c $branch $start_point"
       ;;
     *)
@@ -271,7 +237,6 @@ handle_add_error() {
 }
 
 cmd_merge() {
-  [ -n "$branch" ] || degrade missing-branch "worktree merge: --branch required"
   [ "$ladder_attempt" -le "$LADDER_CAP" ] || stop merge-ladder-exhausted "the merge ladder retried $LADDER_CAP times without landing $branch. Resolve the PR state on GitHub by hand, then re-approve."
   local root cur_sha
   root=$(repo_root)
@@ -375,7 +340,9 @@ cmd_merge() {
     # One immediate retry; if still pending, hand back. The bounded watch loop is
     # session-owned (references/merge-ladder.md): the model waits with gh pr checks
     # --watch up to CHECKS_TIMEOUT, then re-runs merge - the approval stays valid.
-    if ! merge_out=$(gh pr merge "$branch" --squash 2>&1); then
+    # The retry carries --match-head-commit too: it is the only thing standing between
+    # a push landing in this window and a merge of a head no gate receipt covers.
+    if ! merge_out=$(gh pr merge "$branch" --squash --match-head-commit "$cur_sha" 2>&1); then
       stop checks-pending "required checks are still pending on $branch. Watch them to green (references/merge-ladder.md), then re-run merge - the approval stays valid."
     fi
   else
@@ -383,10 +350,33 @@ cmd_merge() {
     stop merge-failed "gh pr merge failed - see MERGE_ERROR"
   fi
 
-  local issue_state pr_url
+  local issue_state pr_url base_ref default_ref _pr_fields
   issue_state=$(gh issue view "$issue" --json state --jq .state 2>/dev/null || printf '')
-  pr_url=$(gh pr view "$branch" --json url --jq .url 2>/dev/null || printf '')
   emit MERGED true
+
+  # WHERE it merged, not just that it did: a PR stacked on another feature branch
+  # merges into that branch, leaving the issue open and the work off the default one.
+  # One call for both fields, one field per line - the same batching preflight's repo
+  # read uses, and for the same reason.
+  mapfile -t _pr_fields < <(gh pr view "$branch" --json url,baseRefName --jq '.url, .baseRefName' 2>/dev/null)
+  pr_url=${_pr_fields[0]:-}
+  base_ref=${_pr_fields[1]:-}
+  # Asked of the API, not of `refs/remotes/origin/HEAD`: that ref mirrors whatever the
+  # source repo's HEAD was at clone time (often some feature branch) and may not be set
+  # at all. A fast wrong answer defeats the whole point of this signal.
+  default_ref=$(gh repo view --json defaultBranchRef --jq .defaultBranchRef.name 2>/dev/null || printf '')
+  emit MERGED_INTO "$base_ref"
+  # Fails CLOSED, like the review read above: a ref that did not come back is `unknown`,
+  # never `true`. Reporting "this reached the default branch" on the run that could not
+  # find out is the exact false all-clear this block exists to prevent.
+  if [ -z "$base_ref" ] || [ -z "$default_ref" ]; then
+    emit BASE_IS_DEFAULT unknown
+  elif [ "$base_ref" != "$default_ref" ]; then
+    emit BASE_IS_DEFAULT false
+    emit WARN_NON_DEFAULT_BASE "merged into '$base_ref', not '$default_ref' - the issue stays open and this work has NOT reached the default branch"
+  else
+    emit BASE_IS_DEFAULT true
+  fi
   emit MERGE_METHOD "$merge_method"
   emit ISSUE_STATE "$issue_state"
   emit PR_URL "$pr_url"
@@ -394,7 +384,6 @@ cmd_merge() {
 }
 
 cmd_cleanup() {
-  [ -n "$branch" ] || degrade missing-branch "worktree cleanup: --branch required"
   local root wt_path pr_state
   root=$(repo_root)
   [ -n "$root" ] || degrade not-a-git-repo "worktree cleanup: not inside a git repository"
@@ -406,19 +395,25 @@ cmd_cleanup() {
   branch=$(canonical_branch "$branch")
 
   # Hard precondition: the PR must be MERGED. Deleting an open PR's branch is
-  # thereby mechanically impossible.
-  pr_state=$(gh pr view "$branch" --json state --jq .state 2>/dev/null || printf '')
-  [ "$pr_state" = MERGED ] || stop pr-not-merged "PR for $branch is '${pr_state:-unknown}', not MERGED - refusing cleanup"
+  # thereby mechanically impossible. --keep-branch deletes nothing, so it is exempt.
+  if [ "$keep_branch" -eq 0 ]; then
+    pr_state=$(gh pr view "$branch" --json state --jq .state 2>/dev/null || printf '')
+    [ "$pr_state" = MERGED ] || stop pr-not-merged "PR for $branch is '${pr_state:-unknown}', not MERGED - refusing cleanup"
+
+    # A branch that is the BASE of an open PR must survive: deleting it strands that
+    # PR's work. GitHub only retargets a PR to the default branch when its base is
+    # already gone, so this is the check that has to happen first, not GitHub's.
+    # Fails CLOSED, like the review read at the merge: a list that does not come back
+    # is not evidence that there are no dependents, and the delete is irreversible.
+    local dependents
+    dependents=$(gh pr list --base "$branch" --state open --json number --jq '[.[].number] | join(", ")' 2>/dev/null) ||
+      stop dependents-unreadable "could not read whether an open PR is based on $branch - check on GitHub, then delete the branch by hand"
+    [ -z "$dependents" ] || stop base-of-open-pr "$branch is the base of open PR(s) $dependents - retarget or merge them before deleting it"
+  fi
 
   local reg
   reg=$(registered_wt "$issue")
   wt_path=${reg:-$(compute_wt_path "$root" "$issue")}
-
-  # Salvage lasting artifacts before the worktree (and its gitignored files) go.
-  salvage_artifacts "$wt_path" "$salvage_to" "$issue" "$root"
-  # Reported BEFORE the removal, which flushes the buffer on its way out when the tree
-  # is dirty: a caller whose salvage DID happen would otherwise never be told about it.
-  emit SALVAGED "${SALVAGED:-}"
 
   # Get out of the worktree before removing it.
   cd "$root" 2>/dev/null || true
@@ -430,6 +425,12 @@ cmd_cleanup() {
   remove_worktree "$wt_path" "$root" "$issue"
 
   local deleted_local=false deleted_remote=false
+  if [ "$keep_branch" -eq 1 ]; then
+    emit REMOVED "$REMOVED"
+    emit KEPT branch-and-pr
+    [ -n "$LEFTOVER" ] && emit LEFTOVER_DIR "$LEFTOVER"
+    done_ok
+  fi
   # In-place mode (no worktree): the branch may be checked out in root, and a
   # checked-out branch can't be deleted. Move root off it first - to the default
   # branch when known, else detach HEAD.
@@ -454,8 +455,7 @@ cmd_cleanup() {
   # else prunes them since the approval sweep went with the marker in 3.0.0, and a
   # state directory that only ever grows is how the old markers piled up.
   rm -f "$(receipt_path "$root" "$branch")" 2>/dev/null
-  # The run's own files go the same way. Salvage above already copied out anything
-  # the user asked to keep, and the design lives in the PR body.
+  # The run's own files go the same way; the design lives in the PR body.
   rm -rf "$(run_dir "$root" "$issue")" 2>/dev/null
 
   emit REMOVED "$REMOVED"
@@ -465,81 +465,9 @@ cmd_cleanup() {
   done_ok
 }
 
-cmd_teardown() {
-  local root reg wt_path kept
-  root=$(repo_root)
-  [ -n "$root" ] || degrade not-a-git-repo "worktree teardown: not inside a git repository"
-  reg=$(registered_wt "$issue")
-
-  wt_path=${reg:-$(compute_wt_path "$root" "$issue")}
-  salvage_artifacts "$wt_path" "$salvage_to" "$issue" "$root"
-  emit SALVAGED "${SALVAGED:-}" # before the removal, which can stop and flush (see cleanup)
-
-  REMOVED=false
-  LEFTOVER=""
-  if [ -z "$reg" ] && [ ! -d "$wt_path" ]; then
-    # In-place fallback: no worktree was ever created, so there is none to remove.
-    kept=in-place
-  else
-    cd "$root" 2>/dev/null || true
-    remove_worktree "$wt_path" "$root" "$issue"
-    kept="branch-and-pr" # teardown never touches the branch or PR (quoted: shellcheck reads the dashes as arithmetic)
-  fi
-
-  emit REMOVED "$REMOVED"
-  [ -n "$LEFTOVER" ] && emit LEFTOVER_DIR "$LEFTOVER"
-  emit KEPT "$kept"
-  done_ok
-}
-
-# cmd_revert - post-merge safety net (sec 6.5). When the smoke gate fails on the
-# updated base, prepare a DRAFT revert PR of the squash commit and hand back. NEVER
-# merges anything - the draft is the human's prepared undo, they still decide.
-cmd_revert() {
-  [ -n "$branch" ] || degrade missing-branch "worktree revert: --branch required"
-  local root base_ref title slug squash_sha rev_branch rev_wt rev_url
-  root=$(repo_root)
-  [ -n "$root" ] || degrade not-a-git-repo "worktree revert: not inside a git repository"
-  squash_sha=$(gh pr view "$branch" --json mergeCommit --jq '.mergeCommit.oid' 2>/dev/null || printf '')
-  [ -n "$squash_sha" ] || degrade no-merge-commit "worktree revert: could not resolve the merge commit for $branch (is the PR merged?)"
-  base_ref=$(gh pr view "$branch" --json baseRefName --jq .baseRefName 2>/dev/null || printf 'main')
-  title=$(gh pr view "$branch" --json title --jq .title 2>/dev/null || printf 'issue %s' "$issue")
-  slug=$(slugify "$title")
-  rev_branch="revert/issue-$issue-$slug"
-
-  git -C "$root" fetch --quiet origin "$base_ref" 2>/dev/null || true
-  rev_wt=$(compute_wt_path "$root" "revert-$issue")
-  if ! git -C "$root" worktree add -b "$rev_branch" "$rev_wt" "origin/$base_ref" >/dev/null 2>&1; then
-    stop revert-branch-failed "could not create the revert branch $rev_branch off origin/$base_ref. Revert $squash_sha by hand."
-  fi
-  if ! git -C "$rev_wt" revert --no-edit "$squash_sha" >/dev/null 2>&1; then
-    git -C "$rev_wt" revert --abort >/dev/null 2>&1 || true
-    git -C "$root" worktree remove --force "$rev_wt" >/dev/null 2>&1 || true
-    git -C "$root" branch -D "$rev_branch" >/dev/null 2>&1 || true
-    stop revert-conflict "the automatic revert of $squash_sha did not apply cleanly. Revert it by hand."
-  fi
-  if ! git -C "$rev_wt" push -u origin "$rev_branch" >/dev/null 2>&1; then
-    git -C "$root" worktree remove --force "$rev_wt" >/dev/null 2>&1 || true
-    git -C "$root" branch -D "$rev_branch" >/dev/null 2>&1 || true
-    stop revert-push-failed "could not push $rev_branch. Push it and open the revert PR by hand."
-  fi
-  rev_url=$(gh pr create --draft --head "$rev_branch" --base "$base_ref" \
-    --title "Revert \"$title\"" \
-    --body "Draft revert of #$issue (merge commit $squash_sha) - post-merge smoke failed on $base_ref. Review, then merge to roll back or close to keep the change." \
-    2>/dev/null || printf '')
-  git -C "$root" worktree remove --force "$rev_wt" >/dev/null 2>&1 || true
-  [ -n "$rev_url" ] || stop revert-pr-failed "the revert branch $rev_branch is pushed but the draft PR could not be opened. Open it by hand."
-  emit REVERT_BRANCH "$rev_branch"
-  emit REVERT_PR_URL "$rev_url"
-  emit REVERT_COMMIT "$squash_sha"
-  done_ok
-}
-
 case "$subcmd" in
   ensure) cmd_ensure ;;
   merge) cmd_merge ;;
   cleanup) cmd_cleanup ;;
-  teardown) cmd_teardown ;;
-  revert) cmd_revert ;;
   *) degrade unknown-subcommand "worktree: unknown subcommand '$subcmd'" ;;
 esac

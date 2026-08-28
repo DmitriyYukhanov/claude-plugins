@@ -5,6 +5,46 @@ All notable changes to the **issue-to-pr** plugin will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [5.0.0] - 2026-08-28
+
+### Removed
+- Remove epic mode: no run ever used it, and a request too large for one PR now gets split into issues by hand
+- Remove `/issue-to-pr:tune`: it never finished a pass, and the friction log it was meant to batch gets read directly
+- Remove the staging hook that denied `git add -A` in every project: the artifacts it named are already covered by `.gitignore`, and the rule stays where it belongs, in the pipeline's own instructions
+- Remove `state.json`, `step.log`, and the resume path built on them: nothing read them back, and the last two real runs never wrote them
+- Remove `changed-paths.sh`, `--salvage-to`, and `worktree.sh teardown`, which is now `cleanup --keep-branch`
+- Stop guessing the install command from a lockfile: Step 1 works it out in the worktree it is standing in, the way it already works out the gate commands
+- Author both design workflows inline instead of shipping them as files, which drops the argument channel that kept failing along with the guards written against it
+- Remove the board's `next` entry and its draft-card conversion: both were advertised in the skill with nothing behind them
+- Remove `worktree.sh revert`: opening a draft revert PR is four ordinary git and gh commands, and four of its five failure branches had never been exercised by a test
+- Replace `preflight.sh` and `board-sync.sh` with instructions the run follows itself: neither made a promise only a script can keep, and reading a config or calling three GraphQL queries is not worth a shell that has to hand-roll YAML and dodge jq's TSV encoder
+
+### Fixed
+- Close three bypasses in the merge guard, all the same shape: anything sitting between the words defeated the matcher, so a quoted subcommand, `gh pr --repo o/r merge --admin` and `git -C . push --force` each walked straight past it
+- Refuse to delete a branch that another open PR is based on, and stop rather than guess when that cannot be read
+- Report which branch a merge landed in, and say `unknown` rather than claim success when the answer cannot be read
+- Carry `--match-head-commit` on the merge retry after pending checks, so a commit landing in that window can no longer slip in unseen
+- Fail the test run when a test file cannot be parsed; one unbalanced quote used to drop 42 tests while the suite printed ALL GREEN
+- Make the heredoc test see the defeat it exists to prevent: the guard used to let a forbidden command through while every test stayed green
+- Test `merge-guard.sh`, which shipped untested from the first release and is the one script whose failure says nothing
+- Cover the eight failure branches that had no test: an unrecognised `gh pr merge` failure used to report a merge that never happened, an unclassified `git worktree add` failure passed silently, an unwritable log directory ran the gates with nowhere to record them, and a board with no Status field was reported as a board with no matching column; the four argument and environment degrades in `worktree.sh` had none either
+- Document the failure text the scripts hand back on a stop, which was emitted and described nowhere
+- Hand a gate command that carries a quote of its own to the runner intact, instead of letting it close the wrapper the command template puts around it
+- Stop the escalation ratchet sending a trivial run back to a design step the tier matrix never gave it
+- Say plainly in both READMEs and the marketplace listing that cleanup and the issue's auto-close follow only a merge into the default branch
+- Correct three documents that described the opposite of the code: how `base_branch: auto` picks a branch, what the merge ladder does on a behind-base PR and after a rejected push, and what Step 0 still reports
+
+### Changed
+- Cut the per-command cost of the safety hook by an order of magnitude, which every session pays on every shell command
+- Fold triage into the worktree step and the report into the PR step, two steps fewer to follow
+- Run preflight's claim on every run, and report the warnings it hands back instead of dropping them
+- Cut the tier matrix to the rows that route a decision; the rest repeated the step they routed
+- Drop the design panel's two adversarial critics: `/cross-review` reads the same design with a different model
+- Stop pinning the spine's exact wording in tests, which went red on rewrites that changed no meaning
+- Check the spine against the scripts that actually ship, so a deleted script and a forgotten call stop looking the same to the test
+- Let `git push --force-with-lease` through the safety hook without a confirmation: it refuses when the remote has moved, so the thing the rule guards against cannot happen
+- Move the postmortems out of the prose: the reference files carry the rule, this changelog carries the story
+
 ## [4.4.0] - 2026-08-25
 
 ### Added

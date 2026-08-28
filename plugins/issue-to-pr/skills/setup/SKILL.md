@@ -1,13 +1,11 @@
 ---
 name: setup
 description: >-
-  Check what issue-to-pr needs and what would sharpen it, then hand the user the exact
-  install commands. Verifies gh auth and its scopes, reports which companion skills are
-  present and which step each missing one would improve, and explains the optional config
-  file. Prints commands for the user to run; installs nothing itself.
-when_to_use: When the user runs /issue-to-pr:setup, asks what issue-to-pr needs, or hits a
-  preflight failure about gh auth or a missing scope.
-argument-hint: ""
+  Check what issue-to-pr needs and what would sharpen it, then hand over the exact install
+  commands. Use when the user asks what issue-to-pr needs, or hits a Step 0 failure about
+  gh auth or a missing scope. Verifies gh auth and its scopes, reports which companion
+  skills are present and what each missing one would sharpen, and explains the optional
+  config file. Prints commands for the user to run; installs nothing itself.
 user-invocable: true
 ---
 
@@ -27,13 +25,11 @@ Run `gh auth status`. Three outcomes:
 - **Not installed** → point at <https://cli.github.com/> and stop; nothing else matters yet.
 - **Installed, not logged in** → `gh auth login`.
 - **Logged in** → read the `Token scopes:` line. `repo` is required; `project` only for board
-  mode (`next`, and card sync at Steps 1 and 9), and without it the run still works on plain
+  mode (card sync at Steps 1 and 9), and without it the run still works on plain
   issues and says once that board sync is off. Add one with `gh auth refresh -s project`.
-  No scopes line at all means a fine-grained token, not a broken login, and `gh auth refresh`
-  does not apply to one. Report the scopes as unknown rather than missing. On a repo with a
-  board, add that board sync will be skipped anyway: `preflight.sh` and `board-sync.sh` both
-  read that classic line, so a fine-grained token holding real project access still reads as
-  missing to them. Under-warning here defeats the point of running this before the first task.
+  No scopes line at all means a fine-grained token, not a broken login: report the scopes as
+  unknown, not missing, and say board sync will be skipped regardless — both scripts read the
+  classic line, so real project access on a fine-grained token still reads as absent.
 
 Report the account and the scopes you actually saw, not a summary of them.
 
@@ -45,21 +41,20 @@ nothing to install and no marketplace involved, and an official plugin also call
 
 ## 3. The companions
 
-Run `claude plugin list` and read what is installed and enabled. For each row below, report
-**present** or **missing**; for a missing one, say in one line what it buys and print the
-command. Never imply the pipeline is broken without them.
+What each one buys the run is in `../run/references/companions.md`, together with the inline
+fallback it degrades to. Read it there — that table is the only copy. Then run
+`claude plugin list`, report every row below as **present** or **missing**, and for a missing
+one give the one line it sharpens plus its command. Never imply the pipeline is broken
+without them.
 
-| Companion | Buys you | Install |
-|---|---|---|
-| `ponytail` | Lazy mode from Step 4 on, so over-engineering is prevented rather than reviewed; its `ponytail-review` is one of the two Step 8 lenses | `/plugin marketplace add DietrichGebert/ponytail` then `/plugin install ponytail@ponytail` |
-| `superpowers` | Brainstorming, written plans, TDD discipline and systematic debugging at Steps 3–6, plus the done-claims rule that holds for the whole run | `/plugin marketplace add anthropics/claude-plugins-official` then `/plugin install superpowers@claude-plugins-official` |
-| `humanizer` | Step 9–10 prose that does not read like a machine wrote it | `/plugin install humanizer@dmitriy-claude-plugins` |
-| `drill` | `--drill` runs: the tutor walks you through the design at Step 4.5, before it is built | `/plugin marketplace add timini/drill-me` then `/plugin install drill@drill-me` |
-| `codex-collaboration` | `/cross-review`, a second model critiquing the design at Step 4 | Codex first: `/plugin marketplace add openai/codex-plugin-cc`, `/plugin install codex@openai-codex`, `/codex:setup`. Then `/plugin install codex-collaboration@dmitriy-claude-plugins` |
-| `/deep-research` | Step 3 research on external topics. Codebase questions go to a forked research subagent either way, so this is the smaller half | Comes from your own setup or another plugin |
-
-`../run/references/companions.md` carries the same list with the inline
-fallback each one degrades to. If a row here and a row there disagree, that file wins.
+| Companion | Install |
+|---|---|
+| `ponytail` | `/plugin marketplace add DietrichGebert/ponytail` then `/plugin install ponytail@ponytail` |
+| `superpowers` | `/plugin marketplace add anthropics/claude-plugins-official` then `/plugin install superpowers@claude-plugins-official` |
+| `humanizer` | `/plugin install humanizer@dmitriy-claude-plugins` |
+| `drill` | `/plugin marketplace add timini/drill-me` then `/plugin install drill@drill-me` |
+| `codex-collaboration` (`/cross-review`) | Codex first: `/plugin marketplace add openai/codex-plugin-cc`, `/plugin install codex@openai-codex`, `/codex:setup`. Then `/plugin install codex-collaboration@dmitriy-claude-plugins` |
+| `/deep-research` | Comes from your own setup or another plugin |
 
 ## 4. The optional config
 

@@ -1,5 +1,5 @@
 {
-  "description": "issue-to-pr safety gates. Two PreToolUse hooks on Bash run in parallel: merge-guard.sh denies `gh pr merge --admin` so branch protection is never bypassed and asks on a force-push; stage-guard.sh denies `git add -A` / `--all` / `.` so staging stays explicit. Both pass every other command through to the normal permission flow. Plugin agents ignore hooks, so these protect the main session only -- merges must run there.",
+  "description": "issue-to-pr safety gate. One PreToolUse hook on Bash: merge-guard.sh denies `gh pr merge --admin` so branch protection is never bypassed, and asks on a bare force-push (`--force-with-lease` passes, since it refuses when the remote moved). Every other command passes through to the normal permission flow. Plugin agents ignore hooks, so this protects the main session only -- merges must run there.",
   "hooks": {
     "PreToolUse": [
       {
@@ -8,11 +8,6 @@
           {
             "type": "command",
             "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/merge-guard.sh\"",
-            "timeout": 20
-          },
-          {
-            "type": "command",
-            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/stage-guard.sh\"",
             "timeout": 20
           }
         ]

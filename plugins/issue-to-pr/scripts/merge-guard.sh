@@ -1,20 +1,11 @@
 #!/usr/bin/env bash
-# merge-guard.sh - a PreToolUse command hook with two rules: never allow an admin
-# bypass of branch protection, and make a force-push a human decision. Everything
-# else defers to the normal permission flow.
-#
-# It used to gate every merge on an approval marker. That marker proved freshness,
-# single use and a head-SHA binding, never that a human had agreed: the same model
-# that runs the pipeline wrote it, and a hook cannot see the conversation. The one
-# guarantee that was real is now GitHub's own - `gh pr merge --match-head-commit`
-# refuses when the head moved - and the gates are proved by the receipt run-gates.sh
-# leaves. What is left here is the pair a hook can genuinely enforce.
-#
-# Output: {"hookSpecificOutput":{"hookEventName":"PreToolUse",
-#          "permissionDecision":"deny|ask","permissionDecisionReason":"..."}}
+# merge-guard.sh - PreToolUse hook. Two rules a hook can genuinely enforce: never allow
+# an admin bypass of branch protection, and make a force-push a human decision.
+# Everything else defers to the normal permission flow.
 set -uo pipefail
 
-SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# No fork: every caller invokes this by a path containing a slash.
+SCRIPT_DIR=${BASH_SOURCE[0]%/*}
 # shellcheck source=lib/common.sh
 source "$SCRIPT_DIR/lib/common.sh"
 
@@ -26,22 +17,51 @@ case "$input" in
 esac
 
 cmd=$(hook_extract_command "$input")
-# Blank out heredoc bodies first (data, not command syntax), so a commit message or
-# an issue body that discusses this very gate cannot be misread as the command.
+# A heredoc body is data: a commit message discussing this gate is not the command.
 cmd=$(strip_heredoc_bodies "$cmd")
-# Collapse whitespace runs and strip quotes so odd spacing or a quoted path cannot
-# slip a guarded command past the matchers.
-cmd=$(printf '%s' "$cmd" | tr -s '[:space:]' ' ' | tr -d '\042\047')
+# Normalise spacing and quotes so neither can slip a guarded command past the matchers.
+# Done in bash, not `printf | tr | tr`: this runs on every Bash call in every session,
+# and three processes there cost more than the whole rest of the hook. `set -f` stops a
+# `*` in the command from globbing while it is split.
+set -f
+# shellcheck disable=SC2086 # deliberate word-splitting: that IS the whitespace squeeze
+set -- $cmd
+cmd="$*"
+set +f
+cmd=${cmd//\"/}
+cmd=${cmd//\'/}
+
+# Match the verb chain IN ORDER, never as one contiguous phrase. Both `gh pr --repo o/r
+# merge 7 --admin` and `git -C . push --force` put an option between the words, and that
+# alone walked past the old substring matcher - the same shape as the quoted-subcommand
+# bypass. Whole tokens only, so `remerge` is not `merge`.
+has_verbs() { # haystack word...
+  local rest=" $1 " w
+  shift
+  for w; do
+    case "$rest" in
+      *" $w "*) rest=" ${rest#*" $w "}" ;;
+      *) return 1 ;;
+    esac
+  done
+}
 
 case "$cmd" in
-  *"gh pr merge"*"--admin"*)
-    hook_deny "issue-to-pr: gh pr merge --admin is forbidden - never bypass branch protection." ;;
+  *"--admin"*)
+    has_verbs "$cmd" gh pr merge &&
+      hook_deny "issue-to-pr: gh pr merge --admin is forbidden - never bypass branch protection." ;;
 esac
 
-# A force-push is a human call: match --force, -f, or a +refspec.
-case "$cmd" in
-  *"git push"*"--force"* | *"git push"*" -f"* | *"git push"*" +"*)
-    hook_ask "issue-to-pr: force-push detected - confirm this manually." ;;
-esac
+# --force, -f, or a +refspec. `--force-with-lease` is exempt: it refuses when the remote
+# moved since the last fetch, so it cannot overwrite a push nobody here has seen. Strip the
+# lease flags first, so `--force-with-lease --force` still asks.
+unleased=${cmd//--force-with-lease/}
+unleased=${unleased//--force-if-includes/}
+if has_verbs "$unleased" git push; then
+  case "$unleased" in
+    *" --force"* | *" -f"* | *" +"*)
+      hook_ask "issue-to-pr: force-push detected - confirm this manually." ;;
+  esac
+fi
 
 hook_passthrough

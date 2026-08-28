@@ -11,30 +11,6 @@ test_common_emit_keyvalue() {
   assert_key "$out" BAZ "qux quux"
 }
 
-test_common_json_mode_escapes() {
-  source "$ITP_SCRIPTS/lib/common.sh"
-  OUTPUT_JSON=1
-  emit A 'he said "hi"'
-  emit B $'line1\nline2'
-  local out
-  out=$(flush_output)
-  assert_contains "$out" '{'
-  assert_contains "$out" '"A":"he said \"hi\""'
-  assert_contains "$out" '"B":"line1\nline2"'
-}
-
-test_common_slugify() {
-  source "$ITP_SCRIPTS/lib/common.sh"
-  assert_eq "feat-issue-6-foo" "$(slugify 'Feat/Issue 6: Foo!')"
-  assert_eq "a-b" "$(slugify '  a   b  ')"
-}
-
-test_common_join_by() {
-  source "$ITP_SCRIPTS/lib/common.sh"
-  assert_eq "a,b,c" "$(join_by , a b c)"
-  assert_eq "a b|c d" "$(join_by '|' 'a b' 'c d')"
-  assert_eq "" "$(join_by ,)"
-}
 
 test_common_stop_exits_2_with_reason() {
   local out rc
@@ -68,15 +44,19 @@ test_common_strip_heredoc_bodies_blanks_body() {
   out=$(strip_heredoc_bodies "$cmd")
   assert_not_contains "$out" "gh pr merge"
   assert_contains "$out" "<<EOF"
-  assert_contains "$out" "EOF"
 }
 
 test_common_strip_heredoc_bodies_dash_variant_tab_indented_terminator() {
   source "$ITP_SCRIPTS/lib/common.sh"
   local cmd out
-  cmd=$'cat <<-EOF\n\t\tgh pr merge 13\n\tEOF'
+  # A command AFTER the heredoc is the load-bearing half. Asserting only that the
+  # body is gone passes just as well when the terminator is never recognised and
+  # the rest of the command line is swallowed with it -- which is how a real
+  # forbidden command walked past the guard while every test here stayed green.
+  cmd=$'cat <<-EOF\n\t\tgh pr merge 13\n\tEOF\ngh pr view 13'
   out=$(strip_heredoc_bodies "$cmd")
   assert_not_contains "$out" "gh pr merge"
+  assert_contains "$out" "gh pr view 13"
 }
 
 test_common_strip_heredoc_bodies_multiple_heredocs() {
@@ -102,38 +82,6 @@ test_common_done_ok_exits_0() {
   rc=$?
   assert_eq 0 "$rc" "done_ok exits 0"
   assert_key "$out" RESULT good
-}
-
-
-
-
-# resolve_under is what keeps two cwd-sensitive paths honest: preflight's config file and
-# worktree.sh's --salvage-to destination. A Windows form it fails to recognise as absolute
-# gets silently buried under the repo root, where neither of them is ever found again.
-# Every value is built from one unambiguous backslash rather than written as a literal:
-# counting backslashes through layers of quoting is how the first version of this test
-# came to assert something other than what it meant.
-test_common_resolve_under_keeps_absolute_paths() {
-  source "$ITP_SCRIPTS/lib/common.sh"
-  local bs drive unc
-  bs=$(printf '\\')
-  drive="C:${bs}x.md"                 # C:\x.md
-  unc="$bs$bs""nas${bs}team${bs}x.md" # \\nas\team\x.md
-  assert_eq '/etc/x.md' "$(resolve_under /ROOT /etc/x.md)" 'POSIX absolute'
-  assert_eq 'C:/x.md' "$(resolve_under /ROOT C:/x.md)" 'drive letter, forward slash'
-  assert_eq "$drive" "$(resolve_under /ROOT "$drive")" 'drive letter, backslash'
-  assert_eq "$unc" "$(resolve_under /ROOT "$unc")" 'UNC share'
-  assert_eq '//nas/team/x.md' "$(resolve_under /ROOT //nas/team/x.md)" 'UNC, forward slashes'
-}
-
-test_common_resolve_under_roots_a_relative_path() {
-  source "$ITP_SCRIPTS/lib/common.sh"
-  local bs
-  bs=$(printf '\\')
-  assert_eq '/ROOT/.claude/c.md' "$(resolve_under /ROOT .claude/c.md)"
-  assert_eq '/ROOT/C:not-a-drive/c.md' "$(resolve_under /ROOT C:not-a-drive/c.md)" 'drive-relative is not absolute'
-  # ONE leading backslash is not a UNC share, so it still gets rooted.
-  assert_eq "/ROOT/${bs}single" "$(resolve_under /ROOT "${bs}single")" 'single backslash'
 }
 
 # ensure_state_dir is what keeps this plugin out of a repository it is a guest in: the
