@@ -122,6 +122,54 @@ test_setup_walks_every_companion_the_run_knows() {
   done
 }
 
+# Twice now a built-in has been advertised as something to install: `code-review` in
+# companions.md, then `deep-research` in three places at once. Every one slipped past the
+# companion-walk test above, which only checks that the NAME appears somewhere. Hence three
+# regions, each a place whose whole meaning is "you have to install this", and all three
+# checked: the first cut of this test read the setup table alone and went green while both
+# READMEs were still wrong.
+#
+# companions.md gets a narrower rule of its own, at the bottom. The blanket one cannot apply
+# there: its Preferred column legitimately holds `code-review` and `simplify` in their own
+# rows, so banning all three would fail on correct prose. `deep-research` is different, and
+# per-name, because it has no preferred-versus-fallback shape to occupy a row with. The
+# `code-review` incident that opens this comment stays unguarded.
+#
+# Regions 2 and 3 are prose, so the rule there is blunt: any mention trips it, a correct one
+# included. Deliberate. A false red costs a minute; a false green shipped this bug twice.
+# Reword the prose or narrow the slice, never delete the check.
+#
+# `verify` is not guarded yet: absent from the plugin, so the entry would be speculative and
+# the substring would go red on prose that merely says "verify". Add it with the Step 8 slot.
+no_builtins() { # region label
+  local c
+  [ -n "$1" ] || fail "$2 came back empty; this check would be vacuous"
+  for c in code-review simplify deep-research; do
+    assert_not_contains "$1" "$c" "$2 offers $c, which Claude Code already registers"
+  done
+}
+
+test_builtins_are_never_listed_as_installable() {
+  no_builtins "$(sed -n '/^| Companion | Install |/,/^$/p' "$(setup_md)")" \
+    "setup's install table"
+  no_builtins "$(sed -n '/^Optional companions/,/^$/p' "$ITP_SCRIPTS/../README.md")" \
+    "the plugin README's optional-companions paragraph"
+  # Slice the repo README by the claim, not a heading. Take neighbouring lines too, or a hard
+  # wrap that pushes the companion names off the matched line defeats the check silently:
+  # the region stays non-empty, so the vacuity guard above still passes.
+  no_builtins "$(grep -B3 -A3 'used if installed' "$ITP_SCRIPTS/../../../README.md")" \
+    "the repo README's companion line"
+
+  # And the companions table itself, for `deep-research` alone: a row there would put the run
+  # back to choosing between it and the subagent, which is the choice it cannot make.
+  local table
+  table=$(sed -n '/^| Capability | Preferred/,/^$/p' \
+    "$ITP_SCRIPTS/../skills/run/references/companions.md")
+  [ -n "$table" ] || fail "the companions table is gone; this check would be vacuous"
+  assert_not_contains "$table" "deep-research" \
+    "companions.md gives deep-research a row, but the run can never start it"
+}
+
 # A missing scope otherwise surfaces mid-run, after the user has asked for work. Setup is where
 # that check is cheap and early. Assert the load-bearing strings: a bare `project` was satisfied
 # by "changes their environment for every project" elsewhere in the prose.

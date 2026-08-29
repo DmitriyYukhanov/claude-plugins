@@ -7,7 +7,6 @@ companion silently degrade quality without saying so.
 | Capability | Preferred (if installed) | Inline fallback |
 |---|---|---|
 | Written plan (Step 5) | `superpowers:writing-plans` | Write a short ordered plan (files to touch, test-first steps, gates) before coding. |
-| Codebase research (Step 2, complex) | `/deep-research` for external topics | An `Explore` subagent handed an explicit question list, returning a ≤150-line cited summary. |
 | Design critique (Step 3, complex) | `/cross-review` over the produced design | Adversarially self-critique the design against the code, then revise. |
 | Humanizing human-facing text (Step 9) | `humanizer` | Self-edit the PR body / report to drop AI-tell phrasing; flag that a humanizer pass would help. |
 | Lazy design and build (Steps 3–5) | `ponytail:ponytail full`, set once before the design | Design and build against the same ladder by hand: does this need to exist, does the stdlib or the platform already do it, can it be one line. |
@@ -19,6 +18,11 @@ companion silently degrade quality without saying so.
 `code-review` and `simplify` are **built into Claude Code** — invoke them by bare name, no
 install, no namespace, no `if installed` branch. They carry their own fallbacks when the
 Agent tool is unavailable, and `code-review` sizes its own finder fan-out to the diff.
+
+`deep-research` is built in as well, but it is **not the run's to use**: since 2.1.218 Claude
+Code starts it only when the user types `/deep-research` themselves. There is no branch here
+and no row above, because there is no choice to make. Step 2's `Explore` subagent is simply
+what Step 2 does; a user wanting the deeper sweep runs the command in their own turn.
 
 Step 7 declines `code-review --fix`: a sweep of applied fixes lands past the per-fix re-gate
 and past the confirmed-bug count the escalation ratchet reads. Fix findings yourself, one at

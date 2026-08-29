@@ -5,6 +5,11 @@ All notable changes to the **issue-to-pr** plugin will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [5.1.0] - 2026-08-29
+
+### Fixed
+- Stop presenting `deep-research` as something to install or to route Step 2 through: Claude Code ships it and only starts it when you type it yourself, so Step 2 always uses its own research subagent
+
 ## [5.0.0] - 2026-08-28
 
 ### Removed

@@ -56,8 +56,9 @@ progress; everything between them scales to the task.
 Run once before your first task. It checks the one hard requirement (`gh`, logged in, with
 the `repo` scope, plus `project` for board mode), reports which companion skills are present
 and what each missing one would sharpen, and prints the install command for each. It changes
-nothing on its own: the commands are yours to run. It also notes that `code-review` and
-`simplify` are built into Claude Code and need no install at all.
+nothing on its own: the commands are yours to run. It also names what Claude Code already
+registers — `code-review`, `simplify`, `/deep-research` — so nobody hunts an install that
+does not exist.
 
 ### Configuration (optional)
 
@@ -82,9 +83,14 @@ again, but the next merge asks for one more gate run before it will land.
 
 Two of the sharpest tools need no install: Claude Code's own `code-review` reviews the
 diff at Step 7, and its `simplify` is one of the two lenses of the Step 8 gate. The CLI
-registers both, so no marketplace is involved. 
+registers both, so no marketplace is involved.
 
-Optional companions that sharpen specific steps: `superpowers:*`, `/deep-research`,
+`/deep-research` is built in too, but it is yours rather than the pipeline's: Claude Code
+only starts it when you type it. Step 2 always uses an `Explore` subagent, which is the
+ordinary path and not a lesser one. Want the deeper sweep? Run `/deep-research` in your own
+turn and hand the summary in.
+
+Optional companions that sharpen specific steps: `superpowers:*`,
 `/cross-review` (from `codex-collaboration`), `humanizer`, and `ponytail` (whose
 `ponytail-review` is the Step 8 deletion lens, and whose lazy mode shapes the design from
 Step 3 on). Each is used if installed, with an inline fallback otherwise.
