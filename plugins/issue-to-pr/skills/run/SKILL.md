@@ -39,9 +39,8 @@ One todo per step.
 - **Config** (`.claude/issue-to-pr/config.md`, optional): you read it at Step 0 and resolve the
   base from it (`R/configuration.md`), in the main checkout — it is gitignored and absent in the
   worktree. Gate commands come from it, or from you at Step 6.
-  **Built in, no install:** `code-review` (Step 7), `simplify` (Step 8). **Companions** (if
-  installed, else inline): `superpowers:*`, `/deep-research`, `/cross-review`, `humanizer`,
-  `ponytail:*` — all in `R/companions.md`.
+  **Built in:** `code-review` (Step 7), `simplify` (Step 8). **Companions** (if installed,
+  else inline): `superpowers:*`, `/cross-review`, `humanizer`, `ponytail:*` — `R/companions.md`.
 - **Tier** (`R/tier-matrix.md`): you pick it at Step 1, `standard` unless the issue argues
   otherwise; it routes research depth, design, review level/passes and report length.
 - **Autonomy** (`R/autonomy.md`, read once at Step 0): the ask contract (three contact moments,
@@ -70,9 +69,9 @@ Exit-code dispatch (bad-checkout, stale dir, invalid start-point, exit-3 in-plac
 `R/contracts.md`. Board-mode (the config names one): move the card to *in progress* with the
 backgrounded chain in `R/configuration.md`; a board failure is one reported line, never a stop.
 
-**2. Research** (tier routes it, complex+ with unknowns): `/deep-research` if installed, else an
-`Explore` subagent handed an explicit question list. Either way you get back a ≤150-line summary
-citing `path:line`; the raw file reads stay in its context, not yours.
+**2. Research** (tier routes it, complex+ with unknowns): an `Explore` subagent handed an explicit
+question list. You get back a ≤150-line summary citing `path:line`; the raw file reads stay in its
+context, not yours. `/deep-research` is the user's own command, never yours to start.
 
 **3. Design** (tier routes it). **Ponytail installed → `/ponytail:ponytail full` first**, ledgered:
 design and implementation then run under the ladder. Complex: author a `Workflow` **inline**

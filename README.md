@@ -138,7 +138,7 @@ Drive a single GitHub issue from triage to a merge-ready pull request through a 
 - Opens the PR and stops; once you approve it in-session it squash-merges. Cleanup follows only when the change landed in the default branch: on any other base, or when the landing branch cannot be confirmed, the branch and worktree are kept and the run says why.
 - The PR auto-links the issue (`Closes #N`), which GitHub closes on a merge into the default branch; board cards advance to *in-progress* at branch cut and *in-review* at PR open, with `Done` left to GitHub's merge-time automation.
 - Graceful by default — missing the `project` token scope degrades to link-only, and a failed status write never blocks the PR.
-- Optional `.claude/issue-to-pr/config.md` for board URL, base branch, and test commands (auto-detected when unset); companion skills (`superpowers:*`, `/deep-research`, `/cross-review`, `humanizer`, `ponytail:*`) used if installed, with inline fallbacks otherwise.
+- Optional `.claude/issue-to-pr/config.md` for board URL, base branch, and test commands (auto-detected when unset); companion skills (`superpowers:*`, `/cross-review`, `humanizer`, `ponytail:*`) used if installed, with inline fallbacks otherwise.
 
 [View documentation](./plugins/issue-to-pr/README.md)
 

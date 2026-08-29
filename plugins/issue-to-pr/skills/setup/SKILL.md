@@ -39,6 +39,11 @@ Report the account and the scopes you actually saw, not a summary of them.
 nothing to install and no marketplace involved, and an official plugin also called
 `code-review` is a different thing. Say they are present, so nobody goes looking.
 
+`/deep-research` needs no install either, for a different reason: Claude Code only starts it
+when the user types it, never on Claude's own initiative. Nothing to check, then, and nothing
+the pipeline can call. If they ask where it went, one line: Step 2 uses its own `Explore`
+subagent, and anyone wanting the deeper sweep runs `/deep-research` themselves.
+
 ## 3. The companions
 
 What each one buys the run is in `../run/references/companions.md`, together with the inline
@@ -54,7 +59,6 @@ without them.
 | `humanizer` | `/plugin install humanizer@dmitriy-claude-plugins` |
 | `drill` | `/plugin marketplace add timini/drill-me` then `/plugin install drill@drill-me` |
 | `codex-collaboration` (`/cross-review`) | Codex first: `/plugin marketplace add openai/codex-plugin-cc`, `/plugin install codex@openai-codex`, `/codex:setup`. Then `/plugin install codex-collaboration@dmitriy-claude-plugins` |
-| `/deep-research` | Comes from your own setup or another plugin |
 
 ## 4. The optional config
 
