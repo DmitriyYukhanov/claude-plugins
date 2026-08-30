@@ -33,6 +33,7 @@ One todo per step.
 - **Humanizer** runs on 100% of human-facing text (report, PR body, UI strings > 1–2 words)
   regardless of tier — not code/logs/commit subjects. Don't claim "green/passing" without the
   command output. Don't ask what a script or the code can answer.
+- **Check before you lean on it:** a claim about anything outside this repo gets looked up before you build on it, or ledgered as unchecked (`R/autonomy.md`).
 
 ## Config, tier, ask contract
 

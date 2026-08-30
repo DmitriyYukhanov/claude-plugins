@@ -5,6 +5,11 @@ All notable changes to the **issue-to-pr** plugin will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [5.2.0] - 2026-08-30
+
+### Added
+- Check an external claim before building on it, at every tier, and record what settled it in the PR body
+
 ## [5.1.0] - 2026-08-29
 
 ### Fixed
