@@ -93,6 +93,56 @@ for plugin_json in $(echo "$staged_files" | grep -E '^plugins/[^/]+/\.claude-plu
   if [ -n "$marketplace_version" ] && [ "$plugin_version" != "$marketplace_version" ]; then
     sync_errors+=("${plugin_name}: plugin.json=${plugin_version}, marketplace.json=${marketplace_version}")
   fi
+
+  # The description drifts the same way the version does, and for two releases nothing noticed:
+  # issue-to-pr corrected one sentence in three places and left plugin.json, the only copy
+  # Claude Code itself reads, promising the old behaviour. Same loop, same anchoring.
+  plugin_desc=$(git show ":${plugin_json}" 2>/dev/null | awk '
+    /"description"/ {
+      sub(/^[[:space:]]*"description"[[:space:]]*:[[:space:]]*"/, "")
+      sub(/",?$/, "")
+      print; exit
+    }
+  ')
+
+  marketplace_desc=$(echo "$marketplace_content" | awk -v name="$plugin_name" '
+    /"name"/ { found = ($0 ~ "\"" name "\"") }
+    found && /"description"/ {
+      sub(/^[[:space:]]*"description"[[:space:]]*:[[:space:]]*"/, "")
+      sub(/",?$/, "")
+      print; found=0
+    }
+  ')
+
+  # Fail closed, because every silent path here is a way for the two files to drift unnoticed.
+  # A renamed or deleted entry is the worst of them: it takes the version check above down with
+  # it, so a commit can change both fields and report nothing at all. If the version moved, the
+  # plugin has to be findable in the marketplace, and both descriptions have to be readable.
+  # A brand-new plugin has no entry yet and no HEAD manifest to compare against; Check 4 owns
+  # that case and says the right thing about it. Complaining here as well would report a rename
+  # of something that never existed.
+  # Not `$(git show ... | head -c 1)`: this file runs under `set -euo pipefail`, so pipefail
+  # hands the pipeline git's 128 for a path absent from HEAD and the hook dies right here,
+  # rejecting every new-plugin commit with no message at all.
+  if git show "HEAD:${plugin_json}" >/dev/null 2>&1; then
+    plugin_existed=yes
+  else
+    plugin_existed=
+  fi
+
+  if [ -n "$plugin_existed" ] && ! echo "$marketplace_content" | grep -q "\"${plugin_name}\""; then
+    sync_errors+=("${plugin_name}: no entry in ${MARKETPLACE} (renamed or removed?)")
+  elif ! echo "$marketplace_content" | grep -q "\"${plugin_name}\""; then
+    : # new plugin, unregistered - Check 4 reports it
+  elif [ -z "$plugin_desc" ]; then
+    sync_errors+=("${plugin_name}: no description found in ${plugin_json}")
+  elif [ -z "$marketplace_desc" ]; then
+    sync_errors+=("${plugin_name}: entry in ${MARKETPLACE} has no description")
+  elif [ "$plugin_desc" != "$marketplace_desc" ]; then
+    sync_errors+=("${plugin_name}: descriptions differ
+      plugin.json:      ${plugin_desc}
+      marketplace.json: ${marketplace_desc}")
+  fi
 done
 
 # ── Check 3: CHANGELOG.md updated when version bumps ──────────────────
@@ -227,16 +277,20 @@ fi
 if [ ${#sync_errors[@]} -gt 0 ]; then
   has_errors=true
   echo ""
-  echo "ERROR: marketplace.json version mismatch"
+  echo "ERROR: marketplace.json out of sync"
   echo "========================================"
   echo ""
-  echo "The following plugins have mismatched versions between plugin.json and marketplace.json:"
+  echo "These plugins disagree with marketplace.json about their version or their description:"
   echo ""
   for err in "${sync_errors[@]}"; do
     echo "  - ${err}"
   done
   echo ""
-  echo "Fix: update the version in ${MARKETPLACE} to match, then re-stage and commit."
+  echo "Fix: bring the two files into agreement on the field named above, then re-stage."
+  echo "     'descriptions differ' or a version mismatch: edit whichever copy is wrong."
+  echo "     'no description found in plugins/...': add the key to that plugin.json."
+  echo "     'entry ... has no description': add it to ${MARKETPLACE}."
+  echo "     'no entry in ...': the marketplace entry was renamed or deleted. Restore it."
 fi
 
 if [ ${#changelog_errors[@]} -gt 0 ]; then

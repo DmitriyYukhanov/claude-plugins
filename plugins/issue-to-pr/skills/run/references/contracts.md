@@ -13,9 +13,9 @@ decision. This file is the reference: what to call, when, and how to read the re
 - **Uniform exit codes:** `0` proceed · `2` stop-and-ask (reason in `STOP_REASON=`, a hint on
   stderr) · `3` sandbox/permission fallback (do it in place) · `4` degraded (could not parse/reach
   something — do that part by hand). Exceptions noted per script below.
-- Read the config **once in the main checkout** at Step 0 (`R/configuration.md`) and carry the
-  resolved values; never re-read it from inside the worktree. It lives in `.claude/issue-to-pr/`,
-  ignored by a rule the plugin puts there itself, so a worktree normally has no copy at all.
+- Read the config **once in the main checkout** at Step 0 (`R/configuration.md`, which says where
+  it lives and why a worktree has no copy) and carry the resolved values; never re-read it from
+  inside the worktree.
 
 On a stop, `worktree.sh` emits the raw failure alongside `STOP_REASON`: `ADD_ERROR`,
 `DIRTY_FILES`, `PUSH_ERROR`, `MERGE_ERROR`. Read whichever is present and report it
@@ -42,9 +42,8 @@ per rung. The merge carries `--match-head-commit`, so GitHub itself refuses if t
 between the read and the merge. Keys: `MERGED MERGE_METHOD MERGED_INTO BASE_IS_DEFAULT ISSUE_STATE PR_URL` (+
 `FAILING_CHECKS`, `LADDER_STEP`, `WARN_NON_DEFAULT_BASE`). **`BASE_IS_DEFAULT` reads `true` only
 when the landing branch is proved to be the default one** — `false` when the PR merged into
-another feature branch, `unknown` when a ref could not be read. On anything but `true` the issue
-stays open and the work has not reached the default branch, so Step 11 must not treat the task as
-finished. Stops: `pr-head-unreadable · gates-unverified · review-blocked ·
+another feature branch, `unknown` when a ref could not be read. Step 11 owns what each of the
+three means for cleanup. Stops: `pr-head-unreadable · gates-unverified · review-blocked ·
 review-unreadable · push-rejected · checks-failed · merge-conflict · update-branch-failed ·
 base-update-unverified · content-changed-needs-reapproval · checks-pending ·
 merge-ladder-exhausted · merge-failed` — the model's response to each rung is in `merge-ladder.md`.

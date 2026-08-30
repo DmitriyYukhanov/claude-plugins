@@ -33,7 +33,7 @@ One todo per step.
 - **Humanizer** runs on 100% of human-facing text (report, PR body, UI strings > 1–2 words)
   regardless of tier — not code/logs/commit subjects. Don't claim "green/passing" without the
   command output. Don't ask what a script or the code can answer.
-- **Check before you lean on it:** a claim about anything outside this repo gets looked up before you build on it, or ledgered as unchecked (`R/autonomy.md`).
+- **Check before you lean on it:** a claim about anything outside this repo gets looked up before you build on it, and ledgered either way (`R/autonomy.md`).
 
 ## Config, tier, ask contract
 
@@ -68,7 +68,7 @@ own run. Then `S/worktree.sh ensure <N> --branch feat|fix/issue-<N>-<slug> --sta
 as a **literal** (Step 6's rule) and run it through `run-gates.sh` (`--log-dir` on every call).
 Exit-code dispatch (bad-checkout, stale dir, invalid start-point, exit-3 in-place fallback):
 `R/contracts.md`. Board-mode (the config names one): move the card to *in progress* with the
-backgrounded chain in `R/configuration.md`; a board failure is one reported line, never a stop.
+chain in `R/board.md`; a board failure is one reported line, never a stop.
 
 **2. Research** (tier routes it, complex+ with unknowns): an `Explore` subagent handed an explicit
 question list. You get back a ≤150-line summary citing `path:line`; the raw file reads stay in its

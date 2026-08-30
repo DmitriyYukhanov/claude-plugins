@@ -11,11 +11,14 @@ on:
     branches: [main]
     paths:
       - 'plugins/issue-to-pr/**'
+      - '.claude-plugin/marketplace.json'
       - '.githooks/pre-commit'
       - '.github/workflows/issue-to-pr-tests.yml'
   pull_request:
     paths:
       - 'plugins/issue-to-pr/**'
+      - '.claude-plugin/marketplace.json'
+      - '.githooks/pre-commit'
       - '.github/workflows/issue-to-pr-tests.yml'
 
 jobs:
