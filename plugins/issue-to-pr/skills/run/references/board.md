@@ -1,8 +1,8 @@
 # Board sync — GitHub Projects v2
 
 Read only when the config names `board.url` (`R/configuration.md`). Everything here is
-**best-effort at every step**: any failure is one reported line and the run continues. A
-board hiccup never blocks the pipeline, and nothing here is worth debugging mid-run.
+**best-effort**: any failure is one reported line and the run continues. Never debug a board
+hiccup mid-run.
 
 `gh auth status` must list the `project` scope. Without it, say once that board sync is off
 and carry on with plain issues; the fix is `gh auth refresh -s project`. A fine-grained token
@@ -27,9 +27,8 @@ opts=$(gh api graphql -f query='query($proj:ID!,$field:String!){node(id:$proj){.
 printf 'ITEM=%s\nOPTS=%s\n' "$item" "$opts"
 ```
 
-A failed call leaves on its own rung, which is what lets the next paragraph read an empty
-`opts` as an answer. Twenty items is the whole search: an issue carried on more boards than
-that reads as not on this one, and that is the trade, not an oversight.
+Each `||` rung is why an empty `opts` below is an answer rather than a failure. Twenty items is
+the whole search: an issue whose target board falls outside that first page reads as not on it.
 
 `opts` empty means the board has no `Status` field at all, which is not the same as a Status
 field with no matching column — say which one it was. Otherwise pick the option: `status_map`
@@ -40,7 +39,8 @@ ready for review. Then set it:
 
 ```bash
 gh api graphql -f query='mutation($proj:ID!,$item:ID!,$field:ID!,$opt:String!){updateProjectV2ItemFieldValue(input:{projectId:$proj,itemId:$item,fieldId:$field,value:{singleSelectOptionId:$opt}}){projectV2Item{id}}}' \
-  -F proj=<PROJECT_ID> -F item=<ITEM_ID> -F field=<FIELD_ID> -F opt=<OPTION_ID>
+  -F proj=<PROJECT_ID> -F item=<ITEM_ID> -F field=<FIELD_ID> -F opt=<OPTION_ID> \
+  || { echo "BOARD=set-failed"; exit 0; }
 ```
 
 `Done` is never set here: GitHub's own automation moves the card when the PR merges into the

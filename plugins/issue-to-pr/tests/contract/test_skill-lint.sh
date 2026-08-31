@@ -86,22 +86,47 @@ test_skill_smoke_gate_passes_a_log_dir_before_cleanup() {
   assert_contains "$c" 'run-gates.sh --log-dir "<RUN_DIR>/logs"'
 }
 
-# `--drill` is the one way a run spends the human's time on purpose instead of saving it: it
-# hands the design to /drill:me at the checkpoint. Ordering is the contract, not decoration —
-# the drill runs BEFORE the batched question so an objection it surfaces still fits in that
-# same slot rather than needing a second one. A flag nobody can discover is a flag nobody
-# passes, so the frontmatter has to advertise it too.
-test_skill_drill_is_opt_in_and_precedes_the_batched_question() {
-  local blk d a
-  grep -q 'argument-hint:.*--drill' "$(skill_md)" ||
-    fail "argument-hint must advertise --drill"
+# `--grill` is the one way a run spends the human's time on purpose instead of saving it. It
+# REPLACES the batched question rather than joining it: grilling works the design tree in
+# rounds until the frontier is empty and stops on the user's confirmation, which is the
+# checkpoint's own job done properly. So the number in the ask contract stays three.
+#
+# Its predecessor `--drill` did add a fourth moment, and that is the shape an edit restores by
+# reflex, so the old flag and the old count are both checked for below. A flag nobody can
+# discover is a flag nobody passes: the frontmatter advertises it.
+test_skill_grill_reshapes_the_checkpoint_without_adding_a_moment() {
+  local s blk ask f live
+  s=$(cat "$(skill_md)")
+  [ -n "$s" ] || fail "SKILL.md came back empty; this check would be vacuous"
+  grep -q 'argument-hint:.*--grill' "$(skill_md)" ||
+    fail "argument-hint must advertise --grill"
+
+  # Every file that carried a drill row, not just the spine - that is where the rot would sit,
+  # and the companion walk below asks for `grilling` without forbidding what it replaced.
+  # CHANGELOG.md is deliberately exempt: it is version-scoped and its history is meant to age.
+  for f in "$(skill_md)" "$(setup_md)" "$ITP_SCRIPTS"/../skills/run/references/*.md \
+           "$ITP_SCRIPTS/../README.md" "$ITP_SCRIPTS/../../../README.md"; do
+    live=$(cat "$f")
+    [ -n "$live" ] || fail "$f came back empty; this check would be vacuous"
+    assert_not_contains "$live" 'drill' "$f still mentions drill, which the plugin no longer has"
+  done
+
   blk=$(skill_step 4)
-  d=$(printf '%s\n' "$blk" | grep -n '/drill:me' | head -1 | cut -d: -f1)
-  a=$(printf '%s\n' "$blk" | grep -n 'AskUserQuestion' | head -1 | cut -d: -f1)
-  [ -n "$d" ] || fail "the checkpoint must run /drill:me when the flag asked for it"
-  [ -n "$a" ] || fail "the checkpoint lost its batched AskUserQuestion"
-  [ "$d" -le "$a" ] ||
-    fail "the drill must come before the batched question, not after it"
+  [ -n "$blk" ] || fail "Step 4 came back empty; this check would be vacuous"
+  assert_contains "$blk" 'grilling' "the checkpoint must run the grill when --grill asked for it"
+  assert_contains "$blk" 'AskUserQuestion' "the checkpoint lost its batched question"
+  # That pair is not enough on its own: a Step 4 that grills and THEN fires the question
+  # satisfies both while spending two contacts, which is the fourth moment under a new name.
+  assert_contains "$blk" 'replaces' \
+    "Step 4 must say the grill REPLACES the batched question, not merely that both exist"
+
+  # -A3, not a bare grep: the bullet wraps over three lines, and a budget that keeps forcing
+  # reflows would move `four` off the matched line without the rule changing at all.
+  ask=$(printf '%s\n' "$s" | grep -A3 -i 'ask contract:')
+  [ -n "$ask" ] || fail "the spine no longer states the ask contract"
+  case "$ask" in
+    *four*) fail "the ask contract promises a fourth moment again: $ask" ;;
+  esac
 }
 
 setup_md() { printf '%s' "$ITP_SCRIPTS/../skills/setup/SKILL.md"; }
@@ -116,7 +141,7 @@ test_setup_walks_every_companion_the_run_knows() {
   comps=$(cat "$ITP_SCRIPTS/../skills/run/references/companions.md")
   [ ${#s} -gt 500 ] || fail "the setup skill is too short to be walking anyone through anything"
   [ ${#comps} -gt 500 ] || fail "companions.md came back short; the comparison would be vacuous"
-  for c in superpowers ponytail humanizer drill deep-research cross-review code-review simplify; do
+  for c in superpowers ponytail humanizer grilling deep-research cross-review code-review simplify verify; do
     assert_contains "$comps" "$c" "companions.md must still know the $c companion"
     assert_contains "$s" "$c" "setup must account for the $c companion the run relies on"
   done
@@ -139,12 +164,13 @@ test_setup_walks_every_companion_the_run_knows() {
 # included. Deliberate. A false red costs a minute; a false green shipped this bug twice.
 # Reword the prose or narrow the slice, never delete the check.
 #
-# `verify` is not guarded yet: absent from the plugin, so the entry would be speculative and
-# the substring would go red on prose that merely says "verify". Add it with the Step 8 slot.
+# `verify` joined the set with the Step 8 slot. It is the riskiest name of the four, because
+# unlike the others it is an ordinary English word: keep it out of these three regions by
+# rewording them, never by dropping it from the list.
 no_builtins() { # region label
   local c
   [ -n "$1" ] || fail "$2 came back empty; this check would be vacuous"
-  for c in code-review simplify deep-research; do
+  for c in code-review simplify deep-research verify; do
     assert_not_contains "$1" "$c" "$2 offers $c, which Claude Code already registers"
   done
 }

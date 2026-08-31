@@ -35,9 +35,9 @@ Report the account and the scopes you actually saw, not a summary of them.
 
 ## 2. What ships in Claude Code already
 
-`code-review` (Step 7) and `simplify` (Step 8) are registered by the CLI itself. There is
-nothing to install and no marketplace involved, and an official plugin also called
-`code-review` is a different thing. Say they are present, so nobody goes looking.
+`code-review` (Step 7), `simplify` and `verify` (both Step 8) are registered by the CLI
+itself. There is nothing to install and no marketplace involved, and an official plugin also
+called `code-review` is a different thing. Say they are present, so nobody goes looking.
 
 `/deep-research` needs no install either, for a different reason: Claude Code only starts it
 when the user types it, never on Claude's own initiative. Nothing to check, then, and nothing
@@ -57,7 +57,7 @@ without them.
 | `ponytail` | `/plugin marketplace add DietrichGebert/ponytail` then `/plugin install ponytail@ponytail` |
 | `superpowers` | `/plugin marketplace add anthropics/claude-plugins-official` then `/plugin install superpowers@claude-plugins-official` |
 | `humanizer` | `/plugin install humanizer@dmitriy-claude-plugins` |
-| `drill` | `/plugin marketplace add timini/drill-me` then `/plugin install drill@drill-me` |
+| `mattpocock-skills` (`grilling`) | `/plugin marketplace add anthropics/claude-plugins-official` then `/plugin install mattpocock-skills@claude-plugins-official` |
 | `codex-collaboration` (`/cross-review`) | Codex first: `/plugin marketplace add openai/codex-plugin-cc`, `/plugin install codex@openai-codex`, `/codex:setup`. Then `/plugin install codex-collaboration@dmitriy-claude-plugins` |
 
 ## 4. The optional config

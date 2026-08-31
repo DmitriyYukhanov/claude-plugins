@@ -65,6 +65,10 @@ directory (same protection as `ensure`): it reports the path as `LEFTOVER_DIR` a
 the remote branch. Check `DELETED_LOCAL` — if a still-registered locked worktree remains
 it stays `false`; delete that branch and the leftover yourself once whatever holds it is gone.
 
+In the in-place fallback (exit 3) there is no worktree to remove, so Step 11 sweeps the run's
+temp by hand instead: keep anything committed under `docs/`, the PR's own content, and whatever
+the user asked you to keep.
+
 `--keep-branch` — user self-merges / abandons. Removes the worktree only, skips both
 preconditions and **never touches the branch or PR**. Keys: `REMOVED KEPT` (`branch-and-pr`),
 plus `LEFTOVER_DIR`.

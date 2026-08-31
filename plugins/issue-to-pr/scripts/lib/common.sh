@@ -124,7 +124,7 @@ canonical_branch() {
 }
 
 # state_dir ROOT - where everything this plugin writes into a repository lives: the
-# the config, gate receipts, the friction log. One definition, because the path is
+# config, gate receipts, and each run's own files. One definition, because the path is
 # spliced into a receipt name, a config path and an ignore rule that must agree.
 state_dir() { printf '%s/.claude/issue-to-pr' "$1"; }
 

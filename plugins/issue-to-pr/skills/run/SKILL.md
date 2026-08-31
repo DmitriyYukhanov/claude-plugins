@@ -9,7 +9,7 @@ description: >-
   N", "work on issue #N", "build/fix X" when no issue exists yet, and —
   for the merge gate later — "merge it", "approve the PR", "ship it", "lgtm merge".
 user-invocable: true
-argument-hint: "[issue-number | \"free text\"] [--tier trivial|standard|complex] [--drill]"
+argument-hint: "[issue-number | \"free text\"] [--tier trivial|standard|complex] [--grill]"
 ---
 
 # issue-to-pr — issue → merge-ready PR pipeline
@@ -24,9 +24,9 @@ One todo per step.
   resolved base. All work happens there; never two tasks in one tree.
 - **Merge is gated on explicit in-session approval**, runs ONLY in the main session, via
   `S/worktree.sh merge` — never a bare `gh pr merge`, never on the turn the PR opens.
-- **Ask contract:** three moments, four with `--drill` (`R/autonomy.md`) — (1) ONE batched
-  `AskUserQuestion` at Step 4 (only if the ledger has open items), (2) the merge gate,
-  (3) a hard stop. Decide everything else yourself and log it (see below).
+- **Ask contract:** three moments, `--grill` reshapes the first (`R/autonomy.md`) — (1) Step 4:
+  ONE batched `AskUserQuestion` if the ledger has open items, or the grill in its place, (2) the
+  merge gate, (3) a hard stop. Decide everything else yourself and log it (see below).
 - Stage with **explicit paths** (`git add path1 path2`); never `git add -A`/`.`, which
   sweeps in whatever the project keeps untracked. Conventional Commits. TDD (failing test first) for any logic. Write multi-line
   code with the Write tool — a Bash heredoc breaks on an apostrophe inside the body.
@@ -40,26 +40,25 @@ One todo per step.
 - **Config** (`.claude/issue-to-pr/config.md`, optional): you read it at Step 0 and resolve the
   base from it (`R/configuration.md`), in the main checkout — it is gitignored and absent in the
   worktree. Gate commands come from it, or from you at Step 6.
-  **Built in:** `code-review` (Step 7), `simplify` (Step 8). **Companions** (if installed,
-  else inline): `superpowers:*`, `/cross-review`, `humanizer`, `ponytail:*` — `R/companions.md`.
+  **Built in:** `code-review` (Step 7), `simplify` and `verify` (Step 8). **Companions** (if
+  installed, else inline): `superpowers:*`, `/cross-review`, `humanizer`, `ponytail:*`,
+  `mattpocock-skills:grilling` — `R/companions.md`.
 - **Tier** (`R/tier-matrix.md`): you pick it at Step 1, `standard` unless the issue argues
   otherwise; it routes research depth, design, review level/passes and report length.
-- **Autonomy** (`R/autonomy.md`, read once at Step 0): the ask contract (three contact moments,
-  a fourth only with `--drill`), and the ledger of judgment calls you keep in context and render
-  into the report + PR body.
+- **Autonomy** (`R/autonomy.md`, read once at Step 0): the ledger of judgment calls you keep in
+  context and render into the report + PR body — the ask contract is above.
 
 ## Steps
 
 **0. Resolve.** Turn the request into an issue. Free text with no issue number → draft one that
 restates the request and nothing more, `gh issue create`, and make `Drafted issue #<N>: <title>`
 the **first output line of the turn** — that echo is the only guard against issue spam; ambiguous
-scope → ONE `AskUserQuestion` BEFORE creating it (the run's single question, moved earlier, not a
-fourth). Then work out the ground the run stands on, **in the main checkout**, never a worktree,
+scope → ONE `AskUserQuestion` BEFORE creating it (the run's single question, moved
+earlier). Then work out the ground the run stands on, **in the main checkout**, never a worktree,
 following `R/configuration.md`: `gh auth status` (no auth → stop), `gh repo view`, the config file,
 `<BASE>` and `<START_POINT>`, the gate commands the config names, `gh issue view`, and claim the
 issue. **Report every warning that page tells you to raise** — an unresolved base surfaces there
 and nowhere else. An issue already assigned to someone else is a **hard stop**: ask first.
-`<RUN_DIR>` is `.claude/issue-to-pr/runs/task-<N>/` under the main checkout.
 
 **1. Triage + worktree.** Pick `TIER` against `R/tier-matrix.md`: `standard` unless the issue's
 signals say otherwise, `--tier` pins it; too large for one PR → split into issues first, each its
@@ -80,29 +79,29 @@ design and implementation then run under the ladder. Complex: author a `Workflow
 number, title and context paths written into the script text as literals, never
 passed through `args`. Returns the design (→ `<RUN_DIR>/design.md`) + rejected alternatives; a
 throw or an empty design → design inline. `/cross-review` critiques the result. Preference-bound
-questions → ledger. Standard: a mini-design in the PR body. **`--drill` → write the design to
-`<RUN_DIR>/design.md` whatever the tier**, including trivial: there is nothing to drill otherwise.
+questions → ledger. Standard: a mini-design in the PR body. **`--grill` needs a design at any
+tier**, trivial included and in context rather than on disk: there is nothing to grill otherwise.
 
-**4. Checkpoint (unconditional slot).** `--drill` → hand `<RUN_DIR>/design.md` to `/drill:me`
-**first** (no plugin: hand the file over to read), appending each objection to the ledger as it
-is raised, never at the end — a drill is long enough to compact
-(`R/autonomy.md`). Then ask any open `asked` items in ONE batched `AskUserQuestion`; a `--drill`
-run asks even on an empty ledger, or the design goes unanswered. The only mid-run question.
+**4. Checkpoint (unconditional slot).** `--grill` → `mattpocock-skills:grilling` over the design
+you just built (absent: hand it over in the question itself), ledgering each decision as its round
+closes, never at the end — a grill is long enough to compact (`R/autonomy.md`). It ends on the
+user's confirmation and **replaces** the batched question, so every open `asked` item goes into
+its first round; a second ask after it is the fourth moment coming back. No flag → those items in
+ONE batched `AskUserQuestion`. Either way, the only mid-run question.
 
 **5. Plan + implement.** Turn the design into a plan (`superpowers:writing-plans` for
 complex+); TDD: failing test → implement → passing. UI/layout work is verified with
 `<visual_cmd>` or a browser test, never eyeballing.
 
-**6. Gates.** Config commands are authoritative; each one the config left empty you work
-out **in the worktree**, the tree the gates run in, from its manifests and CI workflow — as a
-**literal** (`npm test`, `bash tests/run-tests.sh`), never a string assembled from repository
-filenames, because `run-gates.sh` evaluates it through `bash -c`. Ambiguous ⇒ Step 4 asks.
-`S/run-gates.sh --log-dir "<RUN_DIR>/logs" --gate typecheck='<typecheck_cmd>' --gate
-test='<test_cmd>'` (+ `--gate visual=…` for UI). A command carrying a quote of its own closes that
-wrapper: put it in a shell variable in the same call and pass `--gate "test=$t"`, so the value
-reaches the script as one argument. Never judge a gate from an ad-hoc command: only this one
-surfaces the real failure. An empty gate command degrades (exit 4), never a false green.
-Red ⇒ STOP and fix.
+**6. Gates.** Config commands are authoritative; each one the config left empty you work out **in
+the worktree**, the tree the gates run in, from its manifests and CI workflow — as a **literal**
+(`npm test`, `bash tests/run-tests.sh`), never a string assembled from repository filenames,
+because `run-gates.sh` evaluates it through `bash -c`. Ambiguous ⇒ Step 4 asks. `S/run-gates.sh
+--log-dir "<RUN_DIR>/logs" --gate typecheck='<typecheck_cmd>' --gate test='<test_cmd>'` (+
+`--gate visual=…` for UI). A command carrying a quote of its own closes that wrapper: put it in a
+shell variable in the same call and pass `--gate "test=$t"`, so the value reaches the script as
+one argument. Never judge a gate from an ad-hoc command: only this one surfaces the real failure.
+An empty gate command degrades (exit 4), never a false green. Red ⇒ STOP and fix.
 
 **7. Review loop.** Claude Code's built-in `code-review` skill at the tier's level, ≤ tier's max
 passes, and **without `--fix`** — that flag applies findings in one sweep, past the per-fix re-gate
@@ -117,43 +116,44 @@ from the diff whether it reaches auth, crypto, secrets, sessions, payments or mi
 `/security-review` if it does — judging the code, not the filename. A floor you may escalate from
 and never argue down: anything under `auth`, `crypto`, `secrets` or `migrations`, plus `.env*`,
 `*.sql`, `*.pem`, `*.key`.
-**Escalate a level** on 2+ confirmed bugs in a pass or a gate failing twice; re-run gates
-after each fix.
+**Escalate a level** on 2+ confirmed bugs in a pass or a gate failing twice; re-run gates after each fix.
 
-**8. Re-gates + simplification gate.** Re-run `run-gates.sh` (all green). For any gate command you
-worked out yourself, **print** (never write) the `<CONFIG_PATH>` frontmatter block in the report.
-Then the **simplification gate**, at most two passes: `/ponytail:ponytail-review` (when installed)
-for what to delete, built-in `simplify` for what stays but gets simpler, over `git diff <BASE>` (two dots, never
-three) plus any untracked file `<CHANGED>` names. Apply the cuts you
-agree with, re-run gates, stop as soon as a pass finds nothing; the rest gets one line each in
-the report. Lenses and fallbacks: `R/companions.md`.
+**8. Re-gates, simplification, verify.** Re-run `run-gates.sh` (all green). For any gate command
+you worked out yourself, **print** (never write) the `<CONFIG_PATH>` frontmatter block in the
+report. Then the **simplification gate**, at most two passes: `/ponytail:ponytail-review` (when
+installed) for what to delete, built-in `simplify` for what stays but gets simpler, over `git diff
+<BASE>` (two dots, never three) plus any untracked file `<CHANGED>` names. Apply the cuts you agree
+with, re-run gates, stop as soon as a pass finds nothing; the rest gets one line each in the
+report. Lenses and fallbacks: `R/companions.md`.
+Then built-in **`verify`**, `standard`+ and **last**: build the change and drive it at its own
+surface, past the happy path. A diff with nothing runnable in it skips the slot outright. A FAIL
+is stop-and-fix and re-gate, never a ratchet count. Why each of those three: `R/companions.md`.
 
 **9. Commit + PR + report.** `git add <explicit paths>`, conventional subjects; `git push -u
 origin <branch>`. **Re-run `run-gates.sh` on the commit** — the receipt names the HEAD it ran
-against, so the pre-commit run does not cover it. Then `gh pr create` against `BASE`,
-`Closes #<N>`, humanized body (autonomous-decisions section + rejected alternatives).
-Board-mode: move the card to *in review* the same way. Then report, length per tier (3 lines →
-full): what was built and why, test status with the green proof, the autonomous decisions, the PR
-link, and how much machinery ran (gate runs, review passes and level). Ask when to merge, and
-**stop** — merging is the next step.
+against, so the pre-commit run does not cover it. Then `gh pr create` against `BASE`, `Closes
+#<N>`, humanized body (autonomous-decisions section + rejected alternatives). Board-mode: move
+the card to *in review* the same way. Then report, length per tier (3 lines → full): what was
+built and why, test status with the green proof, the autonomous decisions, the PR link, and how
+much machinery ran (gate runs, review passes and level). Ask when to merge, and **stop** —
+merging is the next step.
 
 ## Step 10 — Merge on approval (GATE)
 
 Return to your working tree first: `cd` into the `WT_PATH` you recorded at Step 1 (worktree
 mode); in the in-place fallback stay in the main checkout on `<branch>`. Read the reply against
 *this* PR. A `review-blocked` / `review-unreadable` stop is a real answer, not a hiccup: route it
-through change-requests. **Merge only on an unambiguous
-go-ahead to merge THIS PR; if the reply (or GitHub review) is anything else, do not merge.**
+through change-requests. **Merge only on an unambiguous go-ahead to merge THIS PR; if the reply
+(or GitHub review) is anything else, do not merge.**
 - **Go-ahead** ("merge it", "lgtm, ship it", "approved", "go ahead and merge") → `S/worktree.sh
   merge <N> --branch <branch>`, the only sanctioned merge path (what it refuses, and why:
-  `R/contracts.md`). On a
-  `STOP_REASON` rung follow `R/merge-ladder.md`; on exit 2, **skip cleanup**.
+  `R/contracts.md`). On a `STOP_REASON` rung follow `R/merge-ladder.md`; on exit 2, **skip
+  cleanup**.
 - **Change requests** → implement in the worktree, **re-run the tier gates** (Steps 6–7 on the
   new diff) until clean, push, re-report, wait again. Never merge unverified changes.
 - **Anything else** → do **not** merge. A vague ack ("ok", "looks fine") or a question → ask for
-  explicit confirmation. If they'll self-merge/abandon, offer `S/worktree.sh cleanup <N>
-  --branch <branch> --keep-branch` (removes the tree, keeps the PR + branch). Approval is
-  never inferred.
+  explicit confirmation. If they'll self-merge/abandon, offer `S/worktree.sh cleanup <N> --branch
+  <branch> --keep-branch` (removes the tree, keeps the PR + branch). Approval is never inferred.
 
 ## Step 11 — Cleanup (after a successful merge)
 
@@ -167,9 +167,8 @@ refreshed base and open a **draft** PR from it. Never auto-revert, never merge i
 Then `S/worktree.sh cleanup <N> --branch <branch>` (removes the worktree, deletes the merged
 local + remote branch, prunes the receipt and run dir). It refuses a branch that is the base of
 an open PR. Report from its keys — `DELETED_LOCAL=false` or a `LEFTOVER_DIR` means a locked dir
-remains; say so, remove it by hand once the lock clears. In-place fallback (no worktree):
-switch off `<branch>`, delete it local+remote, sweep the scratchpad temp (keep committed
-`docs/`, PR content, anything you were asked to keep). Details: `R/contracts.md` →
+remains; say so, remove it by hand once the lock clears. In-place fallback (no worktree): switch
+off `<branch>`, delete it local+remote, sweep the run's temp. Details: `R/contracts.md` →
 "worktree.sh". Finish with one line: what merged, what was removed, what was kept.
 
 ## Friction log
