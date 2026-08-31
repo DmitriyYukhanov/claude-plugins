@@ -10,7 +10,8 @@ directory holds the plugin's repository-level state and carries its own `.gitign
 **first** rule is `*`, so a teammate without the plugin never sees a file they cannot place
 and the project's own `.gitignore` is never edited. Create it that way before writing
 anything into it — the friction log and the gate receipt both land there. A run's own files
-live beside it under `runs/task-<N>/` and go at cleanup. A config left at the pre-2.5 path
+live beside it under `runs/task-<N>/` and go at cleanup: that path, in the main checkout and
+never in a worktree, is the `<RUN_DIR>` the spine writes designs and gate logs to. A config left at the pre-2.5 path
 (`.claude/issue-to-pr.local.md`) is not read: say so once and leave the file alone.
 
 ```yaml

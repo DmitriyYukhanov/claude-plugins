@@ -5,6 +5,17 @@ All notable changes to the **issue-to-pr** plugin will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [6.0.0] - 2026-08-31
+
+### Added
+- Drive the built change at its own surface after the diff settles, so a PR has to do what it says and not only keep the tests green
+
+### Changed
+- `--drill` becomes `--grill`: the checkpoint now interviews you over the design in rounds instead of teaching you a design already made, and it replaces the one batched question rather than adding a fourth interruption
+
+### Removed
+- The `drill-me` marketplace from the setup skill's install table
+
 ## [5.3.0] - 2026-08-30
 
 ### Fixed

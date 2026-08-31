@@ -3,12 +3,29 @@
 The pipeline decides what it reasonably can on its own, records every decision, and
 surfaces the automatic ones where the human already looks: the report and the PR body.
 
-## Ask contract — three moments, plus one the user asks for
+## Ask contract — three moments
 
-Contact the user at these three points, and at a fourth only if asked (below):
+Contact the user at these three points. Nothing in the run may interrupt them anywhere else; a
+flag they passed themselves can.
 
 1. **Step 4 checkpoint** — ONE batched `AskUserQuestion`, only if the ledger has open
-   `asked` items. This is the single mid-run question.
+   `asked` items. This is the single mid-run question, and it may move **earlier**, to Step 0,
+   when the ambiguity is in the request rather than in the design: the same one question, spent
+   sooner.
+
+   `--grill` spends the slot differently rather than adding to it: `mattpocock-skills:grilling`
+   works the design tree in rounds, each a numbered set of decisions with a recommended answer,
+   until the frontier is empty and the user confirms. It **replaces** the batched question, so
+   every open `asked` item goes **into** the grill, in its first round: the grill works the
+   design tree, the ledger holds what is not on it — a new dependency, a gate command Step 6
+   could not settle — and an item the grill never reaches is an item nobody asks. Ledger each
+   decision **as its round closes**, never in a batch at the end: a grill runs long enough for
+   the context to compact, and a decision that lived only in its transcript is gone when it
+   does. Anything surfacing after it belongs to moment (3), like any other late arrival.
+
+   Under the flag the grill **always** runs, including on a run whose scope question already
+   went at Step 0: Step 0 cannot defer that one, since an issue it drafts on a guessed scope is
+   the wrong issue. The flag is the user electing the longer form, and nothing here cancels it.
 2. **The merge gate** (Step 10) — always.
 3. **A hard stop** — anything with no safe default: an exit-2 (`WARN_CLAIMED_BY`, a
    gate-critical unknown), or a preference-bound choice that surfaced too late for
@@ -23,12 +40,6 @@ A question is for the user (`kind: asked`) only when it is:
 Everything else is decided autonomously (`kind: auto`) and logged. Forbidden: proceeding
 past the checkpoint with a gate-critical unknown; asking mid-implementation anything that
 fits moment (1).
-
-## The fourth moment: `--drill`
-
-Append each objection to the ledger **as it is raised**, never in a batch at the end: a
-tutoring session is long enough for the context to compact, and a decision that lived only
-in the drill's transcript is gone when it does.
 
 ## Ledger
 
@@ -53,9 +64,9 @@ the claim, the `decision` is what you built on it, and the `rationale` carries w
 **and where** — a conclusion with no source reads exactly like the guess this rule exists to
 stop.
 
-It goes here and **never into a design file**. `<RUN_DIR>/design.md` exists only on `complex` or
-under `--drill`, and Step 11 prunes it once the change lands on the default branch, so a citation
-left there is deleted before any reader sees it. The ledger is the one path that reaches the PR
+It goes here and **never into a design file**. `<RUN_DIR>/design.md` exists only on `complex`, and
+Step 11 prunes it once the change lands on the default branch, so a citation left there is
+deleted before any reader sees it. The ledger is the one path that reaches the PR
 body from every tier.
 
 Use whatever search the session offers, except `/deep-research` (`R/companions.md`). Nothing else

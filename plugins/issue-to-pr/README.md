@@ -17,7 +17,7 @@ as work progresses.
 ### Skill: `run`
 
 Invoked by the model or by you (`/issue-to-pr:run [issue-number | "free text"]
-[--tier trivial|standard|complex] [--drill]`). The pipeline runs triage, research, design,
+[--tier trivial|standard|complex] [--grill]`). The pipeline runs triage, research, design,
 implementation, review, PR, approval-gated merge, and cleanup. Hard gates block forward
 progress; everything between them scales to the task.
 
@@ -29,13 +29,16 @@ progress; everything between them scales to the task.
   and report length all size to it.
 - **Autonomous, one question max.** The skill contacts you at three moments: one
   batched question mid-run (only if something genuinely needs your preference), the merge
-  gate, and hard stops. Pass `--drill` and it adds a fourth on purpose: the `drill` tutor
-  walks you through the design before anything is built, and whatever you dispute there is
-  folded into that same batched question. It makes every other decision itself, logs it, and surfaces it in
-  the report and PR body.
+  gate, and hard stops. Pass `--grill` and the first of those changes shape rather than
+  multiplying: instead of one batched question you get `grilling`, which works the design in
+  rounds of numbered decisions, each with a recommended answer, until nothing is left silently
+  assumed. It makes every other decision itself, logs it, and surfaces it in the report and PR
+  body.
 - **Gates.** Design hardening (cross-review or a multi-agent fallback), tests green
   (typecheck + tests, plus visual checks for UI work), and a code-review loop that runs
   until clean; the review level escalates automatically when passes keep finding real bugs.
+  Once the diff has settled, a last pass builds the change and drives it at its own surface,
+  because green tests are not the same claim as "the thing in the PR title happens".
 - **Beyond a single issue.** A plain request with no number is drafted into an issue and run.
 - **A careful merge gate.** Merge happens only on your explicit in-session approval, never
   on the turn the PR opens. What a script can prove, a script proves: the merge refuses a head
@@ -81,9 +84,10 @@ again, but the next merge asks for one more gate run before it will land.
 
 ### Companion skills (optional)
 
-Two of the sharpest tools need no install: Claude Code's own `code-review` reviews the
-diff at Step 7, and its `simplify` is one of the two lenses of the Step 8 gate. The CLI
-registers both, so no marketplace is involved.
+Three of the sharpest tools need no install: Claude Code's own `code-review` reviews the
+diff at Step 7, its `simplify` is one of the two lenses of the Step 8 gate, and its `verify`
+closes that step by driving the built change. The CLI registers all three, so no marketplace
+is involved.
 
 `/deep-research` is built in too, but it is yours rather than the pipeline's: Claude Code
 only starts it when you type it. Step 2 always uses an `Explore` subagent, which is the
@@ -91,9 +95,10 @@ ordinary path and not a lesser one. Want the deeper sweep? Run `/deep-research` 
 turn and hand the summary in.
 
 Optional companions that sharpen specific steps: `superpowers:*`,
-`/cross-review` (from `codex-collaboration`), `humanizer`, and `ponytail` (whose
-`ponytail-review` is the Step 8 deletion lens, and whose lazy mode shapes the design from
-Step 3 on). Each is used if installed, with an inline fallback otherwise.
+`/cross-review` (from `codex-collaboration`), `humanizer`, `mattpocock-skills` (whose
+`grilling` is what `--grill` runs), and `ponytail` (whose `ponytail-review` is the Step 8
+deletion lens, and whose lazy mode shapes the design from Step 3 on). Each is used if
+installed, with an inline fallback otherwise.
 
 ## Usage
 
