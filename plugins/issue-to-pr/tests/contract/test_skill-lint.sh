@@ -182,3 +182,37 @@ test_setup_checks_the_hard_requirements_and_installs_nothing() {
   assert_contains "$s" 'never run' \
     "setup prints install commands for a human to run; it must say it installs nothing itself"
 }
+
+# v5.0.0 corrected one sentence about cleanup in three places and missed the fourth: the plugin
+# manifest, which is the only copy Claude Code itself reads. It stayed wrong for two releases
+# because the pre-commit hook keeps the two manifests' VERSIONS in step and says nothing about
+# what they claim the plugin does. Byte equality is the whole rule. If they ever have to differ,
+# change this test and say why in the same commit.
+desc_of() { # file [anchor-line]
+  local line
+  if [ -n "${2:-}" ]; then
+    line=$(grep -A1 -F -- "$2" "$1" | grep '"description"' | head -1)
+  else
+    line=$(grep '"description"' "$1" | head -1)
+  fi
+  line=${line#*\"description\": \"}
+  line=${line%\",}
+  printf '%s' "${line%\"}"
+}
+
+test_manifests_agree_on_what_the_plugin_does() {
+  local plugin market
+  plugin=$(desc_of "$ITP_SCRIPTS/../.claude-plugin/plugin.json")
+  market=$(desc_of "$ITP_SCRIPTS/../../../.claude-plugin/marketplace.json" '"name": "issue-to-pr"')
+  # Guard the extraction, not its length: a byte count is a proxy that goes red on a legitimately
+  # shorter description, and gets "fixed" by lowering the number. What must hold is that the
+  # prefix strip fired and something came back.
+  [ -n "$plugin" ] || fail "no description found in plugin.json; this check would be vacuous"
+  [ -n "$market" ] || fail "no issue-to-pr description found in marketplace.json; check vacuous"
+  case "$plugin$market" in
+    *'"description"'*) fail "the key survived the strip, so both sides are raw lines; check vacuous" ;;
+  esac
+  [ "$plugin" = "$market" ] || fail "the manifests describe the plugin differently:
+    plugin.json:      $plugin
+    marketplace.json: $market"
+}

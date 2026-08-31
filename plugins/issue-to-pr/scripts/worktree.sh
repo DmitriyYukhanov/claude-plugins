@@ -356,8 +356,8 @@ cmd_merge() {
 
   # WHERE it merged, not just that it did: a PR stacked on another feature branch
   # merges into that branch, leaving the issue open and the work off the default one.
-  # One call for both fields, one field per line - the same batching preflight's repo
-  # read uses, and for the same reason.
+  # One call for both fields, one field per line: two gh round-trips for two strings is
+  # the kind of cost that adds up on a step that already makes four.
   mapfile -t _pr_fields < <(gh pr view "$branch" --json url,baseRefName --jq '.url, .baseRefName' 2>/dev/null)
   pr_url=${_pr_fields[0]:-}
   base_ref=${_pr_fields[1]:-}

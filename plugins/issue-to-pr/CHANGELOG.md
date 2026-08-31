@@ -5,6 +5,14 @@ All notable changes to the **issue-to-pr** plugin will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [5.3.0] - 2026-08-30
+
+### Fixed
+- Stop promising cleanup and the issue's auto-close unconditionally in the plugin's description; both wait for a merge into the default branch
+
+### Changed
+- Say in the report when a review pass ran out with fixes still unread, instead of arriving at the merge gate as though everything had been reviewed
+
 ## [5.2.0] - 2026-08-30
 
 ### Added
