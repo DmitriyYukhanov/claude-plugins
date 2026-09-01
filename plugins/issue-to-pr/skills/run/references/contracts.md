@@ -3,26 +3,22 @@
 The pipeline's git/gh mechanics live in tested bash scripts under
 `${CLAUDE_PLUGIN_ROOT}/scripts/` (this plugin), not in prose. Each script owns the *mechanics*;
 the model owns *judgment*. Every human-judgment stop is an exit code, never a silent script
-decision. This file is the reference: what to call, when, and how to read the result.
+decision.
 
 ## How the scripts talk back
 
-- **Output:** each script prints `KEY=VALUE` lines on stdout (the machine block). Lists are
-  comma-joined strings. Human hints go to stderr. A green run is a handful of lines — that printed block IS your
-  verification-before-completion proof.
+- **Output:** each script prints `KEY=VALUE` lines on stdout, lists comma-joined; hints go to
+  stderr. That printed block is your proof a step passed — never claim one without it.
 - **Uniform exit codes:** `0` proceed · `2` stop-and-ask (reason in `STOP_REASON=`, a hint on
   stderr) · `3` sandbox/permission fallback (do it in place) · `4` degraded (could not parse/reach
   something — do that part by hand). Exceptions noted per script below.
-- Read the config **once in the main checkout** at Step 0 (`R/configuration.md`, which says where
-  it lives and why a worktree has no copy) and carry the resolved values; never re-read it from
-  inside the worktree.
+- Read the config **once in the main checkout** at Step 0 (`R/configuration.md`) and carry the
+  resolved values; never re-read it from inside the worktree.
 
 On a stop, `worktree.sh` emits the raw failure alongside `STOP_REASON`: `ADD_ERROR`,
-`DIRTY_FILES`, `PUSH_ERROR`, `MERGE_ERROR`. Read whichever is present and report it
-verbatim - it is the only place the underlying git/gh message survives.
-
-A stop is never a fix: on exit 2 the script hands control back, and you report the exact
-error rather than working around it.
+`DIRTY_FILES`, `PUSH_ERROR`, `MERGE_ERROR`. Report whichever is present verbatim; it is the only
+place the underlying git/gh message survives. A stop is never a fix: report the error rather
+than working around it.
 
 ## worktree.sh — worktree + merge mechanics (SAFETY-CRITICAL)
 

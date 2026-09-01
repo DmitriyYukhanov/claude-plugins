@@ -27,29 +27,24 @@ progress; everything between them scales to the task.
 - **Scaled by tier.** Trivial, standard or complex (`--tier` overrides). Research depth,
   design machinery (an autonomous design panel for complex work), review level and passes,
   and report length all size to it.
-- **Autonomous, one question max.** The skill contacts you at three moments: one
-  batched question mid-run (only if something genuinely needs your preference), the merge
-  gate, and hard stops. Pass `--grill` and the first of those changes shape rather than
-  multiplying: instead of one batched question you get `grilling`, which works the design in
-  rounds of numbered decisions, each with a recommended answer, until nothing is left silently
-  assumed. It makes every other decision itself, logs it, and surfaces it in the report and PR
-  body.
+- **Autonomous, one checkpoint max.** Three moments: one batched question mid-run (only if
+  something needs your preference), the merge gate, and hard stops. `--grill` spends that first
+  moment on `grilling` instead, which works the design in rounds of numbered decisions until
+  nothing is left silently assumed. Every other decision it makes itself, logs, and surfaces in
+  the report and PR body.
 - **Gates.** Design hardening (cross-review or a multi-agent fallback), tests green
   (typecheck + tests, plus visual checks for UI work), and a code-review loop that runs
   until clean; the review level escalates automatically when passes keep finding real bugs.
-  Once the diff has settled, a last pass builds the change and drives it at its own surface,
-  because green tests are not the same claim as "the thing in the PR title happens".
+  Once the diff settles, a last pass builds the change and drives it at its own surface.
 - **Beyond a single issue.** A plain request with no number is drafted into an issue and run.
-- **A careful merge gate.** Merge happens only on your explicit in-session approval, never
-  on the turn the PR opens. What a script can prove, a script proves: the merge refuses a head
-  the gates never ran against, reads the GitHub review itself and stops on a requested change or
-  an unread one, and merges with `--match-head-commit`, so a commit landing after the diff you
-  were shown stops the merge instead of shipping unseen.
+- **A careful merge gate.** Merge happens only on your explicit in-session approval, never on
+  the turn the PR opens. The merge script refuses a head the gates never ran against, reads the
+  GitHub review itself, and passes `--match-head-commit`, so a commit landing after the diff you
+  were shown stops the merge rather than shipping unseen.
 - **Cleanup and a safety net.** After a merge into the default branch it deletes the branch,
-  tears down the worktree, and clears the run temp files; on any other base, or when the
-  landing branch cannot be confirmed, it keeps them and says so. An optional smoke
-  check runs on the updated base; if it fails, the skill opens a *draft* revert PR, never
-  an automatic rollback.
+  tears down the worktree, and clears the run's temp files; on any other base, or one it cannot
+  confirm, it keeps them and says so. An optional smoke check runs on the updated base; if it
+  fails, the skill opens a *draft* revert PR, never an automatic rollback.
 - **Board sync, gracefully.** Cards advance to *in-progress* at branch cut and *in-review*
   at PR open; `Done` is left to GitHub's merge-time automation. A missing `project` token
   scope degrades to link-only and never blocks the PR.
@@ -70,17 +65,13 @@ typecheck/test/visual/smoke commands. Everything is optional; with no file the r
 commands out in the worktree where the gates execute, as literals, and prints the block to
 paste here once they pass. It never writes this file itself.
 
-That directory holds the plugin's repository-level state - the config, gate receipts, the
-friction log - and it ships its own `.gitignore` containing `*`, so none of it reaches
-`git status` and your project's `.gitignore` is left alone. A run's own files - the design
-and its gate logs - live there too, under `runs/task-<N>/`, so nothing a run writes lands in
-your project tree where test discovery or a bundler would pick it up. A config at the
-older `.claude/issue-to-pr.local.md` path is not read; the run says so once and leaves it for
-you to move.
+That directory holds the plugin's state - the config, gate receipts, and each run's files under
+`runs/task-<N>/`. It ships its own `.gitignore` containing `*`, so none of it reaches
+`git status` and your project's `.gitignore` is left alone. A config at the older
+`.claude/issue-to-pr.local.md` path is not read; the run says so once and leaves it for you.
 
-Because the directory is ignored, `git clean -x` treats it as disposable and removes it along
-with the config and the gate receipt. Nothing breaks permanently: the commands get worked out
-again, but the next merge asks for one more gate run before it will land.
+Being ignored, the directory is disposable to `git clean -x`. Nothing breaks permanently: the
+commands get worked out again, and the next merge asks for one more gate run before it lands.
 
 ### Companion skills (optional)
 
@@ -89,10 +80,9 @@ diff at Step 7, its `simplify` is one of the two lenses of the Step 8 gate, and 
 closes that step by driving the built change. The CLI registers all three, so no marketplace
 is involved.
 
-`/deep-research` is built in too, but it is yours rather than the pipeline's: Claude Code
-only starts it when you type it. Step 2 always uses an `Explore` subagent, which is the
-ordinary path and not a lesser one. Want the deeper sweep? Run `/deep-research` in your own
-turn and hand the summary in.
+`/deep-research` is built in too, but it is yours rather than the pipeline's: Claude Code only
+starts it when you type it. Step 2 always uses an `Explore` subagent. For the deeper sweep, run
+`/deep-research` in your own turn and hand the summary in.
 
 Optional companions that sharpen specific steps: `superpowers:*`,
 `/cross-review` (from `codex-collaboration`), `humanizer`, `mattpocock-skills` (whose

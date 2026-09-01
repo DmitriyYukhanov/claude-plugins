@@ -1,18 +1,16 @@
 # Step 0 — the config, the base, and claiming the issue
 
-Everything here resolves against the **main checkout**, never a worktree. The config is
-usually untracked, so a worktree has no copy of it, and on a resume you are standing in one.
+Everything here resolves against the **main checkout**, never a worktree, which has no copy of
+an untracked config.
 
 ## The config file — `.claude/issue-to-pr/config.md`
 
-Optional per-project settings: YAML frontmatter, optional markdown notes below. That
-directory holds the plugin's repository-level state and carries its own `.gitignore` whose
-**first** rule is `*`, so a teammate without the plugin never sees a file they cannot place
-and the project's own `.gitignore` is never edited. Create it that way before writing
-anything into it — the friction log and the gate receipt both land there. A run's own files
-live beside it under `runs/task-<N>/` and go at cleanup: that path, in the main checkout and
-never in a worktree, is the `<RUN_DIR>` the spine writes designs and gate logs to. A config left at the pre-2.5 path
-(`.claude/issue-to-pr.local.md`) is not read: say so once and leave the file alone.
+Optional per-project settings: YAML frontmatter, markdown notes below. Create the directory
+with its own `.gitignore` whose **first** rule is `*` before writing anything into it, so a
+teammate without the plugin never sees a file they cannot place and the project's own
+`.gitignore` is left alone. The gate receipt lands there, and a run's files
+under `runs/task-<N>/` — that path is `<RUN_DIR>`, and cleanup takes it. A config at the pre-2.5
+path (`.claude/issue-to-pr.local.md`) is not read: say so once and leave it alone.
 
 ```yaml
 ---
@@ -60,10 +58,9 @@ the base and the default branch (the one the in-place fallback switches onto):
 git fetch origin --no-prune --quiet "+refs/heads/<BASE>:refs/remotes/origin/<BASE>"
 ```
 
-`--no-prune` is not optional: a user with `fetch.prune` set would otherwise have their
-remote-tracking refs deleted as a side effect of a probe that runs on every task. And fetch
-**one refspec per invocation** — `git fetch` fails the whole call if any single refspec names
-a ref the remote lacks, so an absent default branch would take the base down with it.
+`--no-prune` is not optional: with `fetch.prune` set, a probe that runs on every task would
+delete the user's remote-tracking refs. Fetch **one refspec per invocation**: `git fetch` fails
+the whole call if any refspec names a ref the remote lacks.
 
 `START_POINT` is `origin/<BASE>` when that ref verifies. Otherwise fall back and say so:
 a local `<BASE>` means you are cutting from a branch nothing verified; no ref at all means
@@ -78,8 +75,8 @@ Never run a design on an issue somebody else has taken.
 
 ## Warnings
 
-Every "say so" above is part of Step 0's answer, including on the runs that then stop for
-another reason. Report them; a warning nobody prints is a warning that was never raised.
+Every "say so" above is part of Step 0's answer, including on runs that then stop for another
+reason. A warning nobody prints was never raised.
 
 ## The board
 

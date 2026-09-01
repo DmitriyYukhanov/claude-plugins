@@ -11,9 +11,8 @@ moved it. Borderline picks the **higher** tier.
 | `code-review` level | `low`, 1 pass | `medium`, <=2 passes | `high`, <=3 passes (may raise to `max` on escalation) |
 | Step 8 `verify` | - | when the diff left something runnable | as standard |
 
-Gates, the security overlay, and the external-claim check run at every tier, always. That last
-one scales to nothing at all, so it lives in `R/autonomy.md` with the other ledger rules rather
-than in a table whose three columns would say the same thing.
+Gates, the security overlay, and the external-claim check run at every tier, always; the last
+of those lives in `R/autonomy.md` with the other ledger rules.
 
 ## Signals, strongest first
 
@@ -34,7 +33,6 @@ along with the tier and gives it both a design step and the Step 8 verify slot t
 raising a level inside a tier buys no extra pass. Report the raw per-pass counts at Step 9 so a
 missed ratchet is visible at the merge gate.
 
-The cap is the cap. Another pass is how a review loop stops terminating, and the human at the
-merge gate is the backstop this pipeline is built on. So stop, and ledger what stopping cost —
-the entry's shape, and the fact that it is owed whether or not the ratchet ever fired, are in
-`R/autonomy.md` under "Work no reviewer saw".
+The cap is the cap: another pass is how a review loop stops terminating, and the human at the
+merge gate is the backstop. Stop, and ledger what stopping cost — `R/autonomy.md`, "Work no
+reviewer saw", owed whether or not the ratchet ever fired.

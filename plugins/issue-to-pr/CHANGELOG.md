@@ -5,16 +5,24 @@ All notable changes to the **issue-to-pr** plugin will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [6.1.0] - 2026-09-02
+
+### Changed
+- Cut the instructions an agent reads before it can start from 382 lines to 361, dropping justification that had outgrown the rules it explained
+
+### Removed
+- Remove the friction log, which nothing has read since the `tune` skill went away
+
 ## [6.0.0] - 2026-08-31
 
 ### Added
 - Drive the built change at its own surface after the diff settles, so a PR has to do what it says and not only keep the tests green
 
 ### Changed
-- `--drill` becomes `--grill`: the checkpoint now interviews you over the design in rounds instead of teaching you a design already made, and it replaces the one batched question rather than adding a fourth interruption
+- Replace `--drill` with `--grill`, which interviews you over the design in rounds instead of teaching you one already made, and spends the checkpoint rather than adding a fourth interruption
 
 ### Removed
-- The `drill-me` marketplace from the setup skill's install table
+- Remove the `drill-me` marketplace from the setup skill's install table
 
 ## [5.3.0] - 2026-08-30
 
