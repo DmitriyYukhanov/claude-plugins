@@ -54,7 +54,7 @@ One todo per step.
 restates the request and nothing more, `gh issue create`, and make `Drafted issue #<N>: <title>`
 the **first output line of the turn** — that echo is the only guard against issue spam; ambiguous
 scope → ONE `AskUserQuestion` BEFORE creating it (the run's single question, moved
-earlier). Then work out the ground the run stands on, **in the main checkout**, never a worktree,
+earlier; `--grill` keeps it for the grill). Then work out the ground the run stands on, **in the main checkout**, never a worktree,
 following `R/configuration.md`: `gh auth status` (no auth → stop), `gh repo view`, the config file,
 `<BASE>` and `<START_POINT>`, the gate commands the config names, `gh issue view`, and claim the
 issue. **Report every warning that page tells you to raise** — an unresolved base surfaces there
@@ -103,20 +103,18 @@ shell variable in the same call and pass `--gate "test=$t"`, so the value reache
 one argument. Never judge a gate from an ad-hoc command: only this one surfaces the real failure.
 An empty gate command degrades (exit 4), never a false green. Red ⇒ STOP and fix.
 
-**7. Review loop.** Claude Code's built-in `code-review` skill at the tier's level, ≤ tier's max
-passes, and **without `--fix`** — that flag applies findings in one sweep, past the per-fix re-gate
-and the bug count the ratchet reads. Add adversarial subagents when the diff earns a second
-opinion (`R/companions.md`). Run reviewers in the **foreground**, never while gates run — one
-editing the shared worktree mid-gate produces a phantom red.
+**7. Review loop.** Built-in `code-review` at the tier's level, ≤ tier's max passes, **without
+`--fix`**: that flag sweeps findings in past the per-fix re-gate and the count the ratchet reads.
+Add adversarial subagents when the diff earns a second opinion (`R/companions.md`). Run reviewers
+in the **foreground**, never while gates run — one editing the tree mid-gate is a phantom red.
 **Security overlay:** list the surface with `<CHANGED>` = `{ git diff --name-only
 "<BASE>...HEAD"; git diff --name-only HEAD; git ls-files --others --exclude-standard; } | sort -u`
 — committed, uncommitted and untracked. Run `git rev-parse --verify "<BASE>^{commit}"` FIRST,
 every time: an unresolved base still prints a plausible list, minus every committed file. Decide
-from the diff whether it reaches auth, crypto, secrets, sessions, payments or migrations, add one
-`/security-review` if it does — judging the code, not the filename. A floor you may escalate from
-and never argue down: anything under `auth`, `crypto`, `secrets` or `migrations`, plus `.env*`,
-`*.sql`, `*.pem`, `*.key`.
-**Escalate a level** on 2+ confirmed bugs in a pass or a gate failing twice; re-run gates after each fix.
+from the diff, not the filename, whether it reaches auth, crypto, secrets, sessions, payments or
+migrations, and add one `/security-review` if it does. A floor you may escalate from and never
+argue down: `auth`, `crypto`, `secrets`, `migrations`, `.env*`, `*.sql`, `*.pem`, `*.key`.
+**Escalate a level** on 2+ confirmed bugs in a pass or a Step 6 gate failing twice; re-run gates after each fix.
 
 **8. Re-gates, simplification, verify.** Re-run `run-gates.sh` (all green). For any gate command
 you worked out yourself, **print** (never write) the `<CONFIG_PATH>` frontmatter block in the
@@ -170,9 +168,3 @@ an open PR. Report from its keys — `DELETED_LOCAL=false` or a `LEFTOVER_DIR` m
 remains; say so, remove it by hand once the lock clears. In-place fallback (no worktree): switch
 off `<branch>`, delete it local+remote, sweep the run's temp. Details: `R/contracts.md` →
 "worktree.sh". Finish with one line: what merged, what was removed, what was kept.
-
-## Friction log
-
-When a step genuinely fought back, append one dated one-line note to
-`.claude/issue-to-pr/friction.log`. Mention it in the report only once it is over 10 lines;
-it is the maintainer's list, not the run's.

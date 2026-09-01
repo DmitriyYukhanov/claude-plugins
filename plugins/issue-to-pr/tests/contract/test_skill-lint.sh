@@ -86,14 +86,9 @@ test_skill_smoke_gate_passes_a_log_dir_before_cleanup() {
   assert_contains "$c" 'run-gates.sh --log-dir "<RUN_DIR>/logs"'
 }
 
-# `--grill` is the one way a run spends the human's time on purpose instead of saving it. It
-# REPLACES the batched question rather than joining it: grilling works the design tree in
-# rounds until the frontier is empty and stops on the user's confirmation, which is the
-# checkpoint's own job done properly. So the number in the ask contract stays three.
-#
-# Its predecessor `--drill` did add a fourth moment, and that is the shape an edit restores by
-# reflex, so the old flag and the old count are both checked for below. A flag nobody can
-# discover is a flag nobody passes: the frontmatter advertises it.
+# `--grill` REPLACES the batched question rather than joining it, so the ask contract stays at
+# three moments. Its predecessor `--drill` added a fourth, and that is the shape an edit
+# restores by reflex, so the old flag and the old count are both checked for by name.
 test_skill_grill_reshapes_the_checkpoint_without_adding_a_moment() {
   local s blk ask f live
   s=$(cat "$(skill_md)")
@@ -101,9 +96,8 @@ test_skill_grill_reshapes_the_checkpoint_without_adding_a_moment() {
   grep -q 'argument-hint:.*--grill' "$(skill_md)" ||
     fail "argument-hint must advertise --grill"
 
-  # Every file that carried a drill row, not just the spine - that is where the rot would sit,
-  # and the companion walk below asks for `grilling` without forbidding what it replaced.
-  # CHANGELOG.md is deliberately exempt: it is version-scoped and its history is meant to age.
+  # Every file that carried a drill row, not just the spine. CHANGELOG.md is exempt: it is
+  # version-scoped and its history is meant to age.
   for f in "$(skill_md)" "$(setup_md)" "$ITP_SCRIPTS"/../skills/run/references/*.md \
            "$ITP_SCRIPTS/../README.md" "$ITP_SCRIPTS/../../../README.md"; do
     live=$(cat "$f")
@@ -115,13 +109,11 @@ test_skill_grill_reshapes_the_checkpoint_without_adding_a_moment() {
   [ -n "$blk" ] || fail "Step 4 came back empty; this check would be vacuous"
   assert_contains "$blk" 'grilling' "the checkpoint must run the grill when --grill asked for it"
   assert_contains "$blk" 'AskUserQuestion' "the checkpoint lost its batched question"
-  # That pair is not enough on its own: a Step 4 that grills and THEN fires the question
-  # satisfies both while spending two contacts, which is the fourth moment under a new name.
+  # Those two alone pass on a Step 4 that grills and THEN asks, which is two contacts.
   assert_contains "$blk" 'replaces' \
     "Step 4 must say the grill REPLACES the batched question, not merely that both exist"
 
-  # -A3, not a bare grep: the bullet wraps over three lines, and a budget that keeps forcing
-  # reflows would move `four` off the matched line without the rule changing at all.
+  # -A3: the bullet wraps, and a reflow would move `four` off a line-scoped match.
   ask=$(printf '%s\n' "$s" | grep -A3 -i 'ask contract:')
   [ -n "$ask" ] || fail "the spine no longer states the ask contract"
   case "$ask" in
@@ -147,26 +139,19 @@ test_setup_walks_every_companion_the_run_knows() {
   done
 }
 
-# Twice now a built-in has been advertised as something to install: `code-review` in
-# companions.md, then `deep-research` in three places at once. Every one slipped past the
-# companion-walk test above, which only checks that the NAME appears somewhere. Hence three
-# regions, each a place whose whole meaning is "you have to install this", and all three
-# checked: the first cut of this test read the setup table alone and went green while both
-# READMEs were still wrong.
+# Twice now a built-in has been advertised as something to install: `code-review`, then
+# `deep-research` in three places at once. Both slipped past the companion walk above, which
+# only asks whether the NAME appears somewhere. Hence three regions, each one a place whose
+# whole meaning is "you have to install this" - the first cut of this test read the setup
+# table alone and went green while both READMEs were still wrong.
 #
-# companions.md gets a narrower rule of its own, at the bottom. The blanket one cannot apply
-# there: its Preferred column legitimately holds `code-review` and `simplify` in their own
-# rows, so banning all three would fail on correct prose. `deep-research` is different, and
-# per-name, because it has no preferred-versus-fallback shape to occupy a row with. The
-# `code-review` incident that opens this comment stays unguarded.
+# Regions 2 and 3 are prose, so the rule is blunt: any mention trips it, a correct one
+# included. A false red costs a minute; a false green shipped this bug twice. Reword the
+# prose or narrow the slice, never delete the check. That bluntness is why companions.md is
+# not a region: its Preferred column legitimately names `code-review` and `simplify`.
 #
-# Regions 2 and 3 are prose, so the rule there is blunt: any mention trips it, a correct one
-# included. Deliberate. A false red costs a minute; a false green shipped this bug twice.
-# Reword the prose or narrow the slice, never delete the check.
-#
-# `verify` joined the set with the Step 8 slot. It is the riskiest name of the four, because
-# unlike the others it is an ordinary English word: keep it out of these three regions by
-# rewording them, never by dropping it from the list.
+# `verify` is the riskiest name here, being an ordinary English word. Keep it out of the
+# three regions by rewording them, never by dropping it from the list.
 no_builtins() { # region label
   local c
   [ -n "$1" ] || fail "$2 came back empty; this check would be vacuous"

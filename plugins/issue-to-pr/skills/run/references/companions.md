@@ -16,42 +16,20 @@ companion silently degrade quality without saying so.
 | Diff review loop (Step 7) | `code-review` at the tier's level | Independent adversarial review subagents (2–3) critique the diff for correctness, reuse, and regressions; iterate. |
 
 `code-review`, `simplify` and `verify` are **built into Claude Code** — invoke them by bare
-name, no install, no namespace, no `if installed` branch. They carry their own fallbacks when
-the Agent tool is unavailable, and `code-review` sizes its own finder fan-out to the diff.
-`verify` has no row above because it has no fallback worth the name: driving a built artifact
-at its real surface is not something you approximate by reading the diff again. Which tiers get
-the slot is `R/tier-matrix.md`; the rules that govern it are at the bottom of this file.
+name, no install, no namespace, no `if installed` branch. `code-review` sizes its own finder
+fan-out to the diff.
+`verify` has no row because it has no fallback: you cannot approximate driving a built artifact
+by reading the diff again.
 
-`deep-research` is built in as well, but it is **not the run's to use**: since 2.1.218 Claude
-Code starts it only when the user types `/deep-research` themselves. There is no branch here
-and no row above, because there is no choice to make. Step 2's `Explore` subagent is simply
-what Step 2 does; a user wanting the deeper sweep runs the command in their own turn.
+`deep-research` is built in as well but is **not the run's to use**: since 2.1.218 Claude Code
+starts it only when the user types it. No branch, no row — Step 2 uses its `Explore` subagent,
+and a user wanting the deeper sweep runs the command in their own turn.
 
-Step 7 declines `code-review --fix`: a sweep of applied fixes lands past the per-fix re-gate
-and past the confirmed-bug count the escalation ratchet reads. Fix findings yourself, one at
-a time, re-running the gates between them.
+Ponytail's `SubagentStart` hook carries the mode into every subagent, so setting it once at
+Step 3 is the whole wiring. Step 7's reviewers inherit it: it governs how a confirmed bug gets
+fixed, never whether it counts as one.
 
-Ponytail's own `SubagentStart` hook carries the mode into every subagent, so setting it once
-at Step 3 is the whole wiring — pass nothing along. Step 7's reviewers inherit it too; their
-prompt says it governs how a confirmed bug gets fixed, never whether it counts as one.
-
-## The Step 8 verify slot
-
-Green gates prove the tests pass. They do not prove the thing the PR claims to do actually
-happens. That gap is what the slot closes, and it is why the three rules are what they are.
-
-**Last in the step, after simplification.** That gate is still applying cuts and re-gating, so
-anything verified ahead of it was verified against a diff that then moved.
-
-**A diff with nothing runnable skips the slot, rather than recording a skip.** Research, docs and
-prose outcomes have no surface to drive, and a verdict collected on every run, most of them
-empty, is one nobody reads by the tenth PR. This pipeline's own runs skip more often than not:
-its surface is a Claude session reading prose, which no terminal can drive.
-
-**A FAIL never counts toward the ratchet.** The ratchet raises the review level, a level only
-buys another review pass, and by Step 8 the loop has closed: the escalation would have nothing
-to spend. A FAIL is stop-and-fix and re-gate, and the fix lands after the last review pass,
-where "Work no reviewer saw" in `R/autonomy.md` already covers it.
-
-These are recommendations, not requirements — the skill checks availability at the relevant
-step and proceeds either way.
+Step 8 runs `verify` **last**, after the simplification gate has stopped moving the diff. A
+FAIL is stop-and-fix and re-gate, never a ratchet count: the ratchet raises the review level, a
+level buys another review pass, and by Step 8 the loop has closed. The fix then lands after the
+last review pass, so "Work no reviewer saw" in `R/autonomy.md` covers it.
