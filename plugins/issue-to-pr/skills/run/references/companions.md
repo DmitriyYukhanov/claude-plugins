@@ -7,8 +7,8 @@ companion silently degrade quality without saying so.
 | Capability | Preferred (if installed) | Inline fallback |
 |---|---|---|
 | Written plan (Step 5) | `superpowers:writing-plans` | Write a short ordered plan (files to touch, test-first steps, gates) before coding. |
-| Design critique (Step 3, complex) | `/cross-review` over the produced design | Adversarially self-critique the design against the code, then revise. |
-| Humanizing human-facing text (Step 9) | `humanizer` | Self-edit the PR body / report to drop AI-tell phrasing; flag that a humanizer pass would help. |
+| Design critique (Step 3, complex) | `/codex-collaboration:cross-review` over the produced design | Adversarially self-critique the design against the code, then revise. |
+| Humanizing human-facing text (Step 9) | `humanizer:humanizer` | Self-edit the PR body / report to drop AI-tell phrasing; flag that a humanizer pass would help. |
 | Lazy design and build (Steps 3–5) | `ponytail:ponytail full`, set once before the design | Design and build against the same ladder by hand: does this need to exist, does the stdlib or the platform already do it, can it be one line. |
 | Grilling the design (Step 4, `--grill` only) | `mattpocock-skills:grilling` over the design you just built | Hand the design over in the batched question itself, with your open `asked` items, and take their objections as the round. Still one contact, not two. |
 | Deletion lens (Step 8) | `ponytail:ponytail-review` over the run's diff | Re-read the diff hunting only for what to delete: reinvented stdlib, one-caller abstractions, config nobody sets, flags nobody passes. |

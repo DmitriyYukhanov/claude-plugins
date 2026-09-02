@@ -1,205 +1,45 @@
 #!/usr/bin/env bash
-# Contract tests for the SKILL.md spine: the line budget, and that the spine still
-# wires its mechanical scripts.
-#
-# The budget counts LINES, not width, so it can be gamed by cramming. Headroom is for
-# reflowing a crammed sentence, never for moving DETAIL back out of `references/`.
-#
-# What this file deliberately does NOT do is pin the spine's English. Assertions on exact
-# wording went red on every rewrite of a step whose meaning had not changed, and a test
-# that fights the edit instead of the defect gets edited to agree, not consulted.
+
+SKILL_LINE_BUDGET=180
+BUILT_IN_SKILLS='code-review simplify verify deep-research'
+HOOK_RUN_SCRIPT=merge-guard.sh
 
 skill_md() { printf '%s' "$ITP_SCRIPTS/../skills/run/SKILL.md"; }
+setup_md() { printf '%s' "$ITP_SCRIPTS/../skills/setup/SKILL.md"; }
+companions_md() { printf '%s' "$ITP_SCRIPTS/../skills/run/references/companions.md"; }
+plugin_readme() { printf '%s' "$ITP_SCRIPTS/../README.md"; }
+repo_readme() { printf '%s' "$ITP_SCRIPTS/../../../README.md"; }
+plugin_manifest() { printf '%s' "$ITP_SCRIPTS/../.claude-plugin/plugin.json"; }
+marketplace_manifest() { printf '%s' "$ITP_SCRIPTS/../../../.claude-plugin/marketplace.json"; }
 
-# The spine is one file, so a bare assert_contains passes when the string it wants drifted
-# into another step. Tests about one step read that step's own block.
-#
-# Steps come in two shapes, `**7. Review loop.**` and `## Step 10 — ...`. The terminator
-# matches a NUMBERED heading only, never a bold run that merely leads with a digit.
-# An empty slice is not self-announcing (assert_not_contains passes on it), so it is a
-# hard failure here rather than a silently empty assertion.
 skill_step() { # step-number
-  local out
-  out=$(awk -v n="$1" '
+  local block
+  block=$(awk -v n="$1" '
     index($0, "**" n ". ")==1 || index($0, "## Step " n " ")==1 {f=1; print; next}
     /^\*\*[0-9]+(\.[0-9]+)?\. / || /^## Step [0-9]/ {f=0}
     f' "$(skill_md)")
-  [ -n "$out" ] || fail "SKILL.md has no Step $1 block; the heading was renamed or removed"
-  printf '%s\n' "$out"
+  [ -n "$block" ] || fail "SKILL.md has no Step $1 block; the heading was renamed or removed"
+  printf '%s\n' "$block"
 }
 
-test_skill_within_line_budget() {
-  local n
-  n=$(wc -l <"$(skill_md)")
-  n=${n// /}
-  # 180 since v2.8.0. The number buys shell back: every rebalance that moved a probe out of
-  # a script and into the spine paid for its prose many times over in deleted bash.
-  if [ "$n" -gt 180 ]; then fail "SKILL.md is $n lines; the budget is <=180"; fi
+install_table() { sed -n '/^| Companion | Install |/,/^$/p' "$(setup_md)"; }
+companions_table() { sed -n '/^| Capability | Preferred/,/^$/p' "$(companions_md)"; }
+optional_companions_paragraph() { sed -n '/^Optional companions/,/^$/p' "$(plugin_readme)"; }
+companion_line_of_repo_readme() { grep 'companion skills (' "$(repo_readme)"; }
+companion_region_of_repo_readme() { grep -B3 -A3 'used if installed' "$(repo_readme)"; }
+
+plugins_setup_can_install() {
+  install_table | sed -n 's/^| `\([^`]*\)`.*/\1/p' | sort -u
 }
 
-# Derived from what actually ships, not a hard-coded list: a script the spine stopped calling
-# and a script that was deleted look identical to a fixed list, and only one of them is a bug.
-# merge-guard.sh is the exception - hooks.json runs it, so the spine never names it.
-test_skill_names_spine_scripts() {
-  local c s base n=0
-  c=$(cat "$(skill_md)")
-  for s in "$ITP_SCRIPTS"/*.sh; do
-    base=${s##*/}
-    [ "$base" = merge-guard.sh ] && continue
-    assert_contains "$c" "$base" "SKILL spine must invoke $base, or the script should not ship"
-    n=$((n + 1))
-  done
-  [ "$n" -gt 0 ] || fail "no scripts found under $ITP_SCRIPTS; the glob did not expand"
+companion_paths_in() { # text
+  printf '%s\n' "$1" | grep -o '`/\{0,1\}[^`]*:[^`]*`' | tr -d '`/' | cut -d' ' -f1 | sort -u
 }
 
-# Values the model resolves at one step and uses at another are placeholders, not shell
-# variables: every Bash call starts a fresh shell. The spine once wrote
-# `--option "$STATUS_MAP_IN_PROGRESS"`, which expands to nothing, and the board update
-# silently went out without its column. Placeholders are `<ANGLE_BRACKETS>`.
-test_skill_never_writes_a_resolved_value_as_a_shell_variable() {
-  local hits
-  hits=$(grep -n '\$[A-Z][A-Z_]\{2,\}' "$(skill_md)" || true)
-  if [ -n "$hits" ]; then
-    fail "SKILL.md names a shell variable instead of substituting the value: $hits"
-  fi
-}
+paths_the_run_prefers() { companion_paths_in "$(companions_table | cut -d'|' -f3)"; }
+plugins_the_run_prefers() { paths_the_run_prefers | cut -d: -f1 | sort -u; }
 
-# A checkout path with a space in it turned an unquoted placeholder into two
-# arguments, which sent gate logs and the pinned config somewhere else entirely.
-test_skill_quotes_its_path_placeholders() {
-  local bad
-  bad=$(grep -nE '\-\-(log-dir|config) [^"]' "$(skill_md)" || true)
-  if [ -n "$bad" ]; then
-    fail "SKILL.md passes an unquoted path to a path flag: $bad"
-  fi
-}
-
-# `run-gates.sh` degrades on a missing --log-dir before it runs anything, so the
-# post-merge smoke call without one meant the safety net never fired in any released
-# version: a merge that broke the base was never caught and the draft revert PR never
-# opened.
-test_skill_smoke_gate_passes_a_log_dir_before_cleanup() {
-  local c smoke_line
-  c=$(cat "$(skill_md)")
-  smoke_line=$(printf '%s\n' "$c" | grep -n "gate smoke=" || true)
-  [ -n "$smoke_line" ] || fail "SKILL.md no longer runs the post-merge smoke gate"
-  assert_contains "$c" 'run-gates.sh --log-dir "<RUN_DIR>/logs"'
-}
-
-# `--grill` REPLACES the batched question rather than joining it, so the ask contract stays at
-# three moments. Its predecessor `--drill` added a fourth, and that is the shape an edit
-# restores by reflex, so the old flag and the old count are both checked for by name.
-test_skill_grill_reshapes_the_checkpoint_without_adding_a_moment() {
-  local s blk ask f live
-  s=$(cat "$(skill_md)")
-  [ -n "$s" ] || fail "SKILL.md came back empty; this check would be vacuous"
-  grep -q 'argument-hint:.*--grill' "$(skill_md)" ||
-    fail "argument-hint must advertise --grill"
-
-  # Every file that carried a drill row, not just the spine. CHANGELOG.md is exempt: it is
-  # version-scoped and its history is meant to age.
-  for f in "$(skill_md)" "$(setup_md)" "$ITP_SCRIPTS"/../skills/run/references/*.md \
-           "$ITP_SCRIPTS/../README.md" "$ITP_SCRIPTS/../../../README.md"; do
-    live=$(cat "$f")
-    [ -n "$live" ] || fail "$f came back empty; this check would be vacuous"
-    assert_not_contains "$live" 'drill' "$f still mentions drill, which the plugin no longer has"
-  done
-
-  blk=$(skill_step 4)
-  [ -n "$blk" ] || fail "Step 4 came back empty; this check would be vacuous"
-  assert_contains "$blk" 'grilling' "the checkpoint must run the grill when --grill asked for it"
-  assert_contains "$blk" 'AskUserQuestion' "the checkpoint lost its batched question"
-  # Those two alone pass on a Step 4 that grills and THEN asks, which is two contacts.
-  assert_contains "$blk" 'replaces' \
-    "Step 4 must say the grill REPLACES the batched question, not merely that both exist"
-
-  # -A3: the bullet wraps, and a reflow would move `four` off a line-scoped match.
-  ask=$(printf '%s\n' "$s" | grep -A3 -i 'ask contract:')
-  [ -n "$ask" ] || fail "the spine no longer states the ask contract"
-  case "$ask" in
-    *four*) fail "the ask contract promises a fourth moment again: $ask" ;;
-  esac
-}
-
-setup_md() { printf '%s' "$ITP_SCRIPTS/../skills/setup/SKILL.md"; }
-
-# A companion the run knows and `setup` does not is a companion nobody installs. Both files
-# are read up front and a short read is a failure, never a skip: a guard that skips on no
-# match passed this test against a one-byte setup skill.
-test_setup_walks_every_companion_the_run_knows() {
-  local s c comps
-  [ -f "$(setup_md)" ] || fail "the setup skill is missing"
-  s=$(cat "$(setup_md)")
-  comps=$(cat "$ITP_SCRIPTS/../skills/run/references/companions.md")
-  [ ${#s} -gt 500 ] || fail "the setup skill is too short to be walking anyone through anything"
-  [ ${#comps} -gt 500 ] || fail "companions.md came back short; the comparison would be vacuous"
-  for c in superpowers ponytail humanizer grilling deep-research cross-review code-review simplify verify; do
-    assert_contains "$comps" "$c" "companions.md must still know the $c companion"
-    assert_contains "$s" "$c" "setup must account for the $c companion the run relies on"
-  done
-}
-
-# Twice now a built-in has been advertised as something to install: `code-review`, then
-# `deep-research` in three places at once. Both slipped past the companion walk above, which
-# only asks whether the NAME appears somewhere. Hence three regions, each one a place whose
-# whole meaning is "you have to install this" - the first cut of this test read the setup
-# table alone and went green while both READMEs were still wrong.
-#
-# Regions 2 and 3 are prose, so the rule is blunt: any mention trips it, a correct one
-# included. A false red costs a minute; a false green shipped this bug twice. Reword the
-# prose or narrow the slice, never delete the check. That bluntness is why companions.md is
-# not a region: its Preferred column legitimately names `code-review` and `simplify`.
-#
-# `verify` is the riskiest name here, being an ordinary English word. Keep it out of the
-# three regions by rewording them, never by dropping it from the list.
-no_builtins() { # region label
-  local c
-  [ -n "$1" ] || fail "$2 came back empty; this check would be vacuous"
-  for c in code-review simplify deep-research verify; do
-    assert_not_contains "$1" "$c" "$2 offers $c, which Claude Code already registers"
-  done
-}
-
-test_builtins_are_never_listed_as_installable() {
-  no_builtins "$(sed -n '/^| Companion | Install |/,/^$/p' "$(setup_md)")" \
-    "setup's install table"
-  no_builtins "$(sed -n '/^Optional companions/,/^$/p' "$ITP_SCRIPTS/../README.md")" \
-    "the plugin README's optional-companions paragraph"
-  # Slice the repo README by the claim, not a heading. Take neighbouring lines too, or a hard
-  # wrap that pushes the companion names off the matched line defeats the check silently:
-  # the region stays non-empty, so the vacuity guard above still passes.
-  no_builtins "$(grep -B3 -A3 'used if installed' "$ITP_SCRIPTS/../../../README.md")" \
-    "the repo README's companion line"
-
-  # And the companions table itself, for `deep-research` alone: a row there would put the run
-  # back to choosing between it and the subagent, which is the choice it cannot make.
-  local table
-  table=$(sed -n '/^| Capability | Preferred/,/^$/p' \
-    "$ITP_SCRIPTS/../skills/run/references/companions.md")
-  [ -n "$table" ] || fail "the companions table is gone; this check would be vacuous"
-  assert_not_contains "$table" "deep-research" \
-    "companions.md gives deep-research a row, but the run can never start it"
-}
-
-# A missing scope otherwise surfaces mid-run, after the user has asked for work. Setup is where
-# that check is cheap and early. Assert the load-bearing strings: a bare `project` was satisfied
-# by "changes their environment for every project" elsewhere in the prose.
-test_setup_checks_the_hard_requirements_and_installs_nothing() {
-  local s
-  s=$(cat "$(setup_md)")
-  assert_contains "$s" 'gh auth status' "setup must verify the one hard dependency the run has"
-  assert_contains "$s" 'gh auth refresh -s project' \
-    "board mode needs the project scope; setup must print the command that adds it"
-  assert_contains "$s" 'never run' \
-    "setup prints install commands for a human to run; it must say it installs nothing itself"
-}
-
-# v5.0.0 corrected one sentence about cleanup in three places and missed the fourth: the plugin
-# manifest, which is the only copy Claude Code itself reads. It stayed wrong for two releases
-# because the pre-commit hook keeps the two manifests' VERSIONS in step and says nothing about
-# what they claim the plugin does. Byte equality is the whole rule. If they ever have to differ,
-# change this test and say why in the same commit.
-desc_of() { # file [anchor-line]
+description_in() { # manifest [anchor-line]
   local line
   if [ -n "${2:-}" ]; then
     line=$(grep -A1 -F -- "$2" "$1" | grep '"description"' | head -1)
@@ -211,19 +51,153 @@ desc_of() { # file [anchor-line]
   printf '%s' "${line%\"}"
 }
 
+reject_built_ins_in() { # region region-name
+  local skill
+  [ -n "$1" ] || fail "$2 came back empty; this check would be vacuous"
+  for skill in $BUILT_IN_SKILLS; do
+    assert_not_contains "$1" "$skill" "$2 offers $skill, which Claude Code already registers"
+  done
+}
+
+assert_same_set() { # expected actual expected-name actual-name
+  [ -n "$1" ] || fail "nothing parsed from $3; this check would be vacuous"
+  [ "$1" = "$2" ] || fail "$3 and $4 disagree.
+    $3: $(printf '%s' "$1" | tr '\n' ' ')
+    $4: $(printf '%s' "$2" | tr '\n' ' ')"
+}
+
+test_skill_within_line_budget() {
+  local count
+  count=$(wc -l <"$(skill_md)")
+  count=${count// /}
+  [ "$count" -le "$SKILL_LINE_BUDGET" ] || fail "SKILL.md is $count lines, over the $SKILL_LINE_BUDGET budget.
+    Move detail into references/ rather than widening the budget."
+}
+
+test_skill_names_spine_scripts() {
+  local spine script name found=0
+  spine=$(cat "$(skill_md)")
+  for script in "$ITP_SCRIPTS"/*.sh; do
+    name=${script##*/}
+    [ "$name" = "$HOOK_RUN_SCRIPT" ] && continue
+    assert_contains "$spine" "$name" "SKILL spine must invoke $name, or the script should not ship"
+    found=$((found + 1))
+  done
+  [ "$found" -gt 0 ] || fail "no scripts found under $ITP_SCRIPTS; the glob did not expand"
+}
+
+test_skill_never_writes_a_resolved_value_as_a_shell_variable() {
+  local hits
+  hits=$(grep -n '\$[A-Z][A-Z_]\{2,\}' "$(skill_md)" || true)
+  [ -z "$hits" ] || fail "SKILL.md names a shell variable where it must substitute the value.
+    Every Bash call is a fresh shell, so the name expands to nothing. Use <ANGLE_BRACKETS>.
+$hits"
+}
+
+test_skill_quotes_its_path_placeholders() {
+  local unquoted
+  unquoted=$(grep -nE '\-\-(log-dir|config) [^"]' "$(skill_md)" || true)
+  [ -z "$unquoted" ] || fail "SKILL.md passes an unquoted path to a path flag.
+    A checkout path containing a space then arrives as two arguments.
+$unquoted"
+}
+
+test_skill_smoke_gate_passes_a_log_dir_before_cleanup() {
+  local spine
+  spine=$(cat "$(skill_md)")
+  printf '%s\n' "$spine" | grep -q "gate smoke=" ||
+    fail "SKILL.md no longer runs the post-merge smoke gate"
+  assert_contains "$spine" 'run-gates.sh --log-dir "<RUN_DIR>/logs"' \
+    "the smoke gate needs --log-dir; run-gates.sh degrades before running anything without one"
+}
+
+test_skill_grill_reshapes_the_checkpoint_without_adding_a_moment() {
+  local spine checkpoint ask_contract file content
+  spine=$(cat "$(skill_md)")
+  [ -n "$spine" ] || fail "SKILL.md came back empty; this check would be vacuous"
+  grep -q 'argument-hint:.*--grill' "$(skill_md)" || fail "argument-hint must advertise --grill"
+
+  for file in "$(skill_md)" "$(setup_md)" "$ITP_SCRIPTS"/../skills/run/references/*.md \
+              "$(plugin_readme)" "$(repo_readme)"; do
+    content=$(cat "$file")
+    [ -n "$content" ] || fail "$file came back empty; this check would be vacuous"
+    assert_not_contains "$content" 'drill' "$file still mentions drill, which the plugin no longer has"
+  done
+
+  checkpoint=$(skill_step 4)
+  assert_contains "$checkpoint" 'grilling' "the checkpoint must run the grill when --grill asked for it"
+  assert_contains "$checkpoint" 'AskUserQuestion' "the checkpoint lost its batched question"
+  assert_contains "$checkpoint" 'replaces' \
+    "Step 4 must say the grill REPLACES the batched question; one that grills and THEN asks spends two contacts"
+
+  ask_contract=$(printf '%s\n' "$spine" | grep -A3 -i 'ask contract:')
+  [ -n "$ask_contract" ] || fail "the spine no longer states the ask contract"
+  case "$ask_contract" in
+    *four*) fail "the ask contract promises a fourth moment again: $ask_contract" ;;
+  esac
+}
+
+test_setup_names_every_builtin_the_run_leans_on() {
+  local setup companions built_in
+  setup=$(cat "$(setup_md)")
+  companions=$(cat "$(companions_md)")
+  [ ${#setup} -gt 500 ] || fail "the setup skill is too short to be walking anyone through anything"
+  [ ${#companions} -gt 500 ] || fail "companions.md came back short; the comparison would be vacuous"
+  for built_in in $BUILT_IN_SKILLS; do
+    assert_contains "$companions" "$built_in" "companions.md must still know the built-in $built_in"
+    assert_contains "$setup" "$built_in" "setup must still tell people $built_in needs no install"
+  done
+}
+
+test_setup_and_companions_name_the_same_plugins() {
+  assert_same_set "$(plugins_the_run_prefers)" "$(plugins_setup_can_install)" \
+    "the plugins companions.md prefers" "the plugins setup installs"
+}
+
+test_both_readmes_name_exactly_the_companions_the_run_prefers() {
+  local line
+  line=$(companion_line_of_repo_readme)
+  [ "$(printf '%s\n' "$line" | grep -c .)" -eq 1 ] ||
+    fail "'companion skills (' no longer matches exactly one line of the repo README"
+  assert_same_set "$(paths_the_run_prefers)" "$(companion_paths_in "$(optional_companions_paragraph)")" \
+    "companions.md" "the plugin README"
+  assert_same_set "$(paths_the_run_prefers)" "$(companion_paths_in "$line")" \
+    "companions.md" "the repo README"
+}
+
+test_builtins_are_never_listed_as_installable() {
+  local table
+  reject_built_ins_in "$(install_table)" "setup's install table"
+  reject_built_ins_in "$(optional_companions_paragraph)" "the plugin README's optional-companions paragraph"
+  reject_built_ins_in "$(companion_region_of_repo_readme)" "the repo README's companion line"
+
+  table=$(companions_table)
+  [ -n "$table" ] || fail "the companions table is gone; this check would be vacuous"
+  assert_not_contains "$table" "deep-research" \
+    "companions.md gives deep-research a row, but the run can never start it"
+}
+
+test_setup_checks_the_hard_requirements_and_installs_nothing() {
+  local setup
+  setup=$(cat "$(setup_md)")
+  assert_contains "$setup" 'gh auth status' "setup must verify the one hard dependency the run has"
+  assert_contains "$setup" 'gh auth refresh -s project' \
+    "board mode needs the project scope; setup must print the command that adds it"
+  assert_contains "$setup" 'never run' \
+    "setup prints install commands for a human to run; it must say it installs nothing itself"
+}
+
 test_manifests_agree_on_what_the_plugin_does() {
   local plugin market
-  plugin=$(desc_of "$ITP_SCRIPTS/../.claude-plugin/plugin.json")
-  market=$(desc_of "$ITP_SCRIPTS/../../../.claude-plugin/marketplace.json" '"name": "issue-to-pr"')
-  # Guard the extraction, not its length: a byte count is a proxy that goes red on a legitimately
-  # shorter description, and gets "fixed" by lowering the number. What must hold is that the
-  # prefix strip fired and something came back.
+  plugin=$(description_in "$(plugin_manifest)")
+  market=$(description_in "$(marketplace_manifest)" '"name": "issue-to-pr"')
   [ -n "$plugin" ] || fail "no description found in plugin.json; this check would be vacuous"
   [ -n "$market" ] || fail "no issue-to-pr description found in marketplace.json; check vacuous"
   case "$plugin$market" in
     *'"description"'*) fail "the key survived the strip, so both sides are raw lines; check vacuous" ;;
   esac
-  [ "$plugin" = "$market" ] || fail "the manifests describe the plugin differently:
+  [ "$plugin" = "$market" ] || fail "the manifests describe the plugin differently.
+    plugin.json is the only copy Claude Code reads, so byte equality is the rule.
     plugin.json:      $plugin
     marketplace.json: $market"
 }

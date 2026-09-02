@@ -5,6 +5,12 @@ All notable changes to the **issue-to-pr** plugin will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [6.1.1] - 2026-09-02
+
+### Fixed
+- Name every companion by its full invocation path, so the docs say what to type rather than only what the capability is called
+- Both READMEs now list `ponytail:ponytail`, which the run sets before the design and neither mentioned
+
 ## [6.1.0] - 2026-09-02
 
 ### Changed
