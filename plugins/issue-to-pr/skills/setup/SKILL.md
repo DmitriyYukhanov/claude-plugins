@@ -57,8 +57,8 @@ without them.
 | `ponytail` | `/plugin marketplace add DietrichGebert/ponytail` then `/plugin install ponytail@ponytail` |
 | `superpowers` | `/plugin marketplace add anthropics/claude-plugins-official` then `/plugin install superpowers@claude-plugins-official` |
 | `humanizer` | `/plugin install humanizer@dmitriy-claude-plugins` |
-| `mattpocock-skills` (`grilling`) | `/plugin marketplace add anthropics/claude-plugins-official` then `/plugin install mattpocock-skills@claude-plugins-official` |
-| `codex-collaboration` (`/cross-review`) | Codex first: `/plugin marketplace add openai/codex-plugin-cc`, `/plugin install codex@openai-codex`, `/codex:setup`. Then `/plugin install codex-collaboration@dmitriy-claude-plugins` |
+| `mattpocock-skills` | `/plugin marketplace add anthropics/claude-plugins-official` then `/plugin install mattpocock-skills@claude-plugins-official` |
+| `codex-collaboration` | Codex first: `/plugin marketplace add openai/codex-plugin-cc`, `/plugin install codex@openai-codex`, `/codex:setup`. Then `/plugin install codex-collaboration@dmitriy-claude-plugins` |
 
 ## 4. The optional config
 

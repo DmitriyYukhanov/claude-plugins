@@ -84,11 +84,10 @@ is involved.
 starts it when you type it. Step 2 always uses an `Explore` subagent. For the deeper sweep, run
 `/deep-research` in your own turn and hand the summary in.
 
-Optional companions that sharpen specific steps: `superpowers:*`,
-`/cross-review` (from `codex-collaboration`), `humanizer`, `mattpocock-skills` (whose
-`grilling` is what `--grill` runs), and `ponytail` (whose `ponytail-review` is the Step 8
-deletion lens, and whose lazy mode shapes the design from Step 3 on). Each is used if
-installed, with an inline fallback otherwise.
+Optional companions that sharpen specific steps: `superpowers:writing-plans`,
+`/codex-collaboration:cross-review`, `humanizer:humanizer`, `ponytail:ponytail` for the design
+and build, `mattpocock-skills:grilling` for `--grill`, and `ponytail:ponytail-review` as the
+Step 8 deletion lens. Each is used if installed, with an inline fallback otherwise.
 
 ## Usage
 
