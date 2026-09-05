@@ -1,15 +1,6 @@
 #!/usr/bin/env bash
-# tests/fake-gh/gh - a PATH shim standing in for the real `gh`.
-#
-# Behaviour is chosen by FAKE_GH_SCENARIO. Every invocation is appended to
-# FAKE_GH_LOG so tests can assert what the script called. Production scripts read
-# gh through gh's own `--jq`, so this shim returns the ALREADY-FILTERED value for
-# a given `--json <field> --jq <filter>` request - it does not run jq itself.
-#
-# Extend by adding cases; keep each scenario's data obvious. No jq, no network.
 set -uo pipefail
 
-# Log the full invocation (space-joined; good enough for substring asserts).
 if [ -n "${FAKE_GH_LOG:-}" ]; then
   printf 'gh %s\n' "$*" >>"$FAKE_GH_LOG"
 fi
@@ -17,11 +8,9 @@ fi
 scenario=${FAKE_GH_SCENARIO:-happy}
 sub=${1:-}
 
-# Canned identities.
 HEAD_SHA_CURRENT="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 HEAD_SHA_MOVED="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 
-# Extract the value following a flag, e.g. flag_val --jq "$@".
 flag_val() {
   local want=$1
   shift
@@ -44,7 +33,6 @@ die() { # message exitcode
 
 case "$sub" in
   api)
-    # Only `gh api graphql` survives, and only for review_state()'s reviewThreads count.
     case "$scenario" in
       review-unresolved) printf '2\n' ;;
       *) printf '0\n' ;;
@@ -52,7 +40,6 @@ case "$sub" in
     ;;
 
   repo)
-    # `gh repo view --json <f> --jq <filter>`
     case "$jqf" in
       .nameWithOwner) printf 'octo-owner/demo-repo\n' ;;
       .defaultBranchRef.name)
@@ -88,18 +75,14 @@ case "$sub" in
     action=${2:-}
     case "$action" in
       list)
-        # `gh pr list --base BRANCH --state open --json number --jq ...` - cleanup asks
-        # whether an open PR is stacked on the branch it is about to delete.
         if printf '%s' "$*" | grep -q -- '--base'; then
           case "$scenario" in
             has-dependent-pr) printf '77\n' ;;
-            # A read that fails is not the same answer as 'no dependents'.
             dependents-unreadable) exit 1 ;;
             *) printf '' ;;
           esac
           exit 0
         fi
-        # `gh pr list --head BRANCH --json state --jq ...`
         case "$scenario" in
           pr-open) printf 'OPEN\n' ;;
           pr-merged) printf 'MERGED\n' ;;
@@ -107,19 +90,14 @@ case "$sub" in
         esac
         ;;
       view)
-        # Review-ingestion read (sec 6.4): "<reviewDecision>\t<changes-requested-count>\t<number>".
         if printf '%s' "$*" | grep -q 'reviewDecision'; then
           case "$scenario" in
-            # Null reviewDecision (no branch protection) but a latest review requested
-            # changes - the exact case reviewDecision-alone would miss.
             review-changes-requested) printf '\t1\t123\n' ;;
             review-read-fail) printf '' ;;
             *) printf '\t0\t123\n' ;;
           esac
           exit 0
         fi
-        # Merge-ladder structured read (sec 6.3): production reads it through gh's
-        # own --jq, so return the ALREADY-FILTERED TSV "<mergeable>\t<state>\t<failing-csv>".
         if printf '%s' "$*" | grep -q 'statusCheckRollup'; then
           case "$scenario" in
             checks-failing) printf 'MERGEABLE\tBLOCKED\tCI / build\n' ;;
@@ -148,15 +126,11 @@ case "$sub" in
             esac
             ;;
           .headRefName)
-            # Every fixture's PR lives on this branch, regardless of whether it was
-            # looked up by branch name or by PR number -- that's the resolution the
-            # production scripts rely on to key one marker for either ref form.
             case "$scenario" in
               head-name-missing) printf '' ;;
               *) printf 'feat/issue-6-x\n' ;;
             esac
             ;;
-          # The batched form cmd_merge uses: one call, two fields, one per line.
           *'.url, .baseRefName'*)
             printf 'https://github.com/octo-owner/demo-repo/pull/123\n'
             case "$scenario" in
@@ -175,11 +149,6 @@ case "$sub" in
         esac
         ;;
       update-branch)
-        # Real gh merges the base into the PR branch on the server. For the two
-        # behind-base scenarios we reproduce that server-side move with a throwaway
-        # clone so is_pure_base_merge is exercised against genuine divergence
-        # (behind-clean: base adds an unrelated file only; behind-content: the
-        # update also touches the PR's own file, which must fail the pure check).
         br=${3:-}
         case "$scenario" in
           behind-update-fail) die "could not update the branch" 1 ;;
@@ -212,7 +181,6 @@ case "$sub" in
             exit 0
             ;;
           rebase-only)
-            # Only --rebase succeeds; --squash and --merge are both disallowed.
             if printf '%s ' "$@" | grep -qE -- '--squash|--merge'; then
               die "Squash merging is not allowed on this repository" 1
             fi
@@ -231,7 +199,6 @@ case "$sub" in
     ;;
 
   *)
-    # Unknown subcommand: succeed quietly so unrelated calls do not break tests.
     exit 0
     ;;
 esac

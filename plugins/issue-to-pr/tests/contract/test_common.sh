@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Contract tests for scripts/lib/common.sh (the output + exit-code contract).
 
 test_common_emit_keyvalue() {
   source "$ITP_SCRIPTS/lib/common.sh"
@@ -10,7 +9,6 @@ test_common_emit_keyvalue() {
   assert_key "$out" FOO bar
   assert_key "$out" BAZ "qux quux"
 }
-
 
 test_common_stop_exits_2_with_reason() {
   local out rc
@@ -49,10 +47,6 @@ test_common_strip_heredoc_bodies_blanks_body() {
 test_common_strip_heredoc_bodies_dash_variant_tab_indented_terminator() {
   source "$ITP_SCRIPTS/lib/common.sh"
   local cmd out
-  # A command AFTER the heredoc is the load-bearing half. Asserting only that the
-  # body is gone passes just as well when the terminator is never recognised and
-  # the rest of the command line is swallowed with it -- which is how a real
-  # forbidden command walked past the guard while every test here stayed green.
   cmd=$'cat <<-EOF\n\t\tgh pr merge 13\n\tEOF\ngh pr view 13'
   out=$(strip_heredoc_bodies "$cmd")
   assert_not_contains "$out" "gh pr merge"
@@ -84,19 +78,15 @@ test_common_done_ok_exits_0() {
   assert_key "$out" RESULT good
 }
 
-# ensure_state_dir is what keeps this plugin out of a repository it is a guest in: the
-# state directory carries its own ignore rule, so a teammate without the plugin never
-# sees a file they cannot place, and the project's own .gitignore is never touched.
 test_common_ensure_state_dir_writes_a_self_ignoring_gitignore() {
   source "$ITP_SCRIPTS/lib/common.sh"
   local d first
   d="$TEST_TMPDIR/state"
   ensure_state_dir "$d" || fail "ensure_state_dir reported a failure on a writable path"
   [ -f "$d/.gitignore" ] || fail "no .gitignore was written"
-  # `*` must be the FIRST rule: gitignore lets the last match win, so a `!keep` someone
-  # adds below still works. A `*` at the bottom would override it.
   first=$(grep -v '^#' "$d/.gitignore" | grep -v '^[[:space:]]*$' | head -1)
-  assert_eq '*' "$first" 'the first rule must be *'
+  assert_eq '*' "$first" 'the FIRST rule must be *: gitignore lets the last match decide, so a `*`
+    written below any other rule leaves the state directory unignored'
 }
 
 test_common_ensure_state_dir_never_clobbers_an_existing_gitignore() {
@@ -109,9 +99,6 @@ test_common_ensure_state_dir_never_clobbers_an_existing_gitignore() {
   assert_contains "$(cat "$d/.gitignore")" 'keep-me.md' 'a hand-edited rule was overwritten'
 }
 
-# The caller has to be able to refuse: the files that land here carry the board URL, the
-# pinned gate commands and live approvals, and without the rule they are ordinary
-# untracked files that the next `git add -A` commits.
 test_common_ensure_state_dir_reports_a_failure() {
   source "$ITP_SCRIPTS/lib/common.sh"
   local blocked
@@ -122,9 +109,6 @@ test_common_ensure_state_dir_reports_a_failure() {
   fi
 }
 
-# A zero-byte .gitignore is the wreckage of an interrupted write, not a rule. Treating it
-# as "already set up" left the directory unignored forever while every caller read the 0
-# return as proof the rule was there.
 test_common_ensure_state_dir_repairs_an_empty_gitignore() {
   source "$ITP_SCRIPTS/lib/common.sh"
   local d first
@@ -133,5 +117,6 @@ test_common_ensure_state_dir_repairs_an_empty_gitignore() {
   : >"$d/.gitignore"
   ensure_state_dir "$d" || fail "ensure_state_dir reported a failure"
   first=$(grep -v '^#' "$d/.gitignore" | grep -v '^[[:space:]]*$' | head -1)
-  assert_eq '*' "$first" 'the rule was not restored'
+  assert_eq '*' "$first" 'a zero-byte .gitignore is the wreckage of an interrupted write, not a
+    rule; reading it as "already set up" left the directory unignored forever'
 }

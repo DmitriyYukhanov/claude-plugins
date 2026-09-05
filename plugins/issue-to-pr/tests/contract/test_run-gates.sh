@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Contract tests for scripts/run-gates.sh (spec §4.3).
 
 test_gates_all_pass() {
   run_script run-gates.sh --log-dir "$TEST_TMPDIR/logs" --gate 'typecheck=true' --gate 'test=true'
@@ -10,9 +9,6 @@ test_gates_all_pass() {
   assert_key "$OUT" GATES_RUN 2
 }
 
-# Every gate log lands in --log-dir, so a directory that cannot be created means the run has no
-# evidence at all. That must degrade before a single gate runs, not after they have all passed
-# and written nowhere.
 test_gates_unwritable_log_dir_degrades_before_running_anything() {
   printf 'blocking file
 ' > "$TEST_TMPDIR/blocker"
@@ -51,7 +47,6 @@ test_gates_no_gates_degrades() {
 }
 
 test_gates_empty_command_degrades_not_green() {
-  # An unresolved '<test_cmd>' must not pass as green via `bash -c ""`.
   run_script run-gates.sh --log-dir "$TEST_TMPDIR/logs" --gate 'typecheck='
   assert_rc 4
   assert_key "$OUT" DEGRADED_REASON empty-gate-command
@@ -71,9 +66,6 @@ test_gates_log_file_written() {
   assert_contains "$content" "hi-there"
 }
 
-# 2.11.0: a green run leaves the receipt worktree.sh merge checks. Bound to the HEAD
-# it ran against, because the only question at the merge is whether the gates saw the
-# content being merged.
 test_gates_green_leaves_a_receipt_for_this_head() {
   local repo head
   repo=$(init_repo "$TEST_TMPDIR/gr")
@@ -98,8 +90,6 @@ test_gates_red_leaves_no_receipt() {
   fi
 }
 
-# run-gates.sh is useful outside a checkout too, and a receipt it cannot write is not
-# a reason to redden a green suite. The merge is where the absence is felt.
 test_gates_outside_a_repo_still_pass() {
   mkdir -p "$TEST_TMPDIR/norepo-gates"
   cd "$TEST_TMPDIR/norepo-gates" || fail "cd failed"
@@ -107,4 +97,3 @@ test_gates_outside_a_repo_still_pass() {
   assert_rc 0
   assert_key "$OUT" GATES_OK true
 }
-

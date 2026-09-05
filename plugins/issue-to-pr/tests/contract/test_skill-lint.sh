@@ -1,25 +1,35 @@
 #!/usr/bin/env bash
 
-SKILL_LINE_BUDGET=180
+SKILL_LINE_BUDGET=150
+ROUTINE_READ_BUDGET=321
+ALL_PROSE_BUDGET=583
+ROUTINE_READ_REFERENCES='judgment.md configuration.md companions.md'
 BUILT_IN_SKILLS='code-review simplify verify deep-research'
 HOOK_RUN_SCRIPT=merge-guard.sh
 
 skill_md() { printf '%s' "$ITP_SCRIPTS/../skills/run/SKILL.md"; }
 setup_md() { printf '%s' "$ITP_SCRIPTS/../skills/setup/SKILL.md"; }
-companions_md() { printf '%s' "$ITP_SCRIPTS/../skills/run/references/companions.md"; }
+companions_md() { printf '%s' "$(references_dir)/companions.md"; }
 plugin_readme() { printf '%s' "$ITP_SCRIPTS/../README.md"; }
 repo_readme() { printf '%s' "$ITP_SCRIPTS/../../../README.md"; }
 plugin_manifest() { printf '%s' "$ITP_SCRIPTS/../.claude-plugin/plugin.json"; }
 marketplace_manifest() { printf '%s' "$ITP_SCRIPTS/../../../.claude-plugin/marketplace.json"; }
 
-skill_step() { # step-number
-  local block
-  block=$(awk -v n="$1" '
-    index($0, "**" n ". ")==1 || index($0, "## Step " n " ")==1 {f=1; print; next}
-    /^\*\*[0-9]+(\.[0-9]+)?\. / || /^## Step [0-9]/ {f=0}
-    f' "$(skill_md)")
-  [ -n "$block" ] || fail "SKILL.md has no Step $1 block; the heading was renamed or removed"
-  printf '%s\n' "$block"
+skill_step() { # word-in-the-heading
+  local heads head='^([*][*][0-9]+([.][0-9]+)?[.] |## Step [0-9])'
+  heads=$(grep -cE "$head.*$1" "$(skill_md)")
+  [ "$heads" -eq 1 ] || fail "SKILL.md has $heads step headings naming $1; there must be exactly one.
+    Zero means it was renamed or removed. Two is how one step becomes two, which is how a single
+    contact moment becomes a pair that each still reads like the original."
+  awk -v w="$1" -v h="$head" '$0 ~ h {f = index($0, w) > 0} f' "$(skill_md)"
+}
+
+references_dir() { printf '%s' "$ITP_SCRIPTS/../skills/run/references"; }
+
+references_on_disk() { basename -a "$(references_dir)"/*.md | sort -u; }
+
+references_the_spine_cites() {
+  grep -o 'R/[A-Za-z0-9._-]*\.md' "$(skill_md)" | cut -d/ -f2 | sort -u
 }
 
 install_table() { sed -n '/^| Companion | Install |/,/^$/p' "$(setup_md)"; }
@@ -66,12 +76,44 @@ assert_same_set() { # expected actual expected-name actual-name
     $4: $(printf '%s' "$2" | tr '\n' ' ')"
 }
 
+prose_budget() { # what budget file...
+  local what=$1 budget=$2 total=0 file count breakdown=''
+  shift 2
+  for file in "$@"; do
+    [ -f "$file" ] || fail "$what counts $file, which is not on disk"
+    count=$(wc -l <"$file")
+    count=${count// /}
+    total=$((total + count))
+    breakdown+="${breakdown:+, }${file##*/} $count"
+  done
+  [ "$total" -le "$budget" ] || fail "$what is $total lines, over the $budget budget.
+    $breakdown
+    Cut somewhere else, or raise the ceiling in the same PR and say in its body what the extra
+    lines bought. A ratchet nobody may ever move is one somebody eventually deletes."
+}
+
 test_skill_within_line_budget() {
-  local count
-  count=$(wc -l <"$(skill_md)")
-  count=${count// /}
-  [ "$count" -le "$SKILL_LINE_BUDGET" ] || fail "SKILL.md is $count lines, over the $SKILL_LINE_BUDGET budget.
-    Move detail into references/ rather than widening the budget."
+  prose_budget "the spine" "$SKILL_LINE_BUDGET" "$(skill_md)"
+}
+
+test_routine_read_stays_within_budget() {
+  local file
+  local -a files
+  [ -n "$ROUTINE_READ_REFERENCES" ] ||
+    fail "ROUTINE_READ_REFERENCES is empty, so this budget counts the spine alone and is vacuous"
+  files=("$(skill_md)")
+  for file in $ROUTINE_READ_REFERENCES; do files+=("$(references_dir)/$file"); done
+  prose_budget "what a run reads before it can work" "$ROUTINE_READ_BUDGET" "${files[@]}"
+}
+
+test_all_prose_stays_within_budget() {
+  prose_budget "the plugin's prose" "$ALL_PROSE_BUDGET" \
+    "$(skill_md)" "$(setup_md)" "$(references_dir)"/*.md
+}
+
+test_every_reference_is_cited_and_every_citation_exists() {
+  assert_same_set "$(references_on_disk)" "$(references_the_spine_cites)" \
+    "the reference files on disk" "the R/*.md the spine cites"
 }
 
 test_skill_names_spine_scripts() {
@@ -117,18 +159,18 @@ test_skill_grill_reshapes_the_checkpoint_without_adding_a_moment() {
   [ -n "$spine" ] || fail "SKILL.md came back empty; this check would be vacuous"
   grep -q 'argument-hint:.*--grill' "$(skill_md)" || fail "argument-hint must advertise --grill"
 
-  for file in "$(skill_md)" "$(setup_md)" "$ITP_SCRIPTS"/../skills/run/references/*.md \
+  for file in "$(skill_md)" "$(setup_md)" "$(references_dir)"/*.md \
               "$(plugin_readme)" "$(repo_readme)"; do
     content=$(cat "$file")
     [ -n "$content" ] || fail "$file came back empty; this check would be vacuous"
     assert_not_contains "$content" 'drill' "$file still mentions drill, which the plugin no longer has"
   done
 
-  checkpoint=$(skill_step 4)
+  checkpoint=$(skill_step Checkpoint)
   assert_contains "$checkpoint" 'grilling' "the checkpoint must run the grill when --grill asked for it"
   assert_contains "$checkpoint" 'AskUserQuestion' "the checkpoint lost its batched question"
   assert_contains "$checkpoint" 'replaces' \
-    "Step 4 must say the grill REPLACES the batched question; one that grills and THEN asks spends two contacts"
+    "the checkpoint must say the grill REPLACES the batched question; one that grills and THEN asks spends two contacts"
 
   ask_contract=$(printf '%s\n' "$spine" | grep -A3 -i 'ask contract:')
   [ -n "$ask_contract" ] || fail "the spine no longer states the ask contract"

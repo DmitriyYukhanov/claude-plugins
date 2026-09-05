@@ -1,12 +1,24 @@
-# Merge-failure ladder - Step 10 (spec sec 6.3)
+# Merge-failure ladder - Step 8
 
-`worktree.sh merge <N> --branch <b> [--ladder-attempt <n>]` runs a structured pre-check
-before any `gh pr merge` and emits a typed `STOP_REASON` (exit 2) for each failure mode. The
-script owns detection and the safe base-merge refresh; the model owns the bounded CI wait and
-the re-merge loop. On any stop nothing is merged and nothing is cleaned up: read the
-`STOP_REASON`, act per its rung, then re-run `merge` - the pre-check re-reads live state each
-call. The pre-merge stops (`gates-unverified`, `review-blocked`, `review-unreadable`,
-`pr-head-unreadable`, `merge-failed`) hand back the same way, outside the ladder loop.
+`worktree.sh merge` runs a structured pre-check before any `gh pr merge` and emits a typed
+`STOP_REASON` (exit 2) for every failure mode. The script owns detection and the safe base-merge
+refresh; the model owns the bounded CI wait and the re-merge loop. On any stop nothing is merged
+and nothing is cleaned up: read the `STOP_REASON`, act per its rung, then re-run `merge` - the
+pre-check re-reads live state each call.
+
+## Before the ladder
+
+These five refuse the merge outright rather than opening a loop.
+
+- **`gates-unverified`** - no green gate receipt covers the current head. Re-run `run-gates.sh` on
+  it, then re-run `merge`.
+- **`review-blocked`** - GitHub carries a requested change. Route it through change-requests; the
+  earlier go-ahead no longer covers this PR.
+- **`review-unreadable`** - the review state could not be read, so the script refuses rather than
+  guessing. A real answer, not a hiccup: hand back and ask.
+- **`pr-head-unreadable`** - the PR's head could not be read; hand back.
+- **`merge-failed`** - `gh pr merge` failed for a reason the classifier does not recognise. Report
+  its `MERGE_ERROR` verbatim and hand back.
 
 ## The rungs
 
@@ -51,13 +63,11 @@ Watch the checks green, then re-classify - never trust `--watch`'s bare exit cod
    `worktree.sh merge <N> --branch <b> --ladder-attempt <n+1>`. Its pre-check re-reads state,
    so a now-failed check surfaces as `checks-failed` and a now-green PR merges.
 
-At most ONE watch per attempt. Increment `--ladder-attempt` on each loop; at the cap, give up
-and hand back (`merge-ladder-exhausted`).
+At most ONE watch per attempt, and increment `--ladder-attempt` on each loop.
 
 ## The behind-base loop
 
-When the PR is behind its base, the script updates it and proves the PR's own diff untouched
+When the PR is behind its base the script updates it and proves the PR's own diff untouched
 (`LADDER_STEP=base-merged-clean`), then stops at `gates-unverified`: the new head is base+diff,
-which the gates never ran against. Pull it, re-run `run-gates.sh`, re-run `merge`. If the base
-merge altered the PR's own diff instead, the rung is `content-changed-needs-reapproval` and the
-user re-approves first.
+which the gates never ran against, and it exists only on the remote. Pull it first, or the receipt
+binds to the stale local head and the next `merge` stops the same way. Then re-gate and re-run.
