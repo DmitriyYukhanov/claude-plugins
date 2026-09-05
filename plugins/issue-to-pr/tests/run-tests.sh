@@ -1,11 +1,4 @@
 #!/usr/bin/env bash
-# tests/run-tests.sh - entry point for the issue-to-pr contract tests.
-#
-# Runs under Git Bash on Windows, bash on Linux/macOS. No bats, no jq. Two
-# phases: (1) shellcheck as an optional gate - skipped with a notice when it is
-# not installed (owner's Windows box), enforced in CI; (2) every `test_*`
-# function under tests/contract/, each in its own subshell with cwd set to a
-# fresh temp dir. Exit 0 only when lint (if run) and all tests pass.
 set -uo pipefail
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -19,9 +12,6 @@ if [ -t 1 ]; then
   red=$'\033[31m' grn=$'\033[32m' ylw=$'\033[33m' rst=$'\033[0m'
 fi
 
-# -- Phase 1: shellcheck (optional gate) -------------------------------------
-# Honour a SHELLCHECK override (path to the binary) for machines where it is not
-# named `shellcheck` on PATH; fall back to the PATH command otherwise.
 SHELLCHECK_BIN=${SHELLCHECK:-shellcheck}
 lint_rc=0
 if command -v "$SHELLCHECK_BIN" >/dev/null 2>&1; then
@@ -40,7 +30,6 @@ else
   printf '%s== shellcheck skipped (not installed) ==%s\n' "$ylw" "$rst"
 fi
 
-# -- Phase 2: contract tests -------------------------------------------------
 printf '== contract tests ==\n'
 total=0 pass=0 fail=0
 failures=""
@@ -56,9 +45,6 @@ for tf in "$HERE"/contract/test_*.sh; do
       declare -F | awk "{print \$3}" | grep "^test_" | sort
     ' _ "$ASSERT_LIB" "$tf" 2>/dev/null || true
   )
-  # A file that fails to parse yields zero functions, and the loop below then does
-  # nothing at all -- the whole file vanishes from the run while the suite still
-  # prints ALL GREEN. One unbalanced quote used to drop 42 worktree tests silently.
   if [ "${#fns[@]}" -eq 0 ] || [ -z "${fns[0]:-}" ]; then
     fail=$((fail + 1))
     failures="$failures"$'\n'"  $name :: NO TESTS DISCOVERED (parse error?)"

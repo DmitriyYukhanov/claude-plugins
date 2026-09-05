@@ -67,8 +67,7 @@ paste here once they pass. It never writes this file itself.
 
 That directory holds the plugin's state - the config, gate receipts, and each run's files under
 `runs/task-<N>/`. It ships its own `.gitignore` containing `*`, so none of it reaches
-`git status` and your project's `.gitignore` is left alone. A config at the older
-`.claude/issue-to-pr.local.md` path is not read; the run says so once and leaves it for you.
+`git status` and your project's `.gitignore` is left alone.
 
 Being ignored, the directory is disposable to `git clean -x`. Nothing breaks permanently: the
 commands get worked out again, and the next merge asks for one more gate run before it lands.
@@ -76,7 +75,7 @@ commands get worked out again, and the next merge asks for one more gate run bef
 ### Companion skills (optional)
 
 Three of the sharpest tools need no install: Claude Code's own `code-review` reviews the
-diff at Step 7, its `simplify` is one of the two lenses of the Step 8 gate, and its `verify`
+diff, its `simplify` is one of the two lenses of the simplification gate, and its `verify`
 closes that step by driving the built change. The CLI registers all three, so no marketplace
 is involved.
 
@@ -87,7 +86,7 @@ starts it when you type it. Step 2 always uses an `Explore` subagent. For the de
 Optional companions that sharpen specific steps: `superpowers:writing-plans`,
 `/codex-collaboration:cross-review`, `humanizer:humanizer`, `ponytail:ponytail` for the design
 and build, `mattpocock-skills:grilling` for `--grill`, and `ponytail:ponytail-review` as the
-Step 8 deletion lens. Each is used if installed, with an inline fallback otherwise.
+deletion lens. Each is used if installed, with an inline fallback otherwise.
 
 ## Usage
 
