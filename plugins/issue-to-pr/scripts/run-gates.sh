@@ -5,16 +5,11 @@ SCRIPT_DIR=${BASH_SOURCE[0]%/*}
 # shellcheck source=lib/common.sh
 source "$SCRIPT_DIR/lib/common.sh"
 
-log_dir=""
 gate_names=()
 gate_cmds=()
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
-    --log-dir)
-      log_dir=${2:-}
-      shift 2 2>/dev/null || shift "$#"
-      ;;
     --gate)
       spec=${2:-}
       shift 2 2>/dev/null || shift "$#"
@@ -22,26 +17,52 @@ while [ "$#" -gt 0 ]; do
       gate_cmds+=("${spec#*=}")
       ;;
     *)
-      warn "run-gates: ignoring unknown argument: $1"
-      shift
+      degrade unknown-argument "run-gates: unrecognised argument '$1'. A gate value carrying a quote of its own closes the wrapper and splits the rest into arguments like this one; pass each value through a shell variable: --gate \"test=\$t\""
       ;;
   esac
 done
 
-[ -n "$log_dir" ] || degrade missing-log-dir "run-gates: --log-dir is required"
 [ "${#gate_names[@]}" -gt 0 ] || degrade no-gates "run-gates: at least one --gate is required"
-
-for ((gi = 0; gi < ${#gate_cmds[@]}; gi++)); do
-  if [ -z "${gate_cmds[$gi]//[[:space:]]/}" ]; then
-    degrade empty-gate-command "run-gates: gate '${gate_names[$gi]}' has an empty command - resolve it before running the gate"
-  fi
-done
-
-mkdir -p "$log_dir" 2>/dev/null || degrade log-dir-unwritable "run-gates: cannot create $log_dir"
 
 key_of() {
   printf '%s' "$1" | tr '[:lower:]' '[:upper:]' | tr -c 'A-Z0-9' '_' | sed 's/_*$//'
 }
+
+seen_keys=""
+for ((gi = 0; gi < ${#gate_cmds[@]}; gi++)); do
+  gname=${gate_names[$gi]}
+  gcmd=${gate_cmds[$gi]}
+
+  if [ -z "${gcmd//[[:space:]]/}" ]; then
+    degrade empty-gate-command "run-gates: gate '$gname' has an empty command - resolve it before running the gate"
+  fi
+  # shellcheck disable=SC2016  # these patterns match a literal dollar sign, they do not expand
+  case "$gcmd" in
+    '$('*) : ;;
+    '$'*)
+      degrade unexpanded-gate-command "run-gates: gate '$gname' arrived as the literal text $gcmd, so the value was single-quoted at the call site and the shell never expanded it. Running that expands to nothing and exits 0, which is a green gate over no command. Use double quotes: --gate \"$gname=\$var\"" ;;
+  esac
+
+  gkey=$(key_of "$gname")
+  [ -n "$gkey" ] || degrade unnamed-gate "run-gates: gate name '$gname' leaves nothing to build an output key from"
+  case " $seen_keys " in
+    *" $gkey "*) degrade duplicate-gate "run-gates: gate '$gname' keys to GATE_${gkey}_EXIT, which an earlier gate already claimed, so one would report over the other. Rename one." ;;
+  esac
+  seen_keys="$seen_keys $gkey"
+done
+
+root=$(repo_root)
+branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || printf '')
+if [ -z "$root" ] || [ -z "$branch" ]; then
+  degrade not-a-git-repo "run-gates: the gate logs are keyed to the checkout and its branch, and neither could be read here"
+fi
+if [ "$branch" = HEAD ]; then
+  degrade detached-head "run-gates: this checkout is detached, so there is no branch to key the receipt to and the merge would look for it under the branch name instead. Check the feature branch out first."
+fi
+log_dir="$(branch_dir "$root" "$branch")/logs"
+if ! ensure_state_dir "$(state_dir "$root")" || ! mkdir -p "$log_dir" 2>/dev/null; then
+  degrade log-dir-unwritable "run-gates: cannot create $log_dir"
+fi
 
 ts=$(date +%Y%m%d-%H%M%S)
 overall_rc=0
@@ -51,17 +72,13 @@ n=${#gate_names[@]}
 
 for ((i = 0; i < n; i++)); do
   name=${gate_names[$i]}
-  cmd=${gate_cmds[$i]}
   key=$(key_of "$name")
-  logf="$log_dir/${name}-${ts}.log"
+  logf="$log_dir/$(printf '%s' "$key" | tr '[:upper:]' '[:lower:]')-$ts.log"
 
-  start=$(date +%s)
-  bash -c "$cmd" >"$logf" 2>&1
+  bash -c "${gate_cmds[$i]}" >"$logf" 2>&1
   rc=$?
-  end=$(date +%s)
 
   emit "GATE_${key}_EXIT" "$rc"
-  emit "GATE_${key}_TIME" "$((end - start))"
   emit "GATE_${key}_LOG" "$logf"
 
   if [ "$rc" -ne 0 ]; then
@@ -77,13 +94,13 @@ emit GATES_RUN "$((i < n ? i + 1 : n))"
 emit GATES_OK "$gates_ok"
 
 if [ "$gates_ok" = true ]; then
-  receipt_root=$(repo_root)
-  receipt_branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || printf '')
-  receipt_head=$(git rev-parse HEAD 2>/dev/null || printf '')
-  if [ -n "$receipt_root" ] && [ -n "$receipt_branch" ] && [ -n "$receipt_head" ]; then
-    if receipt_write "$(receipt_path "$receipt_root" "$receipt_branch")"       "$receipt_branch" "$receipt_head" "$(IFS=,; printf %s "${gate_names[*]}")" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"; then
-      emit GATES_RECEIPT "$receipt_head"
-    fi
+  head_sha=$(git rev-parse HEAD 2>/dev/null || printf '')
+  if [ -z "$head_sha" ]; then
+    warn "run-gates: the gates passed but HEAD could not be read, so no receipt was written and the merge will refuse this head"
+  elif receipt_write "$root" "$branch" "$head_sha" "$(IFS=,; printf %s "${gate_names[*]}")"; then
+    emit GATES_RECEIPT "$head_sha"
+  else
+    warn "run-gates: the gates passed but the receipt under $(branch_dir "$root" "$branch") could not be written, so the merge will refuse this head"
   fi
 fi
 flush_output

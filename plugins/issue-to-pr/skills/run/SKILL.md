@@ -50,10 +50,10 @@ you claim.
 **1. Worktree.** Pick `TIER` against `R/judgment.md`: `standard` unless the issue's signals say
 otherwise, `--tier` pins it; too large for one PR → split into issues first, each its own run.
 Then `S/worktree.sh ensure <N> --branch feat|fix/issue-<N>-<slug> --start-point <START_POINT>`
-and `cd WT_PATH`, where all the work then happens: one task per tree, never two. Install deps: work the command out from that
-tree's manifests as a **literal** (Step 5's rule) and run it through `run-gates.sh --log-dir
-"<RUN_DIR>/logs"`, which every gate call needs. Board-mode (the config named one): move the card
-to *in progress* with the chain in `R/board.md`.
+and `cd WT_PATH`, where all the work then happens: one task per tree, never two. It answers with
+`RUN_DIR`, the one directory this run owns. Install deps: work the command out from that tree's
+manifests as a **literal** (Step 5's rule) and run it through `run-gates.sh`. Board-mode (the
+config named one): move the card to *in progress* with the chain in `R/board.md`.
 
 **2. Design** (tier routes it). Unknowns first, on `complex`: an `Explore` subagent handed an
 explicit question list returns a ≤150-line summary citing `path:line`. `/deep-research` is the
@@ -62,8 +62,10 @@ user's own command, never yours to start. **Ponytail installed → `/ponytail:po
 a `Workflow` **inline** — 3 proposers from distinct angles reading the actual code, 1 judge — with
 the issue number, title and context paths written into the script text as literals, never passed
 through `args`. It returns the design (→ `<RUN_DIR>/design.md`) and rejected alternatives; a throw
-or an empty design → design inline. `/cross-review` critiques the result. Preference-bound
-questions → ledger. Standard: a mini-design in the PR body. **`--grill` needs a design at any
+or an empty design → design inline. `/cross-review` critiques the result, and what the two of you
+cannot settle goes to the ledger, preference-bound or not, rather than to the user: Step 3 is
+still the first contact.
+Standard: a mini-design in the PR body. **`--grill` needs a design at any
 tier**, trivial included and in context rather than on disk: there is nothing to grill otherwise.
 
 **3. Checkpoint (unconditional slot).** `--grill` → `mattpocock-skills:grilling` over the design
@@ -80,11 +82,10 @@ never eyeballing.
 **5. Gates.** Config commands are authoritative; each one the config left empty you work out **in
 the worktree**, the tree the gates run in, from its manifests and CI workflow — as a **literal**
 (`npm test`, `bash tests/run-tests.sh`), never a string assembled from repository filenames,
-because `run-gates.sh` evaluates it through `bash -c`. Ambiguous ⇒ Step 3 asks. Every gate value is
-config text and may carry a quote of its own, which closes the wrapper and splits the rest into
-arguments the script drops with a warning, so the gate runs a truncated command and reports green.
-Put each one in a shell variable in the same call, never inline: `S/run-gates.sh --log-dir
-"<RUN_DIR>/logs" --gate "typecheck=$tc" --gate "test=$t"` (+ `--gate "visual=$v"` for UI). Never
+because `run-gates.sh` evaluates it through `bash -c`. Ambiguous ⇒ Step 3 asks. Pass every gate
+value through a shell variable in the same call, never inline — a quote inside a config command
+closes the wrapper and the split-off words arrive as arguments the script refuses:
+`S/run-gates.sh --gate "typecheck=$tc" --gate "test=$t"` (+ `--gate "visual=$v"` for UI). Never
 judge a gate from an ad-hoc command; only this one surfaces the real failure. Red ⇒ STOP and fix.
 
 **6. Review and harden.** Built-in `code-review` at the tier's level, ≤ tier's max passes,
@@ -100,12 +101,13 @@ migrations, and add one `/security-review` if it does. `auth`, `crypto`, `secret
 `.env*`, `*.sql`, `*.pem` and `*.key` are a floor you may escalate from and never argue down.
 Re-run the gates after each fix and again when the loop closes, all green. For any gate command
 you worked out yourself, **print** (never write) the config frontmatter block in the
-report, naming `.claude/issue-to-pr/config.md`. Then the **simplification gate**, at most two passes: `/ponytail:ponytail-review` when
-installed for what to delete, built-in `simplify` for what stays but gets simpler, over `git diff
-<BASE>` (two dots, never three) plus any untracked file `<CHANGED>` names. Apply the cuts you agree
-with, re-run the gates, stop as soon as a pass finds nothing; the rest gets one line each in the
-report. Then built-in **`verify`**, `standard`+ and **last**: build the change and drive it at its
-own surface, past the happy path. A FAIL is stop-and-fix and re-gate.
+report, naming `.claude/issue-to-pr/config.md`. Then the **simplification gate**, at most two
+passes: `/ponytail:ponytail-review` when installed for what to delete, built-in `simplify` for
+what stays but gets simpler, over `git diff <BASE>` (two dots, never three) plus any untracked
+file `<CHANGED>` names. Apply the cuts you agree with, re-run the gates, stop as soon as a pass
+finds nothing; the rest gets one line each in the report. Then built-in **`verify`**, `standard`+
+and **last**: build the change and drive it at its own surface, past the happy path. A FAIL is
+stop-and-fix and re-gate.
 
 **7. PR and report.** `git add <explicit paths>`, conventional subjects; `git push -u origin
 <branch>`. **Re-run `run-gates.sh` on the commit** — the receipt names the HEAD it ran against, so
@@ -122,7 +124,8 @@ in the in-place fallback stay in the main checkout on `<branch>`. Read the reply
 PR. **Merge only on an unambiguous go-ahead to merge THIS PR.**
 - **Go-ahead** ("merge it", "lgtm, ship it", "approved", "go ahead and merge") → `S/worktree.sh
   merge <N> --branch <branch>`, the only sanctioned merge path (what it refuses, and why:
-  `R/contracts.md`). On any `STOP_REASON` follow `R/merge-ladder.md`; on exit 2, **skip cleanup**.
+  `R/contracts.md`). On any `STOP_REASON` do what its stderr hint says; the two rungs that open
+  a loop rather than end one are in `R/merge-ladder.md`. On exit 2, **skip cleanup**.
 - **Change requests** → build them the way Step 4 builds anything, then **re-run the tier gates**
   (Steps 5–6 on the new diff) until clean, push, re-report, wait again. Never merge unverified.
 - **Anything else** → do **not** merge. A vague ack ("ok", "looks fine") or a question → ask for
@@ -131,14 +134,14 @@ PR. **Merge only on an unambiguous go-ahead to merge THIS PR.**
 
 ## Step 9 — Cleanup (after a successful merge)
 
-Only after Step 8 merges. **Read `BASE_IS_DEFAULT`**; on anything but `true`, do NOT clean up and
-say which it is: `false` → it landed on `<MERGED_INTO>`, not the default branch, so the issue
-stays open; `unknown` → the landing branch could not be confirmed, so claim neither. **`cd` into
-the main checkout first** (a shell whose cwd is the worktree locks it on Windows). **Smoke runs
-BEFORE cleanup**, which deletes the log dir it writes to: if `smoke_cmd` is set, pull the base, put
-it in a shell variable and run `S/run-gates.sh --log-dir "<RUN_DIR>/logs" --gate "smoke=$s"` (Step
-5's rule). Red → revert what `MERGE_METHOD` says landed: one commit for `squash`, `-m 1` for
-`merge`, and for `rebase` the whole range it replayed, since reverting one of those commits leaves
-the rest on the base. Do it on a fresh branch cut from the refreshed base and open a **draft** PR. Never auto-revert, never merge it; report loudly. Then `S/worktree.sh cleanup <N> --branch <branch>` and
-report from its keys (`R/contracts.md`), which is also where the in-place fallback's hand sweep
-lives. Finish with one line: what merged, what was removed, what was kept.
+Only after Step 8 merges. **`cd` into the main checkout first** (a shell whose cwd is the worktree
+locks it on Windows). Smoke first if `smoke_cmd` is set: pull the base, put the command in a shell
+variable and run `S/run-gates.sh --gate "smoke=$s"` (Step 5's rule). Red → revert what
+`MERGE_METHOD` says landed: one commit for `squash`, `-m 1` for `merge`, and for `rebase` the
+whole range it replayed, since reverting one of those commits leaves the rest on the base. Do it
+on a fresh branch cut from the refreshed base and open a **draft** PR;
+never auto-revert, never merge it, and report it loudly. Then `S/worktree.sh cleanup <N> --branch
+<branch>` and report from its keys (`R/contracts.md`), which is also where the in-place fallback's
+hand sweep lives. **`BASE_IS_DEFAULT`** is the one thing cleanup cannot answer: `false` means the
+work landed on `<MERGED_INTO>` and the issue is still open, `unknown` means the landing branch was
+never confirmed, so claim neither. Finish with one line: what merged, what went, what was kept.

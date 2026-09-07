@@ -2,10 +2,9 @@
 
 ## The config file — `.claude/issue-to-pr/config.md`
 
-Optional per-project settings in YAML frontmatter. Before writing anything into
-`.claude/issue-to-pr/`, give that directory its own `.gitignore` whose **first** rule is `*`, never
-touching the project's own. The gate receipt lands there, and a run's files under `runs/task-<N>/` —
-that path is `<RUN_DIR>`, and cleanup takes it.
+Optional per-project settings in YAML frontmatter, in the plugin's own state directory. The
+scripts create that directory and keep it gitignored, and `<RUN_DIR>` is the part of it this run
+owns (`R/contracts.md`).
 
 ```yaml
 ---

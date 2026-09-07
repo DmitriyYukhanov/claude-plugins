@@ -9,7 +9,7 @@ scenario=${FAKE_GH_SCENARIO:-happy}
 sub=${1:-}
 
 HEAD_SHA_CURRENT="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-HEAD_SHA_MOVED="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+PR_URL="https://github.com/octo-owner/demo-repo/pull/123"
 
 flag_val() {
   local want=$1
@@ -33,41 +33,28 @@ die() { # message exitcode
 
 case "$sub" in
   api)
+    # real gh magic-types -F: an all-digit owner or repo becomes a JSON number, and a String!
+    # variable rejects it. Only -f keeps a value a string.
+    case " $* " in
+      *" -F o="* | *" -F r="*) die "Variable of type String! was provided invalid value" 1 ;;
+    esac
     case "$scenario" in
-      review-unresolved) printf '2\n' ;;
-      *) printf '0\n' ;;
+      review-unresolved) printf '2\t2\n' ;;
+      review-threads-overflow) printf '0\t137\n' ;;
+      review-threads-unreadable) die "GraphQL: something went wrong" 1 ;;
+      *) printf '0\t0\n' ;;
     esac
     ;;
 
   repo)
     case "$jqf" in
-      .nameWithOwner) printf 'octo-owner/demo-repo\n' ;;
       .defaultBranchRef.name)
         case "$scenario" in
           default-branch-unreadable) printf '' ;;
           *) printf 'main\n' ;;
         esac
         ;;
-      *) printf '{"owner":{"login":"octo-owner"},"name":"demo-repo","defaultBranchRef":{"name":"main"}}\n' ;;
-    esac
-    ;;
-
-  issue)
-    action=${2:-}
-    case "$action" in
-      view)
-        [ "$scenario" = issue-unreachable ] && die "issue not found" 1
-        case "$jqf" in
-          .state)
-            case "$scenario" in
-              issue-closed) printf 'CLOSED\n' ;;
-              *) printf 'OPEN\n' ;;
-            esac
-            ;;
-          *) printf '{"state":"OPEN","title":"Demo issue"}\n' ;;
-        esac
-        ;;
-      *) exit 0 ;;
+      *) printf '{"defaultBranchRef":{"name":"main"}}\n' ;;
     esac
     ;;
 
@@ -83,18 +70,23 @@ case "$sub" in
           esac
           exit 0
         fi
-        case "$scenario" in
-          pr-open) printf 'OPEN\n' ;;
-          pr-merged) printf 'MERGED\n' ;;
-          *) printf '' ;; # pr-none: empty
+        # real gh lists OPEN pull requests unless --state says otherwise, so a caller
+        # hunting a merged one and not asking for it gets an empty list, not MERGED
+        case "$scenario:$(flag_val --state "$@")" in
+          pr-list-unreadable:*) exit 1 ;;
+          pr-open:*) printf 'OPEN\n' ;;
+          pr-merged:all) printf 'MERGED\n' ;;
+          *) printf '' ;;
         esac
         ;;
       view)
         if printf '%s' "$*" | grep -q 'reviewDecision'; then
           case "$scenario" in
-            review-changes-requested) printf '\t1\t123\n' ;;
+            review-changes-requested) printf '\t1\t%s\n' "$PR_URL" ;;
             review-read-fail) printf '' ;;
-            *) printf '\t0\t123\n' ;;
+            review-url-missing) printf '\t0\t\n' ;;
+            review-url-malformed) printf '\t0\thttps://github.com/octo-owner/demo-repo\n' ;;
+            *) printf '\t0\t%s\n' "$PR_URL" ;;
           esac
           exit 0
         fi
@@ -104,7 +96,7 @@ case "$sub" in
             merge-conflict-state) printf 'CONFLICTING\tDIRTY\t\n' ;;
             behind-clean | behind-content | behind-update-fail | behind-noadvance) printf 'MERGEABLE\tBEHIND\t\n' ;;
             pending-checks) printf 'MERGEABLE\tUNSTABLE\t\n' ;;
-            mergeability-unavailable) printf '' ;;
+            mergeability-unreadable) printf '' ;;
             *) printf 'MERGEABLE\tCLEAN\t\n' ;;
           esac
           exit 0
@@ -113,38 +105,22 @@ case "$sub" in
           .state)
             case "$scenario" in
               pr-merged | has-dependent-pr | dependents-unreadable) printf 'MERGED\n' ;;
-              pr-open) printf 'OPEN\n' ;;
-              pr-closed) printf 'CLOSED\n' ;;
               *) printf 'OPEN\n' ;;
             esac
             ;;
           .headRefOid)
             case "$scenario" in
-              head-moved) printf '%s\n' "$HEAD_SHA_MOVED" ;;
               head-empty) printf '' ;;
               *) printf '%s\n' "$HEAD_SHA_CURRENT" ;;
             esac
             ;;
-          .headRefName)
-            case "$scenario" in
-              head-name-missing) printf '' ;;
-              *) printf 'feat/issue-6-x\n' ;;
-            esac
-            ;;
-          *'.url, .baseRefName'*)
-            printf 'https://github.com/octo-owner/demo-repo/pull/123\n'
-            case "$scenario" in
-              stacked-base) printf 'feat/issue-5-parent\n' ;;
-              *) printf 'main\n' ;;
-            esac
-            ;;
+          .headRefName) printf 'feat/issue-6-x\n' ;;
           .baseRefName)
             case "$scenario" in
               stacked-base) printf 'feat/issue-5-parent\n' ;;
               *) printf 'main\n' ;;
             esac
             ;;
-          .title) printf 'Demo PR title\n' ;;
           *) printf '{"state":"OPEN","headRefOid":"%s"}\n' "$HEAD_SHA_CURRENT" ;;
         esac
         ;;
@@ -186,13 +162,9 @@ case "$sub" in
             fi
             exit 0
             ;;
-          merge-conflict) die "Pull request is not mergeable: merge conflict between base and head." 1 ;;
           protected) die "Protected branch update failed: required status checks have not passed." 1 ;;
           *) exit 0 ;;
         esac
-        ;;
-      create)
-        printf 'https://github.com/octo-owner/demo-repo/pull/123\n'
         ;;
       *) exit 0 ;;
     esac

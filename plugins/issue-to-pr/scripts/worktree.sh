@@ -11,14 +11,11 @@ issue=""
 branch=""
 start_point=""
 keep_branch=0
-ladder_attempt=1
-LADDER_CAP=3
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --branch) branch=${2:-}; shift 2 2>/dev/null || shift "$#" ;;
     --start-point) start_point=${2:-}; shift 2 2>/dev/null || shift "$#" ;;
     --keep-branch) keep_branch=1; shift ;;
-    --ladder-attempt) ladder_attempt=${2:-1}; shift 2 2>/dev/null || shift "$#" ;;
     -*) warn "worktree: ignoring unknown flag: $1"; shift ;;
     *) [ -z "$issue" ] && issue=$1; shift ;;
   esac
@@ -44,6 +41,14 @@ branch_exists() { git show-ref --verify --quiet "refs/heads/$1"; }
 
 is_base_branch() { # name -> true if it looks like an integration base
   case "$1" in main | master | dev | develop) return 0 ;; *) return 1 ;; esac
+}
+
+pr_state_of() { # branch -> MERGED|OPEN|CLOSED|none|unreadable
+  local s
+  # --state all, or a merged PR is simply absent: gh lists open ones by default
+  s=$(gh pr list --head "$1" --state all --json state --jq '.[0].state // empty' 2>/dev/null) ||
+    { printf 'unreadable'; return 0; }
+  printf '%s' "${s:-none}"
 }
 
 pr_mergeability() {
@@ -82,14 +87,12 @@ remove_worktree() {
   fi
 
   local status
-  status=$(git -C "$wt" status --porcelain --untracked-files=all 2>/dev/null |
-    grep -v '^?? \.claude/issue-to-pr/' || printf '')
+  status=$(git -C "$wt" status --porcelain --untracked-files=all 2>/dev/null || printf '')
   if [ -n "$status" ]; then
     emit DIRTY_FILES "$(printf '%s' "$status" | tr '\n' ';')"
     stop dirty-tracked-files "worktree $wt has tracked or unexpected changes - not removing"
   fi
 
-  if git -C "$root" worktree remove "$wt" 2>/dev/null; then REMOVED=true; return 0; fi
   LEFTOVER="$wt"
   return 0
 }
@@ -97,7 +100,7 @@ remove_worktree() {
 cmd_ensure() {
   [ -n "$start_point" ] || degrade missing-start-point "worktree ensure: --start-point required"
 
-  local root reg wt_path add_out state actual_branch
+  local root reg wt_path add_out state actual_branch pr_state
   root=$(repo_root)
   [ -n "$root" ] || degrade not-a-git-repo "worktree ensure: not inside a git repository"
   wt_path=$(compute_wt_path "$root" "$issue")
@@ -120,56 +123,65 @@ cmd_ensure() {
     fi
     state=RESUMED
     wt_path=$reg
-    local pr_state
-    pr_state=$(gh pr list --head "$actual_branch" --json state --jq '.[0].state' 2>/dev/null || printf '')
-    pr_state=${pr_state:-none}
-    if [ "$pr_state" = MERGED ]; then
-      emit WT_PATH "$wt_path"
-      emit BRANCH "$actual_branch"
-      emit PR_STATE merged
-      stop pr-already-merged "PR for $actual_branch is merged - run cleanup"
-    fi
-    emit PR_STATE "$(printf '%s' "$pr_state" | tr '[:upper:]' '[:lower:]')"
+    pr_state=$(pr_state_of "$actual_branch")
   else
     if [ -e "$wt_path" ]; then
       emit WT_PATH "$wt_path"
       stop stale-unregistered-dir "a directory exists at $wt_path but is not a registered worktree"
     fi
-    if branch_exists "$branch"; then
-      add_out=$(git worktree add "$wt_path" "$branch" 2>&1) || { handle_add_error "$add_out"; return; }
-      state=REATTACHED
-    else
-      add_out=$(git worktree add "$wt_path" -b "$branch" "$start_point" 2>&1) || { handle_add_error "$add_out"; return; }
-      state=CREATED
-    fi
     actual_branch=$branch
+    if branch_exists "$branch"; then
+      state=REATTACHED
+      pr_state=$(pr_state_of "$branch")
+      [ "$pr_state" = unreadable ] &&
+        warn "worktree: could not read whether $branch already has a merged PR; if it does, cleanup is the command, not this one"
+    else
+      state=CREATED
+      pr_state=none
+    fi
   fi
 
+  if [ "$pr_state" = MERGED ]; then
+    [ "$state" = RESUMED ] && emit WT_PATH "$wt_path"
+    emit BRANCH "$actual_branch"
+    emit PR_STATE merged
+    stop pr-already-merged "PR for $actual_branch is merged - run cleanup"
+  fi
+
+  # nothing above this line has built anything, so no key names a path that may not exist yet
+  if [ "$state" = REATTACHED ]; then
+    add_out=$(git worktree add "$wt_path" "$branch" 2>&1) || { handle_add_error "$add_out"; return; }
+  elif [ "$state" = CREATED ]; then
+    add_out=$(git worktree add "$wt_path" -b "$branch" "$start_point" 2>&1) || { handle_add_error "$add_out"; return; }
+  fi
+
+  local run_dir
+  run_dir=$(branch_dir "$root" "$actual_branch")
+  if ! ensure_state_dir "$(state_dir "$root")" || ! mkdir -p "$run_dir" 2>/dev/null; then
+    warn "worktree: could not create $run_dir - write the run's files somewhere else and say so"
+  fi
   emit WT_PATH "$wt_path"
   emit ORIGINAL_ROOT "$root"
-  emit STATE "$state"
   emit BRANCH "$actual_branch"
+  emit PR_STATE "$(printf '%s' "$pr_state" | tr '[:upper:]' '[:lower:]')"
+  emit STATE "$state"
+  emit RUN_DIR "$run_dir"
   done_ok
 }
 
 handle_add_error() {
   local raw=$1
   case "$raw" in
-    *"already exists"*)
-      local reg2
-      reg2=$(registered_wt "$issue")
-      if [ -n "$reg2" ]; then
-        emit WT_PATH "$reg2"
-        emit STATE RESUMED
-        emit BRANCH "$(git -C "$reg2" rev-parse --abbrev-ref HEAD 2>/dev/null || printf '')"
-        done_ok
-      fi
-      stop stale-unregistered-dir "worktree add reported 'already exists' but nothing is registered"
-      ;;
     *"invalid reference"* | *"not a valid"* | *"unknown revision"*)
       stop invalid-start-point "start-point '$start_point' is not a valid ref"
       ;;
     *"Permission denied"* | *"permission denied"* | *"Operation not permitted"*)
+      local in_place_root
+      in_place_root=$(repo_root)
+      if [ -n "$in_place_root" ] && ensure_state_dir "$(state_dir "$in_place_root")" &&
+        mkdir -p "$(branch_dir "$in_place_root" "$branch")" 2>/dev/null; then
+        emit RUN_DIR "$(branch_dir "$in_place_root" "$branch")"
+      fi
       fallback worktree-permission-denied "cannot create a worktree here - cut the branch in place: git switch -c $branch $start_point"
       ;;
     *)
@@ -180,14 +192,13 @@ handle_add_error() {
 }
 
 cmd_merge() {
-  [ "$ladder_attempt" -le "$LADDER_CAP" ] || stop merge-ladder-exhausted "the merge ladder retried $LADDER_CAP times without landing $branch. Resolve the PR state on GitHub by hand, then re-approve."
   local root cur_sha
   root=$(repo_root)
   [ -n "$root" ] || degrade not-a-git-repo "worktree merge: not inside a git repository"
 
   branch=$(canonical_branch "$branch")
   cur_sha=$(gh pr view "$branch" --json headRefOid --jq .headRefOid 2>/dev/null || printf '')
-  [ -n "$cur_sha" ] || stop pr-head-unreadable "issue-to-pr: could not read the PR head for $branch. Check the PR exists and gh is authenticated."
+  [ -n "$cur_sha" ] || stop pr-head-unreadable "issue-to-pr: could not read the PR head for $branch. Check the PR exists and gh is authenticated, then hand back."
 
   local receipt receipt_sha rstate
   receipt=$(receipt_path "$root" "$branch")
@@ -198,21 +209,25 @@ cmd_merge() {
     [ -n "$receipt_sha" ] && covers="covers ${receipt_sha:0:12}"
     stop gates-unverified "issue-to-pr: no green gate receipt for ${cur_sha:0:12} (receipt $covers). Re-run run-gates.sh on this head, then re-approve."
   fi
+  if [ "$(json_str_field "$receipt" gates)" = smoke ]; then
+    stop gates-unverified "issue-to-pr: the only receipt for ${cur_sha:0:12} covers a post-merge smoke run, not this branch's gates. Run the full gate set on this head, then re-approve."
+  fi
   rstate=$(review_state "$branch")
   case "$rstate" in
     clear) : ;;
     changes_requested) stop review-blocked "issue-to-pr: $branch has a review requesting changes. Address it, push, re-run the gates, and re-approve." ;;
     unresolved_threads) stop review-blocked "issue-to-pr: $branch has unresolved review threads. Resolve them on GitHub, then re-approve." ;;
-    *) stop review-unreadable "issue-to-pr: could not read the review state of $branch. Check it yourself before merging; this gate does not pass on an unread review." ;;
+    *) stop review-unreadable "issue-to-pr: could not read the review state of $branch. This is an answer, not a hiccup: check the PR yourself and hand back rather than re-running merge, which will stop here again. The gate does not pass on an unread review." ;;
   esac
 
   if ! push_out=$(git push 2>&1); then
     emit PUSH_ERROR "$(printf '%s' "$push_out" | tr '\n' ' ')"
-    stop push-rejected "git push was rejected - resolve remotely, then re-approve"
+    stop push-rejected "issue-to-pr: git push was rejected. Usually the local base is simply behind after an earlier merge: run 'git fetch origin && git merge --ff-only origin/<base>' in the MAIN checkout, then re-run merge. Any other cause means the remote moved under you, so re-approve rather than assuming the approval still covers the diff you showed."
   fi
 
   local mstat mergeable_v state_v failing_v
   mstat=$(pr_mergeability "$branch")
+  [ -n "$mstat" ] || stop mergeability-unreadable "issue-to-pr: could not read whether $branch is mergeable, so the checks, the conflict state and the base distance all went unread. Check the PR yourself and hand back; this gate does not pass on an unread PR."
   if [ -n "$mstat" ]; then
     mergeable_v=$(printf '%s' "$mstat" | cut -f1)
     state_v=$(printf '%s' "$mstat" | cut -f2)
@@ -222,7 +237,7 @@ cmd_merge() {
       stop checks-failed "required checks failed on $branch ($failing_v). Fix them, push, re-run the gates, and re-approve; do not wait on a check that already failed."
     fi
     if [ "$mergeable_v" = CONFLICTING ]; then
-      stop merge-conflict "$branch conflicts with its base. Resolve the conflict locally, push, re-run the gates, and re-approve."
+      stop merge-conflict "$branch conflicts with its base. Do not resolve it yourself: report the conflict and hand back, because a resolution changes the diff that was approved."
     fi
     if [ "$state_v" = BEHIND ]; then
       local base_ref old_head new_head
@@ -255,7 +270,7 @@ cmd_merge() {
       merge_method=rebase
     else
       emit MERGE_ERROR "$(printf '%s' "$merge_out" | tr '\n' ' ')"
-      stop merge-failed "gh pr merge failed after --merge and --rebase fallbacks"
+      stop merge-failed "gh pr merge failed after the --merge and --rebase fallbacks. Report MERGE_ERROR verbatim and hand back."
     fi
   elif printf '%s' "$merge_out" | grep -qiE 'pending|not mergeable.*check|checks are still'; then
     if ! merge_out=$(gh pr merge "$branch" --squash --match-head-commit "$cur_sha" 2>&1); then
@@ -263,16 +278,13 @@ cmd_merge() {
     fi
   else
     emit MERGE_ERROR "$(printf '%s' "$merge_out" | tr '\n' ' ')"
-    stop merge-failed "gh pr merge failed - see MERGE_ERROR"
+    stop merge-failed "gh pr merge failed for a reason the classifier does not know. Report MERGE_ERROR verbatim and hand back."
   fi
 
-  local issue_state pr_url base_ref default_ref _pr_fields
-  issue_state=$(gh issue view "$issue" --json state --jq .state 2>/dev/null || printf '')
+  local base_ref default_ref
   emit MERGED true
-
-  mapfile -t _pr_fields < <(gh pr view "$branch" --json url,baseRefName --jq '.url, .baseRefName' 2>/dev/null)
-  pr_url=${_pr_fields[0]:-}
-  base_ref=${_pr_fields[1]:-}
+  emit MERGE_METHOD "$merge_method"
+  base_ref=$(gh pr view "$branch" --json baseRefName --jq .baseRefName 2>/dev/null || printf '')
   default_ref=$(gh repo view --json defaultBranchRef --jq .defaultBranchRef.name 2>/dev/null || printf '')
   emit MERGED_INTO "$base_ref"
   if [ -z "$base_ref" ] || [ -z "$default_ref" ]; then
@@ -283,9 +295,6 @@ cmd_merge() {
   else
     emit BASE_IS_DEFAULT true
   fi
-  emit MERGE_METHOD "$merge_method"
-  emit ISSUE_STATE "$issue_state"
-  emit PR_URL "$pr_url"
   done_ok
 }
 
@@ -339,8 +348,7 @@ cmd_cleanup() {
     deleted_remote=true
   fi
 
-  rm -f "$(receipt_path "$root" "$branch")" 2>/dev/null
-  rm -rf "$(run_dir "$root" "$issue")" 2>/dev/null
+  rm -rf "$(branch_dir "$root" "$branch")" 2>/dev/null
 
   emit REMOVED "$REMOVED"
   emit DELETED_LOCAL "$deleted_local"
