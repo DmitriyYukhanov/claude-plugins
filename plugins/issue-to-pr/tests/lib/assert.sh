@@ -1,15 +1,4 @@
 #!/usr/bin/env bash
-# tests/lib/assert.sh - plain-bash assertion + fixture helpers.
-#
-# No bats, no jq: every contract test is a `test_*` function in a file under
-# tests/contract/. run-tests.sh runs each in an isolated subshell with cwd set
-# to a fresh $TEST_TMPDIR. An assertion prints a diagnostic to stderr and exits
-# the test subshell non-zero on failure, so the first failure ends that test.
-#
-# Exported by run-tests.sh before tests run: ITP_SCRIPTS (scripts/ dir),
-# FAKE_GH_DIR (fake-gh/ dir), TEST_TMPDIR (per-test scratch dir).
-
-# -- Assertions --------------------------------------------------------------
 
 assert_eq() { # expected actual [msg]
   if [ "$1" != "$2" ]; then
@@ -41,7 +30,6 @@ assert_not_contains() { # haystack needle [msg]
   esac
 }
 
-# assert_key OUTPUT KEY EXPECTED [msg] - assert a `KEY=EXPECTED` line is present.
 assert_key() {
   local out=$1 key=$2 exp=$3 msg=${4:-assert_key}
   local line val found=0
@@ -60,7 +48,6 @@ assert_key() {
   fi
 }
 
-# assert_key_present OUTPUT KEY [msg]
 assert_key_present() {
   local line found=0
   while IFS= read -r line; do
@@ -73,7 +60,6 @@ assert_key_present() {
   fi
 }
 
-# assert_rc EXPECTED [msg] - assert last run_script exit code (in $RC).
 assert_rc() {
   if [ "${RC:-unset}" != "$1" ]; then
     printf '  ASSERT FAILED: %s\n    expected rc: %s\n    actual rc:   %s\n    stdout:\n%s\n    stderr:\n%s\n' \
@@ -87,11 +73,6 @@ fail() { # msg
   exit 1
 }
 
-# -- Running scripts under test ----------------------------------------------
-
-# run_script SCRIPT ARGS... - run scripts/SCRIPT, capture stdout->OUT, stderr->ERR,
-# exit code->RC. Never aborts the test on a non-zero exit (that is the assertion's
-# job). SCRIPT is a path relative to $ITP_SCRIPTS (e.g. "worktree.sh").
 run_script() {
   local script=$1
   shift
@@ -102,14 +83,8 @@ run_script() {
   export OUT ERR RC
 }
 
-# run_guard STDIN_JSON - feed hook JSON to merge-guard.sh on stdin; sets OUT/ERR/RC.
-# Command substitution inherits stdin, so the herestring reaches the hook's `input=$(cat)`.
 run_guard() { run_script merge-guard.sh <<<"$1"; }
 
-# -- fake-gh control ---------------------------------------------------------
-
-# use_fake_gh SCENARIO - put the fake gh first on PATH, select a scenario, and
-# start a fresh invocation log.
 use_fake_gh() {
   export PATH="$FAKE_GH_DIR:$PATH"
   export FAKE_GH_SCENARIO="$1"
@@ -117,24 +92,18 @@ use_fake_gh() {
   : >"$FAKE_GH_LOG"
 }
 
-# gh_log - the recorded gh invocations (one per line).
 gh_log() {
   cat "$FAKE_GH_LOG" 2>/dev/null || true
 }
 
-# assert_gh_called SUBSTR [msg] - assert some gh invocation contained SUBSTR.
 assert_gh_called() {
   assert_contains "$(gh_log)" "$1" "${2:-gh should have been called with: $1}"
 }
 
-# assert_gh_not_called SUBSTR [msg]
 assert_gh_not_called() {
   assert_not_contains "$(gh_log)" "$1" "${2:-gh should NOT have been called with: $1}"
 }
 
-# -- git fixtures ------------------------------------------------------------
-
-# init_repo [DIR] - create a git repo with one commit on `main`. Echoes its path.
 init_repo() {
   local dir=${1:-$TEST_TMPDIR/repo}
   mkdir -p "$dir"
@@ -148,10 +117,6 @@ init_repo() {
   printf '%s' "$dir"
 }
 
-# write_receipt ROOT BRANCH SHA - the green-gate receipt run-gates.sh leaves and
-# worktree.sh merge refuses to merge without. One copy
-# of the on-disk shape, so a schema change cannot leave half the tests exercising
-# a format nothing writes any more.
 write_receipt() {
   local root=$1 branch=$2 sha=$3 slug
   slug=${branch//\//-}
@@ -160,11 +125,6 @@ write_receipt() {
     "$branch" "$sha" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >"$root/.claude/issue-to-pr/gates-$slug.json"
 }
 
-# init_repo_with_remote [BRANCHES...] - a repo with a real bare `origin` holding
-# `main` plus any extra branches named. Needed because `git ls-remote` is the whole
-# basis of base resolution: against a repo with no origin it always fails, so a
-# fixture without one exercises only the offline fallback and leaves the primary
-# path untested. Echoes the repo path.
 init_repo_with_remote() {
   local dir="$TEST_TMPDIR/repo" remote="$TEST_TMPDIR/remote.git" b
   git init -q --bare "$remote"
@@ -174,9 +134,7 @@ init_repo_with_remote() {
   for b in "$@"; do
     git -C "$dir" branch "$b" main
     git -C "$dir" push -q origin "$b"
-    # Drop the local branch: these fixtures are about what the REMOTE has.
     git -C "$dir" branch -q -D "$b"
   done
   printf '%s' "$dir"
 }
-
