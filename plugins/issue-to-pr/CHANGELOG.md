@@ -5,6 +5,25 @@ All notable changes to the **issue-to-pr** plugin will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [7.0.0] - 2026-09-05
+
+### Changed
+- Fold the twelve steps into the ten the plugin exists to run: research happens inside the design, and everything between the code and the commit is one hardening step
+- Cut what a run reads before it can start from 396 lines to 314, keeping each fact only where the run has to act on it
+- Ask one page how deep a run should go and what it may decide alone, instead of two
+- Say why a check exists in the message it prints when it fails, rather than in a comment only a reader of the file would find
+
+### Removed
+- Remove the config's nested `commands:` alias for the `*_cmd` fields; a run that meets one now says so instead of quietly working the commands out again
+- Stop mentioning the pre-2.5 config path, four majors after anything read it
+
+### Fixed
+- Say plainly that the merge guard denies `gh pr merge --admin` and nothing else, so nobody infers a plain merge is covered
+- Pull the updated head before re-gating a PR that was behind its base, which the recovery had stopped saying and without which it never finishes
+- Pass every gate command the quote-safe way, so an apostrophe in a configured test or smoke command can no longer truncate it while the gate still reports green
+- Revert what actually landed when a post-merge smoke fails: one commit for a squash, the merge commit for a merge, and the whole replayed range for a rebase
+- Fetch the default branch as well as the base, which the in-place fallback needs and only the base was getting
+
 ## [6.1.1] - 2026-09-02
 
 ### Fixed

@@ -31,8 +31,9 @@ Each `||` rung is why an empty `opts` below is an answer rather than a failure. 
 the whole search: an issue whose target board falls outside that first page reads as not on it.
 
 `opts` empty means the board has no `Status` field at all, which is not the same as a Status
-field with no matching column — say which one it was. Otherwise pick the option: `status_map`
-pins the exact column name and is authoritative when set; without it match case- and
+field with no matching column — say which one it was. Otherwise pick the option: the config's
+`status_map` (`in_progress` for Step 1, `in_review` for Step 7) pins the exact column name and
+is authoritative when set; without it match case- and
 punctuation-insensitively against the target, where *in progress* also answers to doing,
 started, wip, in development, and *in review* to review, reviewing, code review, pr open,
 ready for review. Then set it:

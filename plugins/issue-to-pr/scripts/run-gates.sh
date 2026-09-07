@@ -1,21 +1,6 @@
 #!/usr/bin/env bash
-# run-gates.sh - run one or more gates (typecheck/test/visual/install/smoke),
-# capture each gate's output to a log, and print a compact machine block. The
-# printed block is the verification-before-completion proof: a green run is ~2-3
-# lines per gate, and only a failing gate's last 40 lines are surfaced (on
-# stderr) so gate output never floods the model's context.
-#
-#   run-gates.sh --log-dir <dir> --gate name='<cmd>' [--gate name2='<cmd2>']
-#
-# Gates run sequentially in the current directory and STOP at the first failure
-# (fail-fast). Unlike the rest of the pipeline, this script's exit code is the
-# first failing gate's own exit code (0 when all pass) - the model reads it as
-# "a gate failed" and looks at the surfaced tail, not as the 0/2/3/4 contract.
-# Argument misuse still exits 4 (degraded).
 set -uo pipefail
 
-# No fork: every caller (hooks.json, the tests, contracts.md) invokes this by a path
-# with a slash in it, and the value is only ever used to source the line below.
 SCRIPT_DIR=${BASH_SOURCE[0]%/*}
 # shellcheck source=lib/common.sh
 source "$SCRIPT_DIR/lib/common.sh"
@@ -46,8 +31,6 @@ done
 [ -n "$log_dir" ] || degrade missing-log-dir "run-gates: --log-dir is required"
 [ "${#gate_names[@]}" -gt 0 ] || degrade no-gates "run-gates: at least one --gate is required"
 
-# An empty gate command (e.g. an unresolved '<test_cmd>') must NOT report green:
-# `bash -c ""` exits 0, which would ship unverified code past the gate.
 for ((gi = 0; gi < ${#gate_cmds[@]}; gi++)); do
   if [ -z "${gate_cmds[$gi]//[[:space:]]/}" ]; then
     degrade empty-gate-command "run-gates: gate '${gate_names[$gi]}' has an empty command - resolve it before running the gate"
@@ -56,7 +39,6 @@ done
 
 mkdir -p "$log_dir" 2>/dev/null || degrade log-dir-unwritable "run-gates: cannot create $log_dir"
 
-# Uppercase + underscore a gate name for use in KEY names.
 key_of() {
   printf '%s' "$1" | tr '[:lower:]' '[:upper:]' | tr -c 'A-Z0-9' '_' | sed 's/_*$//'
 }
@@ -94,11 +76,6 @@ if [ "$overall_rc" -eq 0 ]; then gates_ok=true; else gates_ok=false; fi
 emit GATES_RUN "$((i < n ? i + 1 : n))"
 emit GATES_OK "$gates_ok"
 
-# An all-green run leaves a receipt bound to the HEAD it ran against, and
-# worktree.sh merge refuses to merge a head no receipt covers. Best-effort by
-# design: run-gates.sh is also useful outside a repository, and a receipt that
-# cannot be written is not a reason to fail a green suite. The merge is where
-# the absence bites, and it says so there.
 if [ "$gates_ok" = true ]; then
   receipt_root=$(repo_root)
   receipt_branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || printf '')
