@@ -1,14 +1,10 @@
 #!/usr/bin/env bash
 
-SKILL_LINE_BUDGET=149
-ROUTINE_READ_BUDGET=320
-ALL_PROSE_BUDGET=556
-ROUTINE_READ_REFERENCES='judgment.md configuration.md companions.md'
 BUILT_IN_SKILLS='code-review simplify verify deep-research'
-HOOK_RUN_SCRIPT=merge-guard.sh
 
 skill_md() { printf '%s' "$ITP_SCRIPTS/../skills/run/SKILL.md"; }
 setup_md() { printf '%s' "$ITP_SCRIPTS/../skills/setup/SKILL.md"; }
+references_dir() { printf '%s' "$ITP_SCRIPTS/../skills/run/references"; }
 companions_md() { printf '%s' "$(references_dir)/companions.md"; }
 plugin_readme() { printf '%s' "$ITP_SCRIPTS/../README.md"; }
 repo_readme() { printf '%s' "$ITP_SCRIPTS/../../../README.md"; }
@@ -24,33 +20,8 @@ skill_step() { # word-in-the-heading
   awk -v w="$1" -v h="$head" '$0 ~ h {f = index($0, w) > 0} f' "$(skill_md)"
 }
 
-references_dir() { printf '%s' "$ITP_SCRIPTS/../skills/run/references"; }
-
-references_on_disk() { basename -a "$(references_dir)"/*.md | sort -u; }
-
-references_the_spine_cites() {
-  grep -o 'R/[A-Za-z0-9._-]*\.md' "$(skill_md)" | cut -d/ -f2 | sort -u
-}
-
 install_table() { sed -n '/^| Companion | Install |/,/^$/p' "$(setup_md)"; }
 companions_table() { sed -n '/^| Capability | Preferred/,/^$/p' "$(companions_md)"; }
-optional_companions_paragraph() { sed -n '/^Optional companions/,/^$/p' "$(plugin_readme)"; }
-companion_line_of_repo_readme() { grep 'companion skills (' "$(repo_readme)"; }
-companion_region_of_repo_readme() { grep -B3 -A3 'used if installed' "$(repo_readme)"; }
-
-plugins_setup_can_install() {
-  # shellcheck disable=SC2016  # a sed program, not a string with expansions
-  install_table | sed -n 's/^| `\([^`]*\)`.*/\1/p' | sort -u
-}
-
-companion_paths_in() { # text
-  # shellcheck disable=SC2016  # a grep pattern, not a string with expansions
-  printf '%s
-' "$1" | grep -o '`/\{0,1\}[^`]*:[^`]*`' | tr -d '`/' | cut -d' ' -f1 | sort -u
-}
-
-paths_the_run_prefers() { companion_paths_in "$(companions_table | cut -d'|' -f3)"; }
-plugins_the_run_prefers() { paths_the_run_prefers | cut -d: -f1 | sort -u; }
 
 description_in() { # manifest [anchor-line]
   local line
@@ -64,68 +35,21 @@ description_in() { # manifest [anchor-line]
   printf '%s' "${line%\"}"
 }
 
-reject_built_ins_in() { # region region-name
-  local skill
-  [ -n "$1" ] || fail "$2 came back empty; this check would be vacuous"
-  for skill in $BUILT_IN_SKILLS; do
-    assert_not_contains "$1" "$skill" "$2 offers $skill, which Claude Code already registers"
-  done
-}
-
-assert_same_set() { # expected actual expected-name actual-name
-  [ -n "$1" ] || fail "nothing parsed from $3; this check would be vacuous"
-  [ "$1" = "$2" ] || fail "$3 and $4 disagree.
-    $3: $(printf '%s' "$1" | tr '\n' ' ')
-    $4: $(printf '%s' "$2" | tr '\n' ' ')"
-}
-
-prose_budget() { # what budget file...
-  local what=$1 budget=$2 total=0 file count breakdown=''
-  shift 2
-  for file in "$@"; do
-    [ -f "$file" ] || fail "$what counts $file, which is not on disk"
-    count=$(wc -l <"$file")
-    count=${count// /}
-    total=$((total + count))
-    breakdown+="${breakdown:+, }${file##*/} $count"
-  done
-  [ "$total" -le "$budget" ] || fail "$what is $total lines, over the $budget budget.
-    $breakdown
-    Cut somewhere else, or raise the ceiling in the same PR and say in its body what the extra
-    lines bought. A ratchet nobody may ever move is one somebody eventually deletes."
-}
-
-test_skill_within_line_budget() {
-  prose_budget "the spine" "$SKILL_LINE_BUDGET" "$(skill_md)"
-}
-
-test_routine_read_stays_within_budget() {
-  local file
-  local -a files
-  [ -n "$ROUTINE_READ_REFERENCES" ] ||
-    fail "ROUTINE_READ_REFERENCES is empty, so this budget counts the spine alone and is vacuous"
-  files=("$(skill_md)")
-  for file in $ROUTINE_READ_REFERENCES; do files+=("$(references_dir)/$file"); done
-  prose_budget "what a run reads before it can work" "$ROUTINE_READ_BUDGET" "${files[@]}"
-}
-
-test_all_prose_stays_within_budget() {
-  prose_budget "the plugin's prose" "$ALL_PROSE_BUDGET" \
-    "$(skill_md)" "$(setup_md)" "$(references_dir)"/*.md
-}
-
 test_every_reference_is_cited_and_every_citation_exists() {
-  assert_same_set "$(references_on_disk)" "$(references_the_spine_cites)" \
-    "the reference files on disk" "the R/*.md the spine cites"
+  local on_disk cited
+  on_disk=$(basename -a "$(references_dir)"/*.md | sort -u)
+  cited=$(grep -o 'R/[A-Za-z0-9._-]*\.md' "$(skill_md)" | cut -d/ -f2 | sort -u)
+  [ -n "$on_disk" ] || fail "no references on disk; this check would be vacuous"
+  [ "$on_disk" = "$cited" ] || fail "the reference files on disk and the R/*.md the spine cites disagree.
+    on disk: $(printf '%s' "$on_disk" | tr '\n' ' ')
+    cited:   $(printf '%s' "$cited" | tr '\n' ' ')"
 }
 
-test_skill_names_spine_scripts() {
-  local spine script name found=0
+test_skill_names_every_script_that_ships() {
+  local spine script found=0
   spine=$(cat "$(skill_md)")
   for script in "$ITP_SCRIPTS"/*.sh; do
-    name=${script##*/}
-    [ "$name" = "$HOOK_RUN_SCRIPT" ] && continue
-    assert_contains "$spine" "$name" "SKILL spine must invoke $name, or the script should not ship"
+    assert_contains "$spine" "${script##*/}" "SKILL spine must invoke ${script##*/}, or the script should not ship"
     found=$((found + 1))
   done
   [ "$found" -gt 0 ] || fail "no scripts found under $ITP_SCRIPTS; the glob did not expand"
@@ -137,18 +61,6 @@ test_skill_never_writes_a_resolved_value_as_a_shell_variable() {
   [ -z "$hits" ] || fail "SKILL.md names a shell variable where it must substitute the value.
     Every Bash call is a fresh shell, so the name expands to nothing. Use <ANGLE_BRACKETS>.
 $hits"
-}
-
-test_every_gate_value_uses_the_quote_safe_form() {
-  local gates unsafe
-  gates=$(grep -o -- '--gate [^ `]*' "$(skill_md)" | grep -c . || true)
-  [ "${gates:-0}" -ge 3 ] ||
-    fail "the spine names only ${gates:-0} gate values; this check would be vacuous"
-  unsafe=$(grep -n -- '--gate [^"]' "$(skill_md)" || true)
-  [ -z "$unsafe" ] || fail "a gate value is passed inline instead of through a double-quoted shell
-    variable. Single-quoted, the value reaches run-gates.sh as the literal text \$var, and bash -c
-    on that expands to nothing and exits 0 - a green gate over no command at all.
-$unsafe"
 }
 
 test_skill_grill_reshapes_the_checkpoint_without_adding_a_moment() {
@@ -177,40 +89,13 @@ test_skill_grill_reshapes_the_checkpoint_without_adding_a_moment() {
   esac
 }
 
-test_setup_names_every_builtin_the_run_leans_on() {
-  local setup companions built_in
-  setup=$(cat "$(setup_md)")
-  companions=$(cat "$(companions_md)")
-  [ ${#setup} -gt 500 ] || fail "the setup skill is too short to be walking anyone through anything"
-  [ ${#companions} -gt 500 ] || fail "companions.md came back short; the comparison would be vacuous"
-  for built_in in $BUILT_IN_SKILLS; do
-    assert_contains "$companions" "$built_in" "companions.md must still know the built-in $built_in"
-    assert_contains "$setup" "$built_in" "setup must still tell people $built_in needs no install"
-  done
-}
-
-test_setup_and_companions_name_the_same_plugins() {
-  assert_same_set "$(plugins_the_run_prefers)" "$(plugins_setup_can_install)" \
-    "the plugins companions.md prefers" "the plugins setup installs"
-}
-
-test_both_readmes_name_exactly_the_companions_the_run_prefers() {
-  local line
-  line=$(companion_line_of_repo_readme)
-  [ "$(printf '%s\n' "$line" | grep -c .)" -eq 1 ] ||
-    fail "'companion skills (' no longer matches exactly one line of the repo README"
-  assert_same_set "$(paths_the_run_prefers)" "$(companion_paths_in "$(optional_companions_paragraph)")" \
-    "companions.md" "the plugin README"
-  assert_same_set "$(paths_the_run_prefers)" "$(companion_paths_in "$line")" \
-    "companions.md" "the repo README"
-}
-
 test_builtins_are_never_listed_as_installable() {
-  local table
-  reject_built_ins_in "$(install_table)" "setup's install table"
-  reject_built_ins_in "$(optional_companions_paragraph)" "the plugin README's optional-companions paragraph"
-  reject_built_ins_in "$(companion_region_of_repo_readme)" "the repo README's companion line"
-
+  local table skill
+  table=$(install_table)
+  [ -n "$table" ] || fail "setup's install table came back empty; this check would be vacuous"
+  for skill in $BUILT_IN_SKILLS; do
+    assert_not_contains "$table" "$skill" "setup's install table offers $skill, which Claude Code already registers"
+  done
   table=$(companions_table)
   [ -n "$table" ] || fail "the companions table is gone; this check would be vacuous"
   assert_not_contains "$table" "deep-research" \

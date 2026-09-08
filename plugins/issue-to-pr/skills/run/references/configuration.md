@@ -2,9 +2,9 @@
 
 ## The config file — `.claude/issue-to-pr/config.md`
 
-Optional per-project settings in YAML frontmatter, in the plugin's own state directory. The
-scripts create that directory and keep it gitignored, and `<RUN_DIR>` is the part of it this run
-owns (`R/contracts.md`).
+Optional per-project settings in YAML frontmatter, in the plugin's own state directory. The scripts
+create that directory with a `.gitignore` that ignores everything in it, receipts and logs
+included; one you wrote there yourself is left as it is.
 
 ```yaml
 ---
@@ -16,7 +16,6 @@ typecheck_cmd: npm run typecheck
 test_cmd: npm test
 visual_cmd: npm run visual   # optional; UI/visual verification
 smoke_cmd: npm run smoke     # optional; post-merge smoke
-checks_timeout: 20           # optional; minutes to wait on pending PR checks
 ---
 ```
 
@@ -39,7 +38,7 @@ Ask read-only, and spell the ref in full — `git ls-remote origin refs/heads/de
 | answered, `dev` is gone | the repo's default branch | warn if a **local** `dev` exists: origin has none, pin `base_branch` if that is wrong |
 | could not reach origin | `refs/remotes/origin/dev` if it exists, else the default branch | warn either way — a stale tracking ref may name a branch deleted upstream |
 
-Then make the base **resolve locally**, or `git worktree add` hard-stops Step 1 on a base that is
+Then make the base **resolve locally**, or `git worktree add` fails at Step 1 on a base that is
 perfectly reachable — a `--single-branch` or `--depth 1` clone has never fetched it. Fetch the base
 and the default branch, the one the in-place fallback switches onto:
 
@@ -53,8 +52,8 @@ the user's remote-tracking refs. Fetch **one refspec per invocation** — `git f
 call if any refspec names a ref the remote lacks.
 
 `START_POINT` is `origin/<BASE>` when that ref verifies. Otherwise fall back and say so: a local
-`<BASE>` means you are cutting from a branch nothing verified; no ref at all means Step 1 will stop
-at `invalid-start-point`, so fetch it or pin a different `base_branch`.
+`<BASE>` means you are cutting from a branch nothing verified; no ref at all means `git worktree
+add` will fail, so fetch it or pin a different `base_branch`.
 
 ## Claiming the issue
 

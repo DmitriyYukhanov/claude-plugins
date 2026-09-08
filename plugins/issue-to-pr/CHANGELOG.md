@@ -5,6 +5,22 @@ All notable changes to the **issue-to-pr** plugin will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [9.0.0] - 2026-09-08
+
+### Changed
+- Keep bash only where the action cannot be undone: two scripts, one that runs the gates and writes the receipt, one that merges and cleans up
+- Pass each gate as its own argument, `gates.sh test "npm test"`, instead of a packed `name=cmd` value that needed four guards of its own
+- Create the worktree with a plain `git worktree add` from the instructions rather than a script with three states
+- Squash-merge, and on a refusal report GitHub's own message with the next move, instead of classifying the refusal and retrying by rung; `--method merge|rebase` is the retry, and nothing else reaches gh as a flag
+- Refuse to merge on a receipt that never ran the test gate, whatever else it covers
+- Raise the review level once after a pass confirms two real bugs; the tier's pass cap is the cap
+
+### Removed
+- Drop the merge-guard hook: the rules against `--admin` and a bare force-push are instructions now
+- Drop the merge's review-thread query, mergeability pre-check and behind-base auto-update; a merge that does not happen needs no machinery
+- Drop the scripts' contract reference and the merge ladder; each script says what it refuses in the stop itself
+- Drop the guard against two gate names that shorten to one output key; a red gate now exits 1 and reports the gate's own code alongside
+
 ## [8.0.0] - 2026-09-07
 
 ### Changed

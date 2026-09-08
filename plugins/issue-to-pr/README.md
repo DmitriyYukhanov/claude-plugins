@@ -38,9 +38,10 @@ progress; everything between them scales to the task.
   Once the diff settles, a last pass builds the change and drives it at its own surface.
 - **Beyond a single issue.** A plain request with no number is drafted into an issue and run.
 - **A careful merge gate.** Merge happens only on your explicit in-session approval, never on
-  the turn the PR opens. The merge script refuses a head the gates never ran against, reads the
-  GitHub review itself, and passes `--match-head-commit`, so a commit landing after the diff you
-  were shown stops the merge rather than shipping unseen.
+  the turn the PR opens. The merge script refuses a head the gates never ran against and a review
+  requesting changes, and passes `--match-head-commit`, so a commit landing after the diff you
+  were shown stops the merge rather than shipping unseen. If GitHub refuses the merge, its own
+  message is reported and the run says what to do next.
 - **Cleanup and a safety net.** Once the PR is merged it deletes the branch, tears down the
   worktree, and clears the run's files; a merge into anything but the default branch is reported
   as one, since GitHub only closes the issue on the default. An optional smoke check runs on the
@@ -65,8 +66,8 @@ typecheck/test/visual/smoke commands. Everything is optional; with no file the r
 commands out in the worktree where the gates execute, as literals, and prints the block to
 paste here once they pass. It never writes this file itself.
 
-That directory holds the plugin's state: the config, and one folder per run with its gate
-receipt, gate logs and design. It ships its own `.gitignore` containing `*`, so none of it reaches
+That directory holds the plugin's state: the config, and one folder per branch with its gate
+receipt and gate logs. It ships its own `.gitignore` containing `*`, so none of it reaches
 `git status` and your project's `.gitignore` is left alone. Runs keep their state in the main
 checkout, never in the worktree, so tearing the worktree down can never trip over it.
 
@@ -84,10 +85,9 @@ is involved.
 starts it when you type it. Step 2 always uses an `Explore` subagent. For the deeper sweep, run
 `/deep-research` in your own turn and hand the summary in.
 
-Optional companions that sharpen specific steps: `superpowers:writing-plans`,
-`/codex-collaboration:cross-review`, `humanizer:humanizer`, `ponytail:ponytail` for the design
-and build, `mattpocock-skills:grilling` for `--grill`, and `ponytail:ponytail-review` as the
-deletion lens. Each is used if installed, with an inline fallback otherwise.
+The optional companions, what each one sharpens and what the run does without it are in
+[companions.md](skills/run/references/companions.md). Each is used if installed, with an inline
+fallback otherwise.
 
 ## Usage
 

@@ -22,15 +22,9 @@ strongest first:
 Tier what the run will actually do: a scope the conversation widened past the issue text tiers on
 the wider scope.
 
-### Escalation ratchet (one-way)
-
-Count CONFIRMED `code-review` verdicts per pass and consecutive failures per gate; 2+ confirmed
-bugs in one pass, or the same gate failing twice, raises the review level one notch and never
-lowers it. A `verify` FAIL is not one of those failures: it is stop-and-fix, never a count, or two
-of them buy review passes the cap exists to forbid. A `trivial` run becomes `standard`, which raises
-the cap along with the tier and gives it both a design step and the `verify` slot to re-enter;
-raising a level inside a tier buys no extra pass. The cap is then the cap — another pass is how a review loop stops terminating, and the human
-at the merge gate is the backstop. Stop, and ledger the cost ("Work no reviewer saw", below).
+**Escalation:** if a review pass confirms two or more real bugs, raise the review level once and
+never lower it; the tier's pass cap is still the cap, and the human at the merge gate is the
+backstop. When the cap ends the loop with fixes unread, ledger it ("Work no reviewer saw", below).
 
 ## The ask contract — what the spine's three moments mean
 
@@ -55,8 +49,8 @@ One entry per judgment call: `{question, decision, rationale, kind: asked|auto}`
 **before the next tool call**, so a compaction cannot lose it. Only the `auto` entries render, as a
 **"Decisions made autonomously"** section in both the Step 7 report and the PR body, so the wrong
 `kind` means the entry never reaches its reader. A long run does compact: afterwards `git status`,
-`gh pr view` and the gate logs under `<RUN_DIR>/logs` say where it stopped, and they outrank
-recollection.
+`gh pr view` and the gate logs under `.claude/issue-to-pr/` in the main checkout say where it
+stopped, and they outrank recollection.
 
 ## Two entries always owed
 
@@ -65,13 +59,12 @@ choice still goes to the human.
 
 **A claim about the world outside this repo that you have not checked.** One lookup per doubt. The
 `question` is the claim, the `decision` is what you built on it, the `rationale` is what you found
-**and where** — a conclusion with no source reads like the guess this rule exists to stop. It goes
-here and **never into a design file**: `design.md` exists only on `complex` and Step 9 prunes it,
-so a citation left there dies unread. No search available excuses the lookup, never the entry; say
-in the `rationale` that the claim went unchecked and what you assumed instead.
+**and where** — a conclusion with no source reads like the guess this rule exists to stop. No
+search available excuses the lookup, never the entry; say in the `rationale` that the claim went
+unchecked and what you assumed instead.
 
 **Work no reviewer saw.** The last review pass a tier allows changed something, or the
-simplification gate cut after the loop closed: either way it reaches the merge gate unread. Not
-gated on the ratchet, which needs two confirmed bugs; one bug on the final pass leaves its fix
-exactly as unread. The `rationale` names the files, so the reader knows where to look hardest.
-File it whenever it applies and never otherwise, since a caveat on every run is one nobody reads.
+simplification gate cut after the loop closed: either way it reaches the merge gate unread. One
+bug on the final pass leaves its fix exactly as unread. The `rationale` names the files, so the
+reader knows where to look hardest. File it whenever it applies and never otherwise, since a
+caveat on every run is one nobody reads.
