@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# A stand-in for gh: answers the four calls finish.sh makes, shaped by FAKE_GH_SCENARIO.
 set -uo pipefail
 
 if [ -n "${FAKE_GH_LOG:-}" ]; then
@@ -6,171 +7,48 @@ if [ -n "${FAKE_GH_LOG:-}" ]; then
 fi
 
 scenario=${FAKE_GH_SCENARIO:-happy}
-sub=${1:-}
+SHA="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 
-HEAD_SHA_CURRENT="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-PR_URL="https://github.com/octo-owner/demo-repo/pull/123"
-
-flag_val() {
-  local want=$1
-  shift
-  while [ "$#" -gt 0 ]; do
-    if [ "$1" = "$want" ]; then
-      printf '%s' "${2:-}"
-      return 0
-    fi
-    shift
-  done
-  printf ''
-}
-
-jqf=$(flag_val --jq "$@")
-
-die() { # message exitcode
-  printf '%s\n' "$1" >&2
-  exit "${2:-1}"
-}
-
-case "$sub" in
-  api)
-    # real gh magic-types -F: an all-digit owner or repo becomes a JSON number, and a String!
-    # variable rejects it. Only -f keeps a value a string.
-    case " $* " in
-      *" -F o="* | *" -F r="*) die "Variable of type String! was provided invalid value" 1 ;;
-    esac
+case "${1:-} ${2:-}" in
+  "repo view")
     case "$scenario" in
-      review-unresolved) printf '2\t2\n' ;;
-      review-threads-overflow) printf '0\t137\n' ;;
-      review-threads-unreadable) die "GraphQL: something went wrong" 1 ;;
-      *) printf '0\t0\n' ;;
+      default-branch-unreadable) printf '' ;;
+      *) printf 'main\n' ;;
     esac
     ;;
-
-  repo)
-    case "$jqf" in
-      .defaultBranchRef.name)
-        case "$scenario" in
-          default-branch-unreadable) printf '' ;;
-          *) printf 'main\n' ;;
-        esac
-        ;;
-      *) printf '{"defaultBranchRef":{"name":"main"}}\n' ;;
+  "pr list") # cleanup: open PRs based on the branch
+    case "$scenario" in
+      has-dependent-pr) printf '77\n' ;;
+      dependents-unreadable) exit 1 ;;
+      *) printf '' ;;
     esac
     ;;
-
-  pr)
-    action=${2:-}
-    case "$action" in
-      list)
-        if printf '%s' "$*" | grep -q -- '--base'; then
-          case "$scenario" in
-            has-dependent-pr) printf '77\n' ;;
-            dependents-unreadable) exit 1 ;;
-            *) printf '' ;;
-          esac
-          exit 0
-        fi
-        # real gh lists OPEN pull requests unless --state says otherwise, so a caller
-        # hunting a merged one and not asking for it gets an empty list, not MERGED
-        case "$scenario:$(flag_val --state "$@")" in
-          pr-list-unreadable:*) exit 1 ;;
-          pr-open:*) printf 'OPEN\n' ;;
-          pr-merged:all) printf 'MERGED\n' ;;
-          *) printf '' ;;
-        esac
-        ;;
-      view)
-        if printf '%s' "$*" | grep -q 'reviewDecision'; then
-          case "$scenario" in
-            review-changes-requested) printf '\t1\t%s\n' "$PR_URL" ;;
-            review-read-fail) printf '' ;;
-            review-url-missing) printf '\t0\t\n' ;;
-            review-url-malformed) printf '\t0\thttps://github.com/octo-owner/demo-repo\n' ;;
-            *) printf '\t0\t%s\n' "$PR_URL" ;;
-          esac
-          exit 0
-        fi
-        if printf '%s' "$*" | grep -q 'statusCheckRollup'; then
-          case "$scenario" in
-            checks-failing) printf 'MERGEABLE\tBLOCKED\tCI / build\n' ;;
-            merge-conflict-state) printf 'CONFLICTING\tDIRTY\t\n' ;;
-            behind-clean | behind-content | behind-update-fail | behind-noadvance) printf 'MERGEABLE\tBEHIND\t\n' ;;
-            pending-checks) printf 'MERGEABLE\tUNSTABLE\t\n' ;;
-            mergeability-unreadable) printf '' ;;
-            *) printf 'MERGEABLE\tCLEAN\t\n' ;;
-          esac
-          exit 0
-        fi
-        case "$jqf" in
-          .state)
-            case "$scenario" in
-              pr-merged | has-dependent-pr | dependents-unreadable) printf 'MERGED\n' ;;
-              *) printf 'OPEN\n' ;;
-            esac
-            ;;
-          .headRefOid)
-            case "$scenario" in
-              head-empty) printf '' ;;
-              *) printf '%s\n' "$HEAD_SHA_CURRENT" ;;
-            esac
-            ;;
-          .headRefName) printf 'feat/issue-6-x\n' ;;
-          .baseRefName)
-            case "$scenario" in
-              stacked-base) printf 'feat/issue-5-parent\n' ;;
-              *) printf 'main\n' ;;
-            esac
-            ;;
-          *) printf '{"state":"OPEN","headRefOid":"%s"}\n' "$HEAD_SHA_CURRENT" ;;
-        esac
-        ;;
-      update-branch)
-        br=${3:-}
+  "pr view")
+    case "$*" in
+      *reviewDecision*) # merge: head sha, review decision, base
         case "$scenario" in
-          behind-update-fail) die "could not update the branch" 1 ;;
-          behind-clean | behind-content)
-            url=$(git remote get-url origin 2>/dev/null)
-            tmp="${TMPDIR:-/tmp}/upd.$$"
-            (
-              git clone -q "$url" "$tmp" >/dev/null 2>&1 || exit 0
-              git -C "$tmp" checkout -q "$br" >/dev/null 2>&1 || exit 0
-              git -C "$tmp" -c user.email=t@e.com -c user.name=T merge -q --no-edit origin/main >/dev/null 2>&1 || exit 0
-              if [ "$scenario" = behind-content ]; then
-                printf 'changed by base owner\n' >>"$tmp/work.txt"
-                git -C "$tmp" -c user.email=t@e.com -c user.name=T commit -q -am content >/dev/null 2>&1 || exit 0
-              fi
-              git -C "$tmp" push -q origin "$br" >/dev/null 2>&1 || exit 0
-            )
-            rm -rf "$tmp" 2>/dev/null || true
-            exit 0
-            ;;
-          *) exit 0 ;;
+          pr-unreadable) exit 1 ;;
+          review-changes-requested) printf '%s\tCHANGES_REQUESTED\tmain\n' "$SHA" ;;
+          stacked-base) printf '%s\t\tfeat/issue-5-parent\n' "$SHA" ;;
+          *) printf '%s\tAPPROVED\tmain\n' "$SHA" ;;
         esac
         ;;
-      merge)
+      *) # cleanup: PR state
         case "$scenario" in
-          pending-checks) die "Pull request is not mergeable: the base branch policy prohibits the merge; required checks are still pending." 1 ;;
-          squash-disallowed)
-            if printf '%s ' "$@" | grep -q -- '--squash'; then
-              die "Squash merging is not allowed on this repository" 1
-            fi
-            exit 0
-            ;;
-          rebase-only)
-            if printf '%s ' "$@" | grep -qE -- '--squash|--merge'; then
-              die "Squash merging is not allowed on this repository" 1
-            fi
-            exit 0
-            ;;
-          protected) die "Protected branch update failed: required status checks have not passed." 1 ;;
-          *) exit 0 ;;
+          pr-merged | has-dependent-pr | dependents-unreadable) printf 'MERGED\n' ;;
+          *) printf 'OPEN\n' ;;
         esac
+        ;;
+    esac
+    ;;
+  "pr merge")
+    case "$scenario" in
+      protected)
+        printf 'Protected branch update failed: required status checks have not passed.\n' >&2
+        exit 1
         ;;
       *) exit 0 ;;
     esac
     ;;
-
-  *)
-    exit 0
-    ;;
+  *) exit 0 ;;
 esac

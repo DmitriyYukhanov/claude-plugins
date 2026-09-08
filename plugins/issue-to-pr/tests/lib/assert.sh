@@ -83,7 +83,6 @@ run_script() {
   export OUT ERR RC
 }
 
-run_guard() { run_script merge-guard.sh <<<"$1"; }
 
 use_fake_gh() {
   export PATH="$FAKE_GH_DIR:$PATH"
