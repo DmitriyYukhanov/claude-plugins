@@ -11,12 +11,16 @@ missing one never degrades the result silently.
 | Lazy design and build (Steps 2–4) | `ponytail:ponytail full`, set once before the design | Design and build against the same ladder by hand: does this need to exist, does the stdlib or the platform already do it, can it be one line. |
 | Grilling the design (Step 3, `--grill` only) | `mattpocock-skills:grilling` over the design you just built | Hand the design over in the batched question itself, with your open `asked` items, and take their objections as the round. Still one contact, not two. |
 | Deletion lens (Step 6) | `ponytail:ponytail-review` over the run's diff | Re-read the diff hunting only for what to delete: reinvented stdlib, one-caller abstractions, config nobody sets, flags nobody passes. |
-| Simplification lens (Step 6) | `simplify` | Re-read the diff for what survives but reads worse than it has to: a branch that only ever takes one path, a loop the stdlib has a name for, a comment explaining a name that should have been the name. |
-| Diff review loop (Step 6) | `code-review` at the tier's level | Independent adversarial review subagents (2–3) critique the diff for correctness, reuse, and regressions; iterate. |
 
-`code-review`, `simplify` and `verify` are **built into Claude Code** — invoke them by bare name,
-no install, no namespace, no `if installed` branch. `verify` has no row because it has no
-fallback: you cannot approximate driving a built artifact by reading the diff again.
+`code-review`, `simplify` and `verify` are **built into Claude Code** — bare name, no install, no
+namespace, no `if installed` branch, and no row above, because a fallback table has nothing to say
+about a skill that is always there. `code-review` reviews the diff at the tier's level; `simplify`
+is the other half of the simplification gate, for what survives the deletion pass but still reads
+worse than it has to; `verify` drives the built artifact, which no re-reading approximates, and it
+runs after the gate stops moving the diff, so its fix lands after the last review pass and owes a
+"Work no reviewer saw" entry (`R/judgment.md`). The adversarial subagents Step 6 may add are an
+extra pass too, not a fallback: 2–3 independent reviewers on the diff, in the foreground, until it
+comes back clean.
 
 `deep-research` is built in as well but is **not the run's to use**: Claude Code starts it only
 when the user types it, so it gets no row and no branch.
@@ -24,6 +28,3 @@ when the user types it, so it gets no row and no branch.
 Ponytail's `SubagentStart` hook carries the mode into every subagent, so setting it once at Step 2
 is the whole wiring. Step 6's reviewers inherit it: it governs how a confirmed bug gets fixed,
 never whether it counts as one.
-
-`verify` runs after the simplification gate has stopped moving the diff, so its fix lands after
-the last review pass and owes a "Work no reviewer saw" entry (`R/judgment.md`).

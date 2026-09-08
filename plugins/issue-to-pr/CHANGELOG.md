@@ -5,6 +5,32 @@ All notable changes to the **issue-to-pr** plugin will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [8.0.0] - 2026-09-07
+
+### Changed
+- Keep everything a run owns - gate receipt, gate logs, design - in one directory in the main checkout that the scripts create, find and delete by themselves
+- Put each merge stop's instruction in the stop itself, where the run reads it, instead of in a reference that had drifted from it twice
+- Clean up after a merge into any base, and report which branch it landed on rather than refusing to tidy up
+
+### Removed
+- Remove `--log-dir` from the gate runner and `--ladder-attempt` from the merge: two values a run had to carry between shells, neither of which it can get wrong now
+- Drop the merge's issue-state and PR-URL output and each gate's elapsed time, which nothing read
+
+### Fixed
+- Refuse a gate call whose value a quote of its own split apart, and one the caller single-quoted, named, positional or special, instead of running what is left or nothing at all and reporting it green
+- Stop writing run state into the worktree, which left an untracked `.claude/` that made cleanup half-succeed: remote branch gone, worktree and local branch still there
+- Fail closed on the merge gate's unreadable reads, the review threads and the PR's mergeable state, rather than treating either as an all-clear, and on a PR carrying more review threads than the one page the query asks for
+- Refuse a receipt that only covers the post-merge smoke run, which a stacked PR's base would otherwise collect as proof its own gates had passed
+- Read review threads in repositories whose owner or name is all digits, which the query used to reject outright
+- Refuse to build a fresh worktree for a branch whose PR has already merged, and ask GitHub for merged pull requests when checking, which its default listing never returns
+- Refuse two gate names that shorten to the same output key, and gates on a detached checkout, whose receipt the merge could never find
+- Say so when green gates leave no receipt behind, instead of reporting a pass the merge will then refuse
+- Stop reading a `<<` inside a quoted string as a heredoc, which let a `gh pr merge --admin` on the next line past the guard as if it were message text
+- Tell an unreadable pull-request listing apart from a branch that simply has no PR, instead of taking silence for the second
+- Give every branch its own run directory, so two names differing only by a slash can no longer share the one cleanup deletes
+- Say that the merge prefers a squash and falls back to whatever else the repository allows, which the plugin's own descriptions had been promising away
+- Name no worktree path on a failure that never built one
+
 ## [7.0.0] - 2026-09-05
 
 ### Changed

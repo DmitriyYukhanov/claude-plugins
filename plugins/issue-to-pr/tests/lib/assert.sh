@@ -117,12 +117,18 @@ init_repo() {
   printf '%s' "$dir"
 }
 
-write_receipt() {
-  local root=$1 branch=$2 sha=$3 slug
-  slug=${branch//\//-}
-  mkdir -p "$root/.claude/issue-to-pr"
-  printf '{"branch":"%s","head_sha":"%s","gates":"test","created_at":"%s"}\n' \
-    "$branch" "$sha" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >"$root/.claude/issue-to-pr/gates-$slug.json"
+run_dir_of() { # root branch -> the one directory a run owns
+  printf '%s/.claude/issue-to-pr/branch-%s' "$1" "$(printf '%s' "$2" | sed 's/-/--/g; s|/|-|g')"
+}
+
+receipt_file() { printf '%s/receipt.json' "$(run_dir_of "$1" "$2")"; }
+
+write_receipt() { # root branch sha [gates]
+  local root=$1 branch=$2 sha=$3 gates=${4:-test} dir
+  dir=$(run_dir_of "$root" "$branch")
+  mkdir -p "$dir"
+  printf '{"branch":"%s","head_sha":"%s","gates":"%s","created_at":"%s"}\n' \
+    "$branch" "$sha" "$gates" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >"$dir/receipt.json"
 }
 
 init_repo_with_remote() {

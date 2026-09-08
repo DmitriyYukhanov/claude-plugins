@@ -17,7 +17,7 @@ lint_rc=0
 if command -v "$SHELLCHECK_BIN" >/dev/null 2>&1; then
   printf '== shellcheck ==\n'
   mapfile -t sh_files < <(
-    find "$PLUGIN_DIR/scripts" -name '*.sh' -type f
+    find "$PLUGIN_DIR/scripts" "$PLUGIN_DIR/tests" -name '*.sh' -type f
     printf '%s\n' "$FAKE_GH_DIR/gh"
   )
   if "$SHELLCHECK_BIN" -x -e SC1091 "${sh_files[@]}"; then

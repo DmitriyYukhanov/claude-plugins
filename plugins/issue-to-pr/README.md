@@ -41,10 +41,10 @@ progress; everything between them scales to the task.
   the turn the PR opens. The merge script refuses a head the gates never ran against, reads the
   GitHub review itself, and passes `--match-head-commit`, so a commit landing after the diff you
   were shown stops the merge rather than shipping unseen.
-- **Cleanup and a safety net.** After a merge into the default branch it deletes the branch,
-  tears down the worktree, and clears the run's temp files; on any other base, or one it cannot
-  confirm, it keeps them and says so. An optional smoke check runs on the updated base; if it
-  fails, the skill opens a *draft* revert PR, never an automatic rollback.
+- **Cleanup and a safety net.** Once the PR is merged it deletes the branch, tears down the
+  worktree, and clears the run's files; a merge into anything but the default branch is reported
+  as one, since GitHub only closes the issue on the default. An optional smoke check runs on the
+  updated base; if it fails, the skill opens a *draft* revert PR, never an automatic rollback.
 - **Board sync, gracefully.** Cards advance to *in-progress* at branch cut and *in-review*
   at PR open; `Done` is left to GitHub's merge-time automation. A missing `project` token
   scope degrades to link-only and never blocks the PR.
@@ -65,9 +65,10 @@ typecheck/test/visual/smoke commands. Everything is optional; with no file the r
 commands out in the worktree where the gates execute, as literals, and prints the block to
 paste here once they pass. It never writes this file itself.
 
-That directory holds the plugin's state - the config, gate receipts, and each run's files under
-`runs/task-<N>/`. It ships its own `.gitignore` containing `*`, so none of it reaches
-`git status` and your project's `.gitignore` is left alone.
+That directory holds the plugin's state: the config, and one folder per run with its gate
+receipt, gate logs and design. It ships its own `.gitignore` containing `*`, so none of it reaches
+`git status` and your project's `.gitignore` is left alone. Runs keep their state in the main
+checkout, never in the worktree, so tearing the worktree down can never trip over it.
 
 Being ignored, the directory is disposable to `git clean -x`. Nothing breaks permanently: the
 commands get worked out again, and the next merge asks for one more gate run before it lands.

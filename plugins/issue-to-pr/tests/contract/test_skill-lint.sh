@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 
-SKILL_LINE_BUDGET=150
-ROUTINE_READ_BUDGET=321
-ALL_PROSE_BUDGET=583
+SKILL_LINE_BUDGET=149
+ROUTINE_READ_BUDGET=320
+ALL_PROSE_BUDGET=556
 ROUTINE_READ_REFERENCES='judgment.md configuration.md companions.md'
 BUILT_IN_SKILLS='code-review simplify verify deep-research'
 HOOK_RUN_SCRIPT=merge-guard.sh
@@ -39,11 +39,14 @@ companion_line_of_repo_readme() { grep 'companion skills (' "$(repo_readme)"; }
 companion_region_of_repo_readme() { grep -B3 -A3 'used if installed' "$(repo_readme)"; }
 
 plugins_setup_can_install() {
+  # shellcheck disable=SC2016  # a sed program, not a string with expansions
   install_table | sed -n 's/^| `\([^`]*\)`.*/\1/p' | sort -u
 }
 
 companion_paths_in() { # text
-  printf '%s\n' "$1" | grep -o '`/\{0,1\}[^`]*:[^`]*`' | tr -d '`/' | cut -d' ' -f1 | sort -u
+  # shellcheck disable=SC2016  # a grep pattern, not a string with expansions
+  printf '%s
+' "$1" | grep -o '`/\{0,1\}[^`]*:[^`]*`' | tr -d '`/' | cut -d' ' -f1 | sort -u
 }
 
 paths_the_run_prefers() { companion_paths_in "$(companions_table | cut -d'|' -f3)"; }
@@ -136,34 +139,16 @@ test_skill_never_writes_a_resolved_value_as_a_shell_variable() {
 $hits"
 }
 
-test_skill_quotes_its_path_placeholders() {
-  local unquoted
-  unquoted=$(grep -nE '\-\-(log-dir|config) [^"]' "$(skill_md)" || true)
-  [ -z "$unquoted" ] || fail "SKILL.md passes an unquoted path to a path flag.
-    A checkout path containing a space then arrives as two arguments.
-$unquoted"
-}
-
 test_every_gate_value_uses_the_quote_safe_form() {
   local gates unsafe
   gates=$(grep -o -- '--gate [^ `]*' "$(skill_md)" | grep -c . || true)
   [ "${gates:-0}" -ge 3 ] ||
     fail "the spine names only ${gates:-0} gate values; this check would be vacuous"
   unsafe=$(grep -n -- '--gate [^"]' "$(skill_md)" || true)
-  [ -z "$unsafe" ] || fail "a gate value is passed inline instead of through a quoted shell variable.
-    Every gate command is config text. A quote inside one closes the wrapper, run-gates.sh drops the
-    split-off words with a warning, and the truncated command still reports green.
+  [ -z "$unsafe" ] || fail "a gate value is passed inline instead of through a double-quoted shell
+    variable. Single-quoted, the value reaches run-gates.sh as the literal text \$var, and bash -c
+    on that expands to nothing and exits 0 - a green gate over no command at all.
 $unsafe"
-}
-
-test_skill_smoke_gate_passes_a_log_dir_before_cleanup() {
-  local spine
-  spine=$(cat "$(skill_md)")
-  assert_contains "$spine" '--gate "smoke=' \
-    "the smoke gate must use the quote-safe form Step 5 teaches: smoke_cmd is config text, and a
-    quote inside it truncates the command while the gate still reports green"
-  assert_contains "$spine" 'run-gates.sh --log-dir "<RUN_DIR>/logs"' \
-    "the smoke gate needs --log-dir; run-gates.sh degrades before running anything without one"
 }
 
 test_skill_grill_reshapes_the_checkpoint_without_adding_a_moment() {

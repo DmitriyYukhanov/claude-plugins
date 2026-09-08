@@ -35,41 +35,6 @@ test_common_degrade_exits_4() {
   assert_eq 4 "$?" "degrade exits 4"
 }
 
-test_common_strip_heredoc_bodies_blanks_body() {
-  source "$ITP_SCRIPTS/lib/common.sh"
-  local cmd out
-  cmd=$'git commit -m "$(cat <<EOF\nfix: mentions gh pr merge in prose\nEOF\n)"'
-  out=$(strip_heredoc_bodies "$cmd")
-  assert_not_contains "$out" "gh pr merge"
-  assert_contains "$out" "<<EOF"
-}
-
-test_common_strip_heredoc_bodies_dash_variant_tab_indented_terminator() {
-  source "$ITP_SCRIPTS/lib/common.sh"
-  local cmd out
-  cmd=$'cat <<-EOF\n\t\tgh pr merge 13\n\tEOF\ngh pr view 13'
-  out=$(strip_heredoc_bodies "$cmd")
-  assert_not_contains "$out" "gh pr merge"
-  assert_contains "$out" "gh pr view 13"
-}
-
-test_common_strip_heredoc_bodies_multiple_heredocs() {
-  source "$ITP_SCRIPTS/lib/common.sh"
-  local cmd out
-  cmd=$'cat <<A\nfirst gh pr merge\nA\necho mid\ncat <<B\nsecond git add -A\nB'
-  out=$(strip_heredoc_bodies "$cmd")
-  assert_not_contains "$out" "gh pr merge"
-  assert_not_contains "$out" "git add -A"
-  assert_contains "$out" "echo mid"
-}
-
-test_common_strip_heredoc_bodies_no_heredoc_is_unchanged() {
-  source "$ITP_SCRIPTS/lib/common.sh"
-  local out
-  out=$(strip_heredoc_bodies "gh pr merge feat/issue-6-x --squash")
-  assert_contains "$out" "gh pr merge feat/issue-6-x --squash"
-}
-
 test_common_done_ok_exits_0() {
   local out rc
   out=$(bash -c 'source "$1/lib/common.sh"; emit RESULT good; done_ok' _ "$ITP_SCRIPTS" 2>/dev/null)
@@ -85,8 +50,8 @@ test_common_ensure_state_dir_writes_a_self_ignoring_gitignore() {
   ensure_state_dir "$d" || fail "ensure_state_dir reported a failure on a writable path"
   [ -f "$d/.gitignore" ] || fail "no .gitignore was written"
   first=$(grep -v '^#' "$d/.gitignore" | grep -v '^[[:space:]]*$' | head -1)
-  assert_eq '*' "$first" 'the FIRST rule must be *: gitignore lets the last match decide, so a `*`
-    written below any other rule leaves the state directory unignored'
+  assert_eq '*' "$first" 'the FIRST rule must be a star: gitignore lets the last match decide, so a
+    star written below any other rule leaves the state directory unignored'
 }
 
 test_common_ensure_state_dir_never_clobbers_an_existing_gitignore() {
@@ -119,4 +84,11 @@ test_common_ensure_state_dir_repairs_an_empty_gitignore() {
   first=$(grep -v '^#' "$d/.gitignore" | grep -v '^[[:space:]]*$' | head -1)
   assert_eq '*' "$first" 'a zero-byte .gitignore is the wreckage of an interrupted write, not a
     rule; reading it as "already set up" left the directory unignored forever'
+}
+
+test_common_branch_dir_never_gives_two_branches_one_directory() {
+  source "$ITP_SCRIPTS/lib/common.sh"
+  [ "$(branch_dir /r fix/a/b)" != "$(branch_dir /r fix/a-b)" ] ||
+    fail "two branch names resolved to one run directory. Cleanup rm -rf's that path, so the
+    collision does not merely mix two runs' logs, it deletes the other one's"
 }

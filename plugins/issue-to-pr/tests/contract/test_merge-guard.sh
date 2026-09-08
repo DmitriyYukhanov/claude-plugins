@@ -25,7 +25,7 @@ test_mg_decision_does_not_depend_on_what_sits_in_the_working_directory() {
   : >"$TEST_TMPDIR/+decoy"
   cd "$TEST_TMPDIR" || fail "could not enter the temp dir"
   run_guard '{"tool_name":"Bash","tool_input":{"command":"git push *"}}'
-  assert_contains "$OUT" '"continue":true'     'the guard must not glob the command against the cwd: without set -f around `set -- $cmd` the * expands to a file named +decoy, the plus-refspec test then matches, and a plain push is reported as a force-push'
+  assert_contains "$OUT" '"continue":true'     'the guard must not glob the command against the cwd: without set -f around the word-splitting, the star expands to a file named +decoy, the plus-refspec test then matches, and a plain push is reported as a force-push'
   assert_not_contains "$OUT" 'permissionDecision'     'a decision that changes with the directory listing is not a decision'
 }
 
@@ -87,4 +87,33 @@ test_mg_allows_a_commit_message_quoting_the_admin_flag() {
   run_guard '{"tool_name":"Bash","tool_input":{"command":"git commit -F - <<EOF\ndocs: explain why gh pr merge --admin is denied\nEOF"}}'
   assert_contains "$OUT" '"continue":true'
   assert_not_contains "$OUT" 'permissionDecision'
+}
+
+test_mg_closes_a_tab_indented_heredoc_and_still_reads_what_follows_it() {
+  run_guard '{"tool_name":"Bash","tool_input":{"command":"cat <<-EOF
+	docs: gh pr merge --admin is denied
+	EOF
+gh pr merge 13 --admin"}}'
+  assert_contains "$OUT" '"permissionDecision":"deny"'     'the <<- form strips leading tabs from its terminator: a guard that only matches EOF at column 0 never closes this body, swallows the real merge on the next line, and lets it through'
+}
+
+test_mg_reads_the_command_that_follows_a_heredoc_body() {
+  run_guard '{"tool_name":"Bash","tool_input":{"command":"cat <<A
+not a command: gh pr merge --admin
+A
+gh pr merge 13 --admin"}}'
+  assert_contains "$OUT" '"permissionDecision":"deny"'     'a body that swallows everything after it would hide the real merge on the next line'
+}
+
+test_mg_strips_the_body_of_a_second_heredoc_too() {
+  run_guard '{"tool_name":"Bash","tool_input":{"command":"cat <<A\nnothing here\nA\ncat <<B\ngh pr merge 13 --admin\nB"}}'
+  assert_contains "$OUT" '"continue":true'     'a scanner that closes after the first heredoc feeds the second body to the matcher verbatim, and a commit message quoting the admin flag is denied'
+  assert_not_contains "$OUT" 'permissionDecision'
+}
+
+test_mg_does_not_read_a_quoted_heredoc_marker_as_an_operator() {
+  run_guard '{"tool_name":"Bash","tool_input":{"command":"printf %s '"'"'<<EOF'"'"'\ngh pr merge 13 --admin"}}'
+  assert_contains "$OUT" '"permissionDecision":"deny"' \
+    'the << sits inside a quoted argument, so it opens no heredoc. Reading it as one swallows the
+    real merge on the next line and the guard waves the whole thing through'
 }
