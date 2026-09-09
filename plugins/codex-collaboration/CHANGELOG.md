@@ -5,6 +5,11 @@ All notable changes to the **codex-collaboration** plugin will be documented in 
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.11.0] - 2026-08-28
+
+### Added
+- Declare the Codex plugin as a manifest dependency so it installs with this one; the workflows need both models and have no Claude-only mode
+
 ## [1.10.1] - 2026-07-13
 
 ### Added

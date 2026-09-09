@@ -17,7 +17,7 @@ This plugin delegates to standard Claude Code plugins for enhanced functionality
 | `unity-reviewer` | `feature-dev:code-reviewer` | General code quality, logic, and bug detection |
 | `unity-simplifier` | `code-simplifier:code-simplifier` | General code cleanup after Unity-specific patterns |
 
-**Required plugins** (install from official marketplace):
+**Optional plugins** (install from the official marketplace). Each agent falls back to reviewing directly when they are absent:
 
 ```bash
 /plugin install feature-dev

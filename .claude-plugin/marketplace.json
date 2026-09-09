@@ -5,11 +5,12 @@
   "owner": {
     "name": "Dmitry Yuhanov"
   },
+  "allowCrossMarketplaceDependenciesOn": ["openai-codex"],
   "plugins": [
     {
       "name": "unity-dev",
       "description": "Unity C# development workflow with architecture design, coding guidelines, testing patterns, and specialized review agents",
-      "version": "1.7.3",
+      "version": "1.7.4",
       "author": {
         "name": "Dmitry Yuhanov"
       },
@@ -20,7 +21,7 @@
     {
       "name": "python-dev",
       "description": "Python development workflow with architecture design, coding guidelines, testing patterns, and specialized review agents",
-      "version": "1.2.2",
+      "version": "1.2.3",
       "author": {
         "name": "Dmitry Yuhanov"
       },
@@ -31,7 +32,7 @@
     {
       "name": "typescript-dev",
       "description": "TypeScript development workflow with architecture design, coding guidelines, testing patterns, and specialized review agents",
-      "version": "1.2.2",
+      "version": "1.2.3",
       "author": {
         "name": "Dmitry Yuhanov"
       },
@@ -53,7 +54,7 @@
     {
       "name": "codex-collaboration",
       "description": "Cross-model collaboration between Claude and Codex — sequential drive/validate/act loops and parallel dual review with triage",
-      "version": "1.10.1",
+      "version": "1.11.0",
       "author": {
         "name": "Dmitry Yuhanov"
       },
