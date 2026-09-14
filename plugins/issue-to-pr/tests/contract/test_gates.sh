@@ -68,8 +68,13 @@ test_gates_refuse_a_detached_head() {
 
 test_gates_log_lands_in_the_main_checkout_and_nothing_in_the_worktree() {
   local repo wt
-  repo=$(init_repo "$TEST_TMPDIR/repo")
-  wt="$TEST_TMPDIR/repo-worktrees/issue-6"
+  repo=$(init_repo "$TEST_TMPDIR/repo with spaces")
+  wt="$TEST_TMPDIR/repo with spaces-worktrees/issue-6"
+  # An installed plugin is outside the project; neither host's environment is required.
+  mkdir -p "$TEST_TMPDIR/plugin cache"
+  cp -R "$ITP_SCRIPTS/.." "$TEST_TMPDIR/plugin cache/issue-to-pr"
+  ITP_SCRIPTS="$TEST_TMPDIR/plugin cache/issue-to-pr/scripts"
+  unset CLAUDE_PLUGIN_ROOT PLUGIN_ROOT
   git -C "$repo" worktree add -q "$wt" -b feat/issue-6-x main
   cd "$wt" || fail "could not enter the worktree"
   run_script gates.sh hello 'echo hi-there'

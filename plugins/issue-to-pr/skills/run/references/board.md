@@ -9,8 +9,9 @@ and carry on with plain issues; the fix is `gh auth refresh -s project`. A fine-
 prints no scopes line at all — that is unknown, not missing, and board sync is skipped either
 way, because `gh` reads the classic line.
 
-Discovery is **one backgrounded command**, so it costs the run no wait, and it prints what it
-found because a later Bash call is a new shell in which nothing it assigned survives. The
+Discovery is **one read-only Bash command**. It may run alongside independent work when the host
+can track and collect its result; otherwise wait for it. It prints what it found because a later
+shell call need not retain its variables. The
 mutation cannot join it: picking the option needs `opts` in front of you and the matching
 below is a judgement, not a pipeline stage.
 

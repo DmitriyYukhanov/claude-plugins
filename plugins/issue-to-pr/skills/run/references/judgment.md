@@ -8,8 +8,8 @@ moved it.
 | Machinery | trivial | standard | complex |
 |---|---|---|---|
 | Design | - | mini-design in the PR body | design panel, then `/cross-review` |
-| `code-review` level | `low`, 1 pass | `medium`, <=2 passes | `high`, <=3 passes (may raise to `max` on escalation) |
-| Step 6 `verify` | - | when the diff left something runnable | as standard |
+| Review depth | `low`, 1 pass | `medium`, <=2 passes | `high`, <=3 passes (may raise to `max` on escalation) |
+| Runtime verification | - | when the diff left something runnable | as standard |
 
 Gates, the security overlay and the external-claim check run at every tier, always. Signals,
 strongest first:
@@ -21,6 +21,10 @@ strongest first:
 
 Tier what the run will actually do: a scope the conversation widened past the issue text tiers on
 the wider scope.
+
+Depth describes review coverage, not a model ID or a required tool parameter. Respect the host's
+model settings. At every depth trace changed behavior through its callers; increase independent
+perspectives and edge-case coverage as depth rises.
 
 **Escalation:** if a review pass confirms two or more real bugs, raise the review level once and
 never lower it; the tier's pass cap is still the cap, and the human at the merge gate is the

@@ -1,11 +1,8 @@
 #!/usr/bin/env bash
 
-BUILT_IN_SKILLS='code-review simplify verify deep-research'
-
 skill_md() { printf '%s' "$ITP_SCRIPTS/../skills/run/SKILL.md"; }
 setup_md() { printf '%s' "$ITP_SCRIPTS/../skills/setup/SKILL.md"; }
 references_dir() { printf '%s' "$ITP_SCRIPTS/../skills/run/references"; }
-companions_md() { printf '%s' "$(references_dir)/companions.md"; }
 plugin_readme() { printf '%s' "$ITP_SCRIPTS/../README.md"; }
 repo_readme() { printf '%s' "$ITP_SCRIPTS/../../../README.md"; }
 plugin_manifest() { printf '%s' "$ITP_SCRIPTS/../.claude-plugin/plugin.json"; }
@@ -19,9 +16,6 @@ skill_step() { # word-in-the-heading
     contact moment becomes a pair that each still reads like the original."
   awk -v w="$1" -v h="$head" '$0 ~ h {f = index($0, w) > 0} f' "$(skill_md)"
 }
-
-install_table() { sed -n '/^| Companion | Install |/,/^$/p' "$(setup_md)"; }
-companions_table() { sed -n '/^| Capability | Preferred/,/^$/p' "$(companions_md)"; }
 
 description_in() { # manifest [anchor-line]
   local line
@@ -78,7 +72,7 @@ test_skill_grill_reshapes_the_checkpoint_without_adding_a_moment() {
 
   checkpoint=$(skill_step Checkpoint)
   assert_contains "$checkpoint" 'grilling' "the checkpoint must run the grill when --grill asked for it"
-  assert_contains "$checkpoint" 'AskUserQuestion' "the checkpoint lost its batched question"
+  assert_contains "$checkpoint" 'batched question' "the checkpoint lost its batched question"
   assert_contains "$checkpoint" 'replaces' \
     "the checkpoint must say the grill REPLACES the batched question; one that grills and THEN asks spends two contacts"
 
@@ -87,19 +81,6 @@ test_skill_grill_reshapes_the_checkpoint_without_adding_a_moment() {
   case "$ask_contract" in
     *four*) fail "the ask contract promises a fourth moment again: $ask_contract" ;;
   esac
-}
-
-test_builtins_are_never_listed_as_installable() {
-  local table skill
-  table=$(install_table)
-  [ -n "$table" ] || fail "setup's install table came back empty; this check would be vacuous"
-  for skill in $BUILT_IN_SKILLS; do
-    assert_not_contains "$table" "$skill" "setup's install table offers $skill, which Claude Code already registers"
-  done
-  table=$(companions_table)
-  [ -n "$table" ] || fail "the companions table is gone; this check would be vacuous"
-  assert_not_contains "$table" "deep-research" \
-    "companions.md gives deep-research a row, but the run can never start it"
 }
 
 test_setup_checks_the_hard_requirements_and_installs_nothing() {

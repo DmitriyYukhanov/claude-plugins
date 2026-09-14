@@ -1,12 +1,9 @@
 ---
 name: setup
 description: >-
-  Check what issue-to-pr needs and what would sharpen it, then hand over the exact install
-  commands. Use when the user asks what issue-to-pr needs, or hits a Step 0 failure about
-  gh auth or a missing scope. Verifies gh auth and its scopes, reports which companion
-  skills are present and what each missing one would sharpen, and explains the optional
-  config file. Prints commands for the user to run; installs nothing itself.
-user-invocable: true
+  Check issue-to-pr prerequisites in Claude Code or Codex: shell, GitHub access, optional
+  config and available companion skills. Use when the user asks what issue-to-pr needs
+  or hits a setup failure. Diagnose without installing anything.
 ---
 
 # setup — what the pipeline needs, and what would sharpen it
@@ -14,7 +11,18 @@ user-invocable: true
 **You never run an install command here.** Print them and let the human decide: installing a
 plugin changes their environment for every project.
 
-## 1. The hard requirement: `gh`
+## 1. Runtime prerequisites
+
+Check `git --version`, `gh --version`, and `bash --version`. On Windows use Git for Windows'
+`bin/bash.exe` (discover it from the Git installation), not a WSL launcher returned by PATH.
+Verify `git` and `gh` are reachable inside that Bash too: the bundled scripts call both. Reuse
+that executable for script calls. Do not install a second runtime when Git Bash already works.
+
+Missing Git or Bash → report the missing executable and stop. Missing `gh` → point at
+<https://cli.github.com/>. This plugin needs shell access; a chat host without it cannot run
+the workflow just by loading its Markdown.
+
+## 2. GitHub access
 
 Run `gh auth status`. Three outcomes:
 
@@ -28,28 +36,18 @@ Run `gh auth status`. Three outcomes:
 
 Report the account and the scopes you actually saw, not a summary of them.
 
-## 2. What ships in Claude Code already
-
-`code-review` (Step 6), `simplify` and `verify` (both Step 6) are registered by the CLI itself —
-nothing to install, no marketplace involved. An official plugin is also called `code-review`; it
-is a different thing. `deep-research` needs no install either, for a different reason: Claude Code
-only starts it when the user types it, so the pipeline can never call it, and Step 2 uses its own
-`Explore` subagent instead.
-
 ## 3. The companions
 
 What each one buys the run is in `../run/references/companions.md`, together with the inline
-fallback it degrades to — that table is the only copy. Run `claude plugin list`, report every row
-below as **present** or **missing**, and for a missing one give the one line it sharpens plus its
-command. Never imply the pipeline is broken without them.
+fallback — that table is the only copy. Inspect the current session's skills and tools, and use
+`claude plugin list` only in Claude Code or `codex plugin list` only in Codex when needed.
+Report the available capabilities and which ones will use a fallback. A plugin listed as
+available is not necessarily installed, enabled or usable in this session. Never describe
+another host's built-ins as present or suggest installing a Claude-only command in Codex.
 
-| Companion | Install |
-|---|---|
-| `ponytail` | `/plugin marketplace add DietrichGebert/ponytail` then `/plugin install ponytail@ponytail` |
-| `superpowers` | `/plugin marketplace add anthropics/claude-plugins-official` then `/plugin install superpowers@claude-plugins-official` |
-| `humanizer` | `/plugin install humanizer@dmitriy-claude-plugins` |
-| `mattpocock-skills` | `/plugin marketplace add anthropics/claude-plugins-official` then `/plugin install mattpocock-skills@claude-plugins-official` |
-| `codex-collaboration` | Codex first: `/plugin marketplace add openai/codex-plugin-cc`, `/plugin install codex@openai-codex`, `/codex:setup`. Then `/plugin install codex-collaboration@dmitriy-claude-plugins` |
+For a missing optional companion, give installation instructions only if requested, verifying
+them against that host's CLI help or official documentation. Never imply the pipeline is broken
+without optional companions.
 
 ## 4. The optional config
 
@@ -61,6 +59,6 @@ can be tracked and shared, so what lands in it is the user's decision.
 
 ## 5. Report
 
-One short block: `gh` and its scopes, what is built in, present companions on one line, missing
-ones with what each buys and its command, config status. Finish with the single next thing to do,
-or say the setup is complete and they can run `/issue-to-pr:run <issue>`.
+One short block: runtime and GitHub access, available companions and fallbacks, config status.
+Finish with the single next thing to do, or say the setup is complete and they can select the
+plugin's `run` skill with an issue number. Use invocation syntax from the current host.

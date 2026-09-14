@@ -5,6 +5,19 @@ All notable changes to the **issue-to-pr** plugin will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [9.1.0] - 2026-09-14
+
+### Added
+- Run the same issue-to-PR workflow in Claude Code and Codex, with global Codex installation instructions.
+
+### Changed
+- Use each agent's available tools for research, review and verification while keeping the same quality and merge gates.
+- Check Git Bash on Windows and preserve the active Ponytail level without relying on agent hooks.
+
+### Fixed
+- Refuse to reuse another task's worktree or switch a dirty or occupied main checkout.
+- Restart review and verification when new commits arrive after the PR was reported.
+
 ## [9.0.0] - 2026-09-08
 
 ### Changed

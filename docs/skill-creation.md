@@ -41,7 +41,10 @@ Recognized fields: `name`, `description`, `argument-hint`, `disable-model-invoca
 ## Path Resolution
 
 - Resolve paths dynamically. Do not hardcode absolute paths.
-- In SKILL.md body text, use `${CLAUDE_PLUGIN_ROOT}` to reference the plugin's root directory (e.g., `bash "${CLAUDE_PLUGIN_ROOT}/scripts/run-something.sh"`).
+- In shared skills, resolve bundled resources relative to the installed `SKILL.md` location,
+  then use quoted absolute paths. `${CLAUDE_PLUGIN_ROOT}` is Claude-specific; do not require
+  its expansion in a skill intended for other hosts. Keep one workflow and use available
+  host tools for its capabilities, rather than duplicating instructions per agent.
 - In standalone shell scripts that may be invoked from different directories, derive the plugin root relative to the script location:
   ```bash
   SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

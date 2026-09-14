@@ -1,6 +1,6 @@
 # issue-to-pr
 
-A Claude Code plugin that drives a GitHub issue from triage to a merge-ready pull
+A plugin for Claude Code and Codex that drives a GitHub issue from triage to a merge-ready pull
 request through a gated pipeline. The input can be a **bare issue**, a **card on a
 GitHub Projects (v2) board**, or a **plain request with no issue yet**; the skill drafts
 one first. The PR always links the issue so it auto-closes on merge; board cards advance
@@ -8,9 +8,27 @@ as work progresses.
 
 ## Installation
 
+Claude Code:
+
 ```bash
+/plugin marketplace add DmitriyYukhanov/claude-plugins
 /plugin install issue-to-pr@dmitriy-claude-plugins
 ```
+
+Codex (user-wide, across local projects):
+
+```bash
+codex plugin marketplace add DmitriyYukhanov/claude-plugins
+codex plugin add issue-to-pr@dmitriy-claude-plugins
+```
+
+Skip marketplace registration if already configured. After a release, run
+`codex plugin marketplace upgrade dmitriy-claude-plugins`, then the same `codex plugin add`
+command to install the update. Start a new task to pick up the installed skills.
+
+Both hosts install this same plugin directory, including its scripts and references. Do not
+copy only `skills/run`: it needs the shared scripts and setup skill. Git, authenticated `gh`,
+and Bash are required; on Windows use Git Bash. Per-project settings remain optional.
 
 ## Features
 
@@ -50,14 +68,12 @@ progress; everything between them scales to the task.
   at PR open; `Done` is left to GitHub's merge-time automation. A missing `project` token
   scope degrades to link-only and never blocks the PR.
 
-### Skill: `/issue-to-pr:setup`
+### Skill: `setup`
 
-Run once before your first task. It checks the one hard requirement (`gh`, logged in, with
-the `repo` scope, plus `project` for board mode), reports which companion skills are present
-and what each missing one would sharpen, and prints the install command for each. It changes
-nothing on its own: the commands are yours to run. It also names what Claude Code already
-registers — `code-review`, `simplify`, `/deep-research` — so nobody hunts an install that
-does not exist.
+Run once before your first task. It checks the shell, Git and GitHub access (`repo`, plus
+`project` for board mode), then reports the current host's available capabilities and fallbacks.
+It diagnoses setup without changing it. Optional companion installation instructions are
+provided on request, for the host you are actually using.
 
 ### Configuration (optional)
 
@@ -65,6 +81,9 @@ does not exist.
 typecheck/test/visual/smoke commands. Everything is optional; with no file the run works the
 commands out in the worktree where the gates execute, as literals, and prints the block to
 paste here once they pass. It never writes this file itself.
+
+Claude Code and Codex use this same config and state directory; the `.claude` name is retained
+for compatibility. There is no separate Codex config to keep in sync.
 
 That directory holds the plugin's state: the config, and one folder per branch with its gate
 receipt and gate logs. It ships its own `.gitignore` containing `*`, so none of it reaches
@@ -76,18 +95,12 @@ commands get worked out again, and the next merge asks for one more gate run bef
 
 ### Companion skills (optional)
 
-Three of the sharpest tools need no install: Claude Code's own `code-review` reviews the
-diff, its `simplify` is one of the two lenses of the simplification gate, and its `verify`
-closes that step by driving the built change. The CLI registers all three, so no marketplace
-is involved.
-
-`/deep-research` is built in too, but it is yours rather than the pipeline's: Claude Code only
-starts it when you type it. Step 2 always uses an `Explore` subagent. For the deeper sweep, run
-`/deep-research` in your own turn and hand the summary in.
-
-The optional companions, what each one sharpens and what the run does without it are in
-[companions.md](skills/run/references/companions.md). Each is used if installed, with an inline
-fallback otherwise.
+The host supplies the tools; the plugin defines the checks. Review, simplification and runtime
+verification apply on both hosts, whether performed through an available skill or directly.
+Complex designs use three independent proposals and a parent judge when subagents are available;
+otherwise the agent works through those perspectives sequentially and reports that limitation.
+No hook or companion plugin is required. See the shared
+[capability and fallback table](skills/run/references/companions.md).
 
 ## Usage
 
@@ -99,6 +112,10 @@ when you describe work that has no issue yet ("fix the flaky login test"). Or vi
 
 /issue-to-pr:run "add dark mode to the settings page" --tier standard
 ```
+
+In Codex, select `issue-to-pr:run` or `issue-to-pr:setup` from the skill picker; CLI/IDE users
+can type `$` to select a skill. Pass the issue number and the same flags as above. A request
+such as "Use issue-to-pr to work on issue #4" also identifies the plugin and task.
 
 ## License
 
