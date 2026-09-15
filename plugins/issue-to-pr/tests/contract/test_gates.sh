@@ -66,22 +66,33 @@ test_gates_refuse_a_detached_head() {
   [ ! -e "$(run_dir_of "$REPO" HEAD)" ] || fail "a detached checkout wrote branch-HEAD/, which no merge looks under"
 }
 
+gates_worktree() { # name -> cwd moves into a worktree of REPO on feat/issue-6-x, set as WT
+  REPO=$(init_repo "$TEST_TMPDIR/$1")
+  WT="$REPO-worktrees/issue-6"
+  git -C "$REPO" worktree add -q "$WT" -b feat/issue-6-x main
+  cd "$WT" || fail "could not enter the worktree"
+}
+
 test_gates_log_lands_in_the_main_checkout_and_nothing_in_the_worktree() {
   local repo wt
-  repo=$(init_repo "$TEST_TMPDIR/repo with spaces")
-  wt="$TEST_TMPDIR/repo with spaces-worktrees/issue-6"
-  # An installed plugin is outside the project; neither host's environment is required.
-  mkdir -p "$TEST_TMPDIR/plugin cache"
-  cp -R "$ITP_SCRIPTS/.." "$TEST_TMPDIR/plugin cache/issue-to-pr"
-  ITP_SCRIPTS="$TEST_TMPDIR/plugin cache/issue-to-pr/scripts"
-  unset CLAUDE_PLUGIN_ROOT PLUGIN_ROOT
-  git -C "$repo" worktree add -q "$wt" -b feat/issue-6-x main
-  cd "$wt" || fail "could not enter the worktree"
+  gates_worktree repo
+  repo=$REPO wt=$WT
   run_script gates.sh hello 'echo hi-there'
   assert_rc 0
   [ ! -e "$wt/.claude" ] || fail "a gate run left state inside the worktree, which git worktree remove then refuses"
   assert_contains "$(cat "$(run_dir_of "$repo" feat/issue-6-x)"/logs/hello-*.log)" hi-there
   assert_contains "$(cat "$repo/.claude/issue-to-pr/.gitignore")" '*' "the state directory must ignore itself"
+}
+
+test_gates_run_from_a_relocated_plugin_path_with_spaces() {
+  # An installed plugin lives outside the project; neither host's environment is required.
+  mkdir -p "$TEST_TMPDIR/plugin cache"
+  cp -R "$ITP_SCRIPTS/.." "$TEST_TMPDIR/plugin cache/issue-to-pr"
+  ITP_SCRIPTS="$TEST_TMPDIR/plugin cache/issue-to-pr/scripts"
+  gates_worktree "repo with spaces"
+  run_script gates.sh hello 'echo hi-there'
+  assert_rc 0
+  assert_contains "$(cat "$(run_dir_of "$REPO" feat/issue-6-x)"/logs/hello-*.log)" hi-there
 }
 
 test_gates_say_so_when_the_receipt_cannot_be_written() {

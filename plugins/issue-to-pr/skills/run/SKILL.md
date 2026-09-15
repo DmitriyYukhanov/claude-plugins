@@ -44,7 +44,7 @@ gate's own code in `GATE_<NAME>_EXIT`.
 
 ## Steps
 
-**0. Resolve.** Check runtime prerequisites in `../setup/SKILL.md` section 1. Turn the request
+**0. Resolve.** Turn the request
 into an issue. Free text with no issue number → draft one that
 restates the request and nothing more, `gh issue create`, and immediately report
 `Drafted issue #<N>: <title>`. Ambiguous
@@ -79,13 +79,14 @@ Critique the design using `R/companions.md`; unresolved decisions go to the ledg
 Standard: a mini-design in the PR body. **`--grill` needs a design at
 any tier**, trivial included: there is nothing to grill otherwise.
 
-**3. Checkpoint.** Read its state from the ledger. If `complete`, skip this checkpoint; any new
-unresolved user decision is a hard stop under `R/judgment.md`, not a second routine question.
-Otherwise, `--grill` starts or continues `mattpocock-skills:grilling` over the design (absent:
-discuss it directly). It **replaces** the batched question; include open `asked` items in the
-next round and record decisions as each round closes. Complete it when the user confirms the
-design. Without the flag, ask ONE batched question only if the checkpoint is `unused` and open
-`asked` items remain. If it is `pending`, wait for its answers instead of asking again.
+**3. Checkpoint.** The ledger says where it stands (`R/judgment.md`): an `asked` entry already
+carrying its `decision` means this checkpoint is spent — skip it, and any new user decision is a
+hard stop, not a second routine question. An `asked` entry still without one means the question is
+out; wait for it rather than asking again. Otherwise, `--grill` starts or continues
+`mattpocock-skills:grilling` over the design (absent: discuss it directly). It **replaces** the
+batched question; include open `asked` items in the next round and record decisions as each round
+closes, never at the end — a grill is long enough to compact. It ends on the user's confirmation.
+Without the flag, those items go into ONE batched question. Either way, the only mid-run question.
 
 **4. Build.** Turn the design into a plan (`superpowers:writing-plans` for complex); TDD: failing
 test → implement → passing. UI/layout work is verified with `<visual_cmd>` or a browser test,
@@ -103,8 +104,9 @@ one surfaces the real failure. Red ⇒ STOP and fix.
 
 **6. Review and harden.** Review the complete diff and callers at the tier's depth and pass cap,
 using `R/companions.md`. Reviewers report findings with `path:line`, impact and evidence; only
-the parent applies confirmed fixes. Never use an automatic `--fix` pass that bypasses the
-per-fix re-gate or finding count. Add independent adversarial reviewers when the diff warrants it;
+the parent applies confirmed fixes. Never let a reviewer apply its own fixes in bulk (Claude
+Code's `--fix`, or any equivalent): that sweeps findings in past the per-fix re-gate and past the
+count the ratchet reads. Add independent adversarial reviewers when the diff warrants it;
 wait for them before editing or running gates. **Security overlay:** run
 `git rev-parse --verify "<BASE>^{commit}"` first, every
 time — an unresolved base still prints a plausible list — then the surface is `git diff
@@ -123,13 +125,12 @@ surface, past the happy path. A FAIL is stop-and-fix and re-gate.
 
 **7. PR and report.** `git add <explicit paths>`, conventional subjects; `git push -u origin
 <branch>`. **Re-run `S/gates.sh` on the commit** — the receipt names the HEAD it ran against, so
-the pre-commit run does not cover it. Look up open PRs for `<branch>` with `gh pr list --head
-<branch> --state open --json number,baseRefName,url`. Reuse the one targeting `<BASE>`: read its
-body, update the workflow's report with `gh pr edit <number> --body-file <file>`, preserve
-unrelated content and reuse its URL. A failed lookup, a different base or multiple matches is a
-stop, not permission to create another PR. Only a successful empty lookup permits `gh pr create`
-against `<BASE>`. Include `Closes #<N>` and the humanized design, autonomous decisions and rejected
-alternatives in either case. Board-mode: move the card to
+the pre-commit run does not cover it. Then `gh pr list --head <branch> --state open --json
+number,baseRefName,url`: exactly one open PR on `<BASE>` → reuse it, `gh pr edit <number>
+--body-file <file>`, preserving unrelated body content and its URL; none → `gh pr create` against
+`<BASE>`; anything else — a failed lookup, another base, several matches — is a stop, never
+permission to open a second PR. Either way the body carries `Closes #<N>` and the humanized
+design, autonomous decisions and rejected alternatives. Board-mode: move the card to
 *in review* the same way. Then report, length per tier (3 lines → full): what was built and why,
 test status with the green proof, the autonomous decisions, the PR link, and how much machinery
 ran (gate runs, review passes and level). Ask when to merge, and **stop** — merging is the next

@@ -7,15 +7,11 @@ actually be performed, report it as blocked, never passed.
 
 ## Host tools
 
-- Questions: use the host's question tool when available in the current mode, otherwise ask in
-  chat. An unanswered asynchronous question is still pending; continue only independent work.
-  Count user checkpoints, not tool calls, and honor approval already given for this task.
-- Delegation: use native subagents (Claude Code's Agent or Codex's available collaboration tools).
-  Bound concurrency, make research/review read-only, and keep one implementation writer. Pass the
-  issue, paths, output contract and active constraints explicitly; do not depend on a hook to
-  carry them. Without delegation, do the same checks sequentially and disclose self-review.
-- Skills: Claude Code uses its skill invocations; Codex loads the installed skill instructions
-  through its own catalog. Never send a slash command to the shell or invent an unavailable tool.
+- Questions: the host's question tool, otherwise chat. An unanswered asynchronous question is
+  still open; count user checkpoints, not tool calls.
+- Delegation: native subagents (Claude Code's `Agent`, Codex's collaboration tools). Research and
+  review are read-only, one implementation writer, and everything they need is passed explicitly
+  rather than inherited from a hook. Without delegation the same checks run sequentially, disclosed.
 
 ## Companions
 
@@ -27,10 +23,15 @@ actually be performed, report it as blocked, never passed.
 | Lazy design and build (Steps 2–4) | `ponytail:ponytail`, preserving the active level or using `full` when unset | Design and build against the same ladder by hand: does this need to exist, does the stdlib or the platform already do it, can it be one line. |
 | Grilling the design (Step 3, `--grill` only) | `mattpocock-skills:grilling` over the design you just built | Discuss the design and open `asked` items in the same checkpoint, continuing until the user confirms the design. |
 | Deletion lens (Step 6) | `ponytail:ponytail-review` over the run's diff | Re-read the diff hunting only for what to delete: reinvented stdlib, one-caller abstractions, config nobody sets, flags nobody passes. |
-| Code review (Step 6) | The host's review capability, such as `code-review` in Claude Code | Use a read-only reviewer when available, otherwise self-review; check the diff, callers and tests for regressions, failure paths and missing coverage. |
-| Security review (Step 6, when triggered) | An available security-review skill or reviewer | Trace trust boundaries, authorization, secret exposure and the relevant abuse cases through the changed flow. |
-| Simplification (Step 6) | The host's simplification capability, such as `simplify` | Simplify the surviving code without changing its behavior. |
-| Runtime verification (Step 6) | The host's verification capability, such as `verify` | Build and exercise the changed surface, including an error or boundary case; retain command/browser evidence. |
+
+Step 6's four checks — review, security review, simplification, runtime verification — get no
+row, because a fallback table has nothing to say about a capability the host either has or does
+not. In Claude Code they are `code-review`, `/security-review`, `simplify` and `verify`: bare
+names, no install, no `if installed` branch. On a host without them, run the check directly — a
+read-only reviewer over the diff, its callers and its tests; the trust boundaries, authorization
+and secret exposure of the changed flow; the surviving code made simpler without behaviour
+change; the built change driven past its happy path. The mechanism is the host's; the check is
+not optional.
 
 `codex-collaboration` currently orchestrates Codex from Claude Code; installing it in Codex does
 not supply a second model. Use the design-critique fallback there. Deep research is optional

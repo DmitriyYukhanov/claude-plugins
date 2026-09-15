@@ -5,6 +5,16 @@ All notable changes to the **issue-to-pr** plugin will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [9.1.3] - 2026-09-15
+
+### Changed
+- Name the host's own review, security review, simplification and verification capabilities again. A conditional that reads the same whether the tool is there or not tells the agent nothing.
+- Take the checkpoint's state from the ledger entry that already records it, rather than a second field to keep in sync.
+- Leave the runtime prerequisite check to `setup`. Every run was repeating it.
+
+### Fixed
+- Restore the check that no install command is ever offered for a capability the host already ships.
+
 ## [9.1.2] - 2026-09-15
 
 ### Fixed

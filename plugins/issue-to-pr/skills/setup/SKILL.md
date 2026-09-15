@@ -16,11 +16,10 @@ plugin changes their environment for every project.
 Check `git --version`, `gh --version`, and `bash --version`. On Windows use Git for Windows'
 `bin/bash.exe` (discover it from the Git installation), not a WSL launcher returned by PATH.
 Verify `git` and `gh` are reachable inside that Bash too: the bundled scripts call both. Reuse
-that executable for script calls. Do not install a second runtime when Git Bash already works.
+that executable for script calls.
 
 Missing Git or Bash → report the missing executable and stop. Missing `gh` → point at
-<https://cli.github.com/>. This plugin needs shell access; a chat host without it cannot run
-the workflow just by loading its Markdown.
+<https://cli.github.com/>.
 
 ## 2. GitHub access
 

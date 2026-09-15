@@ -26,9 +26,8 @@ Skip marketplace registration if already configured. After a release, run
 `codex plugin marketplace upgrade dmitriy-claude-plugins`, then the same `codex plugin add`
 command to install the update. Start a new task to pick up the installed skills.
 
-Both hosts install this same plugin directory, including its scripts and references. Do not
-copy only `skills/run`: it needs the shared scripts and setup skill. Git, authenticated `gh`,
-and Bash are required; on Windows use Git Bash. Per-project settings remain optional.
+Git, authenticated `gh` and Bash are required; `skills/setup` §1 checks them and, on Windows,
+finds Git for Windows' own `bash.exe`. Per-project settings remain optional.
 
 ## Features
 

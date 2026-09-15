@@ -3,6 +3,7 @@
 skill_md() { printf '%s' "$ITP_SCRIPTS/../skills/run/SKILL.md"; }
 setup_md() { printf '%s' "$ITP_SCRIPTS/../skills/setup/SKILL.md"; }
 references_dir() { printf '%s' "$ITP_SCRIPTS/../skills/run/references"; }
+companions_md() { printf '%s' "$(references_dir)/companions.md"; }
 plugin_readme() { printf '%s' "$ITP_SCRIPTS/../README.md"; }
 repo_readme() { printf '%s' "$ITP_SCRIPTS/../../../README.md"; }
 plugin_manifest() { printf '%s' "$ITP_SCRIPTS/../.claude-plugin/plugin.json"; }
@@ -81,6 +82,21 @@ test_skill_grill_reshapes_the_checkpoint_without_adding_a_moment() {
   case "$ask_contract" in
     *four*) fail "the ask contract promises a fourth moment again: $ask_contract" ;;
   esac
+}
+
+test_a_host_builtin_is_never_offered_as_an_install() {
+  local setup companions offenders
+  setup=$(cat "$(setup_md)")
+  companions=$(cat "$(companions_md)")
+  assert_contains "$setup" 'gh auth status' "setup.md did not load; this check would be vacuous"
+  assert_contains "$companions" 'Inline fallback'     "companions.md did not load; this check would be vacuous"
+  offenders=$(printf '%s
+%s
+' "$setup" "$companions" |
+    grep -nE '(plugin (install|add)|marketplace add)' |
+    grep -E 'code-review|simplify|verify|deep-research' || true)
+  [ -z "$offenders" ] || fail "an install command is offered for a capability the host ships:
+$offenders"
 }
 
 test_setup_checks_the_hard_requirements_and_installs_nothing() {
