@@ -48,8 +48,9 @@ gate's own code in `GATE_<NAME>_EXIT`.
 into an issue. Free text with no issue number → draft one that
 restates the request and nothing more, `gh issue create`, and immediately report
 `Drafted issue #<N>: <title>`. Ambiguous
-scope → ONE batched question BEFORE creating it, spending the checkpoint early (`--grill` folds
-that scope decision into its first round). Then work out the ground the run stands on, **in
+scope → ONE batched question BEFORE creating it, recording checkpoint use in the ledger as
+`R/judgment.md` describes (`--grill` opens that same checkpoint with the scope question).
+Then work out the ground the run stands on, **in
 the main checkout**, never a worktree, following `R/configuration.md`: `gh auth status` (no auth →
 stop), then the repo, the config, `<BASE>` and `<START_POINT>`, the gate commands, and the issue
 you claim. Carry those values with you: the worktree has no copy of the config.
@@ -78,12 +79,13 @@ Critique the design using `R/companions.md`; unresolved decisions go to the ledg
 Standard: a mini-design in the PR body. **`--grill` needs a design at
 any tier**, trivial included: there is nothing to grill otherwise.
 
-**3. Checkpoint (unconditional slot).** `--grill` → `mattpocock-skills:grilling` over the design
-you just built (absent: hand it over in the question itself), ledgering each decision as its round
-closes, never at the end — a grill is long enough to compact. It ends on the user's confirmation
-and **replaces** the batched question, so every open `asked` item goes into its first round; a
-second ask after it is the fourth moment coming back. No flag → those items in ONE batched
-question. Either way, the only mid-run checkpoint.
+**3. Checkpoint.** Read its state from the ledger. If `complete`, skip this checkpoint; any new
+unresolved user decision is a hard stop under `R/judgment.md`, not a second routine question.
+Otherwise, `--grill` starts or continues `mattpocock-skills:grilling` over the design (absent:
+discuss it directly). It **replaces** the batched question; include open `asked` items in the
+next round and record decisions as each round closes. Complete it when the user confirms the
+design. Without the flag, ask ONE batched question only if the checkpoint is `unused` and open
+`asked` items remain. If it is `pending`, wait for its answers instead of asking again.
 
 **4. Build.** Turn the design into a plan (`superpowers:writing-plans` for complex); TDD: failing
 test → implement → passing. UI/layout work is verified with `<visual_cmd>` or a browser test,
@@ -92,7 +94,8 @@ never eyeballing.
 **5. Gates.** Config commands are authoritative; each one the config left empty you work out **in
 the worktree**, the tree the gates run in, from its manifests and CI workflow — as a **literal**
 (`npm test`, `bash tests/run-tests.sh`), never a string assembled from repository filenames,
-because `gates.sh` runs it through `bash -c`. Ambiguous ⇒ Step 3 asks. Then
+because `gates.sh` runs it through `bash -c`. Unresolvable ⇒ use the checkpoint or hard stop in
+`R/judgment.md`. Then
 `S/gates.sh typecheck "<typecheck_cmd>" test "<test_cmd>"` (+ `visual "<visual_cmd>"` for UI):
 each command is one double-quoted argument with the value substituted in. It stops at the first
 red gate and prints that gate's last 40 lines; never judge a gate from an ad-hoc command, only this
@@ -120,8 +123,13 @@ surface, past the happy path. A FAIL is stop-and-fix and re-gate.
 
 **7. PR and report.** `git add <explicit paths>`, conventional subjects; `git push -u origin
 <branch>`. **Re-run `S/gates.sh` on the commit** — the receipt names the HEAD it ran against, so
-the pre-commit run does not cover it. Then `gh pr create` against `BASE`, `Closes #<N>`, humanized
-body (design, autonomous-decisions section, rejected alternatives). Board-mode: move the card to
+the pre-commit run does not cover it. Look up open PRs for `<branch>` with `gh pr list --head
+<branch> --state open --json number,baseRefName,url`. Reuse the one targeting `<BASE>`: read its
+body, update the workflow's report with `gh pr edit <number> --body-file <file>`, preserve
+unrelated content and reuse its URL. A failed lookup, a different base or multiple matches is a
+stop, not permission to create another PR. Only a successful empty lookup permits `gh pr create`
+against `<BASE>`. Include `Closes #<N>` and the humanized design, autonomous decisions and rejected
+alternatives in either case. Board-mode: move the card to
 *in review* the same way. Then report, length per tier (3 lines → full): what was built and why,
 test status with the green proof, the autonomous decisions, the PR link, and how much machinery
 ran (gate runs, review passes and level). Ask when to merge, and **stop** — merging is the next

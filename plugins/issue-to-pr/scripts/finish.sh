@@ -40,7 +40,7 @@ cmd_merge() {
 
   receipt=$(receipt_path "$root" "$branch")
   if [ ! -f "$receipt" ] || [ "$(json_str_field "$receipt" head_sha)" != "$head_sha" ]; then
-    stop gates-unverified "issue-to-pr: no green gate receipt for ${head_sha:0:12}. Re-run gates.sh on this head, then re-approve."
+    stop gates-unverified "issue-to-pr: no green gate receipt for ${head_sha:0:12}. Repeat run/SKILL.md Steps 5-7 on this head, then re-approve."
   fi
   case ",$(json_str_field "$receipt" gates)," in
     *,test,*) : ;;
@@ -103,7 +103,7 @@ remove_worktree() { # path -> REMOVED, LEFTOVER; stops on a dirty tree, never fo
 }
 
 cmd_cleanup() {
-  local pr_state dependents wt_path def deleted_local=false deleted_remote=false
+  local pr_state dependents wt_path wt_branch def deleted_local=false deleted_remote=false
   if [ "$keep_branch" -eq 0 ]; then
     pr_state=$(gh pr view "$branch" --json state --jq .state 2>/dev/null || printf '')
     [ "$pr_state" = MERGED ] || stop pr-not-merged "PR for $branch is '${pr_state:-unknown}', not MERGED - refusing cleanup"
@@ -113,6 +113,11 @@ cmd_cleanup() {
   fi
 
   wt_path=$(registered_wt)
+  if [ -n "$wt_path" ] && [ -e "$wt_path" ]; then
+    wt_branch=$(git -C "$wt_path" symbolic-ref --quiet --short HEAD 2>/dev/null || printf '')
+    [ "$wt_branch" = "$branch" ] ||
+      stop worktree-branch-mismatch "worktree $wt_path is on '${wt_branch:-detached or unreadable}', expected '$branch' - refusing cleanup"
+  fi
   [ -n "$wt_path" ] || wt_path="$(dirname "$root")/$(basename "$root")-worktrees/issue-$issue"
   cd "$root" 2>/dev/null || true
   remove_worktree "$wt_path"

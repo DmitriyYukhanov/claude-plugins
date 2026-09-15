@@ -32,8 +32,14 @@ backstop. When the cap ends the loop with fixes unread, ledger it ("Work no revi
 
 ## The ask contract — what the spine's three moments mean
 
+Keep `checkpoint: unused|pending|complete` in the existing ledger and carry it through resume
+and compaction. Set it to `pending` before sending the first checkpoint question, even in Step 0.
+For a batched question, mark it `complete` when its answers settle the open items. With `--grill`,
+it stays `pending` through scope clarification and design discussion until the user confirms the
+design. An answered scope question need not block independent design work while the grill is open.
+
 1. **Step 3**, which may move **earlier**, to Step 0, when the ambiguity is in the request rather
-   than the design. Every open `asked` item goes into the grill's first round — including the
+   than the design. Every open `asked` item goes into the grill's next round — including the
    Step 0 scope question, and including items the grill would never reach on its own, like a new
    dependency or a gate command Step 5 could not settle.
 2. **The merge gate**.
@@ -67,8 +73,7 @@ choice still goes to the human.
 search available excuses the lookup, never the entry; say in the `rationale` that the claim went
 unchecked and what you assumed instead.
 
-**Work no reviewer saw.** The last review pass a tier allows changed something, or the
-simplification gate cut after the loop closed: either way it reaches the merge gate unread. One
-bug on the final pass leaves its fix exactly as unread. The `rationale` names the files, so the
-reader knows where to look hardest. File it whenever it applies and never otherwise, since a
-caveat on every run is one nobody reads.
+**Work no reviewer saw.** Any change after the last review needs this entry, including final-pass
+fixes, simplification cuts and fixes from runtime verification. Passing gates does not mean a
+reviewer saw that change. The `rationale` names the files and the unreviewed changes. File it
+whenever it applies, unless a later review covered those changes.

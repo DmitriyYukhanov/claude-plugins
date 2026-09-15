@@ -5,6 +5,14 @@ All notable changes to the **issue-to-pr** plugin will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [9.1.1] - 2026-09-15
+
+### Fixed
+- Remember an early checkpoint so a resumed run does not ask the same round of questions again.
+- Update the existing PR after new commits instead of trying to create it again.
+- Disclose all changes made after the last review, including fixes found during runtime verification.
+- Refuse cleanup when the issue worktree is on another branch or a detached head.
+
 ## [9.1.0] - 2026-09-14
 
 ### Added
