@@ -5,10 +5,10 @@ All notable changes to the **unity-dev** plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [1.7.4] - 2026-08-28
+## [1.7.5] - 2026-09-15
 
 ### Fixed
-- README called `feature-dev` and `code-simplifier` required; both agents fall back to working directly without them, so they are optional
+- README called `feature-dev` and `code-simplifier` required; both agents fall back to working directly without them, so they are optional. `unity-reviewer` reviews without `feature-dev`, `unity-simplifier` simplifies without `code-simplifier`
 
 ## [1.7.3] - 2026-07-13
 
