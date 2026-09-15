@@ -1,5 +1,8 @@
 {
   "name": "codex-collaboration",
-  "version": "1.10.1",
-  "description": "Cross-model collaboration between Claude and Codex — sequential drive/validate/act loops and parallel dual review with triage"
+  "version": "1.11.0",
+  "description": "Cross-model collaboration between Claude and Codex — sequential drive/validate/act loops and parallel dual review with triage",
+  "dependencies": [
+    { "name": "codex", "marketplace": "openai-codex" }
+  ]
 }
