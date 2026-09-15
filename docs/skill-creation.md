@@ -37,11 +37,15 @@ Recognized fields: `name`, `description`, `argument-hint`, `disable-model-invoca
 - Some skills contain an `agents/` subdirectory with OpenAI-format agent config files (e.g., for Codex). These are tool-specific config files, not Claude Code subagents.
 - Do not create extra files like `README.md`, `CHANGELOG.md`, or setup notes inside a skill unless the skill truly needs them at runtime.
 - Do not duplicate the same guidance across `SKILL.md` and `references/`.
+- A skill meant for more than one host keeps one workflow and reaches for whatever tools that
+  host exposes. A second copy of the instructions per agent is the thing that drifts.
 
 ## Path Resolution
 
 - Resolve paths dynamically. Do not hardcode absolute paths.
-- In SKILL.md body text, use `${CLAUDE_PLUGIN_ROOT}` to reference the plugin's root directory (e.g., `bash "${CLAUDE_PLUGIN_ROOT}/scripts/run-something.sh"`).
+- In shared skills, resolve bundled resources relative to the installed `SKILL.md` location,
+  then use quoted absolute paths. `${CLAUDE_PLUGIN_ROOT}` is Claude-specific; do not require
+  its expansion in a skill intended for other hosts.
 - In standalone shell scripts that may be invoked from different directories, derive the plugin root relative to the script location:
   ```bash
   SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

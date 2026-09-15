@@ -173,6 +173,27 @@ test_cleanup_refuses_a_dirty_worktree() {
   branch_survives || fail "the branch of a dirty worktree was deleted"
 }
 
+test_cleanup_refuses_a_worktree_on_another_branch_or_detached_head() {
+  local mode
+  cleanup_setup pr-merged
+  write_receipt "$REPO" feat/issue-6-x "$SHA_OK"
+  git -C "$WT" switch -qc another-task
+  for mode in another-task detached; do
+    [ "$mode" != detached ] || git -C "$WT" checkout -q --detach
+    run_script finish.sh cleanup 6 --branch feat/issue-6-x
+    assert_rc 2
+    assert_key "$OUT" STOP_REASON worktree-branch-mismatch
+    run_script finish.sh cleanup 6 --branch feat/issue-6-x --keep-branch
+    assert_rc 2
+    assert_key "$OUT" STOP_REASON worktree-branch-mismatch
+    [ -f "$WT/work.txt" ] || fail "cleanup removed another task's worktree"
+    branch_survives || fail "refused cleanup deleted the requested branch"
+    git -C "$REPO" ls-remote --exit-code --heads origin feat/issue-6-x >/dev/null 2>&1 ||
+      fail "refused cleanup deleted the remote branch"
+    [ -f "$(receipt_file "$REPO" feat/issue-6-x)" ] || fail "refused cleanup deleted run state"
+  done
+}
+
 test_cleanup_reports_an_unregistered_leftover_dir_instead_of_deleting_it() {
   cleanup_setup pr-merged
   git -C "$REPO" worktree remove "$WT"

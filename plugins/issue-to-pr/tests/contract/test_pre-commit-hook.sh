@@ -112,7 +112,7 @@ test_hook_accepts_a_bump_whose_manifests_agree() {
 
   out=$(git commit -m agreed 2>&1) || fail "the hook blocked a correct commit:
 $out"
-  git log --oneline | grep -q agreed || fail "commit reported success but nothing landed"
+  assert_eq agreed "$(git log -1 --format=%s)" "commit reported success but nothing landed"
 }
 
 test_hook_leaves_an_unregistered_new_plugin_to_check_4() {

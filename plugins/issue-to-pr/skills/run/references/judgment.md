@@ -8,8 +8,8 @@ moved it.
 | Machinery | trivial | standard | complex |
 |---|---|---|---|
 | Design | - | mini-design in the PR body | design panel, then `/cross-review` |
-| `code-review` level | `low`, 1 pass | `medium`, <=2 passes | `high`, <=3 passes (may raise to `max` on escalation) |
-| Step 6 `verify` | - | when the diff left something runnable | as standard |
+| Review depth | `low`, 1 pass | `medium`, <=2 passes | `high`, <=3 passes (may raise to `max` on escalation) |
+| Runtime verification | - | when the diff left something runnable | as standard |
 
 Gates, the security overlay and the external-claim check run at every tier, always. Signals,
 strongest first:
@@ -22,14 +22,26 @@ strongest first:
 Tier what the run will actually do: a scope the conversation widened past the issue text tiers on
 the wider scope.
 
+Depth describes review coverage, not a model ID or a required tool parameter. Respect the host's
+model settings. At every depth trace changed behavior through its callers; increase independent
+perspectives and edge-case coverage as depth rises.
+
 **Escalation:** if a review pass confirms two or more real bugs, raise the review level once and
 never lower it; the tier's pass cap is still the cap, and the human at the merge gate is the
 backstop. When the cap ends the loop with fixes unread, ledger it ("Work no reviewer saw", below).
 
 ## The ask contract — what the spine's three moments mean
 
+The checkpoint needs no state of its own: the ledger already carries it. Write the `asked` entry
+when you send the question, even in Step 0, and its `decision` when the answers land. The
+checkpoint is spent once every open `asked` item has a decision and, under `--grill`, the user has
+confirmed the design — a grill records a decision as each round closes and runs on until that
+confirmation, so a closed round is not a closed checkpoint. An answered scope question does not
+block independent design work meanwhile. Entries are written before the next tool call, which is
+what keeps a compaction from losing them.
+
 1. **Step 3**, which may move **earlier**, to Step 0, when the ambiguity is in the request rather
-   than the design. Every open `asked` item goes into the grill's first round — including the
+   than the design. Every open `asked` item goes into the grill's next round — including the
    Step 0 scope question, and including items the grill would never reach on its own, like a new
    dependency or a gate command Step 5 could not settle.
 2. **The merge gate**.
@@ -63,8 +75,7 @@ choice still goes to the human.
 search available excuses the lookup, never the entry; say in the `rationale` that the claim went
 unchecked and what you assumed instead.
 
-**Work no reviewer saw.** The last review pass a tier allows changed something, or the
-simplification gate cut after the loop closed: either way it reaches the merge gate unread. One
-bug on the final pass leaves its fix exactly as unread. The `rationale` names the files, so the
-reader knows where to look hardest. File it whenever it applies and never otherwise, since a
-caveat on every run is one nobody reads.
+**Work no reviewer saw.** Any change after the last review needs this entry, including final-pass
+fixes, simplification cuts and fixes from runtime verification. Passing gates does not mean a
+reviewer saw that change. The `rationale` names the files and the unreviewed changes. File it
+whenever it applies, unless a later review covered those changes.

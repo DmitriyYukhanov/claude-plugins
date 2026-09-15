@@ -5,6 +5,48 @@ All notable changes to the **issue-to-pr** plugin will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [9.1.4] - 2026-09-15
+
+### Fixed
+- A grill closes a decision per round; that no longer reads as closing the whole checkpoint.
+- Drop the claim that a fresh session can rebuild the checkpoint from the PR and the report. Only `auto` entries render there, and an early checkpoint happens before the PR exists.
+
+## [9.1.3] - 2026-09-15
+
+### Changed
+- Name the host's own review, security review, simplification and verification capabilities again. In Claude Code runtime verification is `run`; there is no `verify` command.
+- Take the checkpoint's state from the ledger entry that already records it, rather than a second field to keep in sync.
+- Leave the runtime prerequisite check to `setup`. Every run was repeating it.
+
+### Fixed
+- Restore the check that no install command is ever offered for a capability the host already ships.
+
+## [9.1.2] - 2026-09-15
+
+### Fixed
+- Check the new commit directly when validating a matching plugin and marketplace version bump.
+
+## [9.1.1] - 2026-09-15
+
+### Fixed
+- Remember an early checkpoint so a resumed run does not ask the same round of questions again.
+- Update the existing PR after new commits instead of trying to create it again.
+- Disclose all changes made after the last review, including fixes found during runtime verification.
+- Refuse cleanup when the issue worktree is on another branch or a detached head.
+
+## [9.1.0] - 2026-09-14
+
+### Added
+- Run the same issue-to-PR workflow in Claude Code and Codex, with global Codex installation instructions.
+
+### Changed
+- Use each agent's available tools for research, review and verification while keeping the same quality and merge gates.
+- Check Git Bash on Windows and preserve the active Ponytail level without relying on agent hooks.
+
+### Fixed
+- Refuse to reuse another task's worktree or switch a dirty or occupied main checkout.
+- Restart review and verification when new commits arrive after the PR was reported.
+
 ## [9.0.0] - 2026-09-08
 
 ### Changed

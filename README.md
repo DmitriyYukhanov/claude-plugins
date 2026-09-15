@@ -33,6 +33,7 @@ Codex reads this repo's `.claude-plugin/marketplace.json` as-is, so the same mar
 ```bash
 codex plugin marketplace add DmitriyYukhanov/claude-plugins
 codex plugin add humanizer@dmitriy-claude-plugins
+codex plugin add issue-to-pr@dmitriy-claude-plugins
 codex plugin list                  # what each marketplace offers, and what is installed
 codex plugin marketplace upgrade   # refresh the snapshots after a release
 ```
@@ -127,7 +128,8 @@ Implementation-ready spec bundle authoring with:
 
 ### issue-to-pr
 
-Drive a single GitHub issue from triage to a merge-ready pull request through a gated pipeline:
+Drive a single GitHub issue from triage to a merge-ready pull request in Claude Code or Codex,
+using one shared workflow and the same scripts:
 
 - One flow for a **bare issue** or a **card on a GitHub Projects (v2) board** — Step 0 resolves the input and decides whether board-status sync applies.
 - Each run works in its own `../<repo>-worktrees/issue-<N>` git worktree, so concurrent local agents on different issues never clash.

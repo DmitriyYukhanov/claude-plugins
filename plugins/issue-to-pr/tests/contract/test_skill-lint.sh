@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
 
-BUILT_IN_SKILLS='code-review simplify verify deep-research'
-
 skill_md() { printf '%s' "$ITP_SCRIPTS/../skills/run/SKILL.md"; }
 setup_md() { printf '%s' "$ITP_SCRIPTS/../skills/setup/SKILL.md"; }
 references_dir() { printf '%s' "$ITP_SCRIPTS/../skills/run/references"; }
@@ -19,9 +17,6 @@ skill_step() { # word-in-the-heading
     contact moment becomes a pair that each still reads like the original."
   awk -v w="$1" -v h="$head" '$0 ~ h {f = index($0, w) > 0} f' "$(skill_md)"
 }
-
-install_table() { sed -n '/^| Companion | Install |/,/^$/p' "$(setup_md)"; }
-companions_table() { sed -n '/^| Capability | Preferred/,/^$/p' "$(companions_md)"; }
 
 description_in() { # manifest [anchor-line]
   local line
@@ -78,7 +73,7 @@ test_skill_grill_reshapes_the_checkpoint_without_adding_a_moment() {
 
   checkpoint=$(skill_step Checkpoint)
   assert_contains "$checkpoint" 'grilling' "the checkpoint must run the grill when --grill asked for it"
-  assert_contains "$checkpoint" 'AskUserQuestion' "the checkpoint lost its batched question"
+  assert_contains "$checkpoint" 'batched question' "the checkpoint lost its batched question"
   assert_contains "$checkpoint" 'replaces' \
     "the checkpoint must say the grill REPLACES the batched question; one that grills and THEN asks spends two contacts"
 
@@ -89,17 +84,19 @@ test_skill_grill_reshapes_the_checkpoint_without_adding_a_moment() {
   esac
 }
 
-test_builtins_are_never_listed_as_installable() {
-  local table skill
-  table=$(install_table)
-  [ -n "$table" ] || fail "setup's install table came back empty; this check would be vacuous"
-  for skill in $BUILT_IN_SKILLS; do
-    assert_not_contains "$table" "$skill" "setup's install table offers $skill, which Claude Code already registers"
-  done
-  table=$(companions_table)
-  [ -n "$table" ] || fail "the companions table is gone; this check would be vacuous"
-  assert_not_contains "$table" "deep-research" \
-    "companions.md gives deep-research a row, but the run can never start it"
+test_a_host_builtin_is_never_offered_as_an_install() {
+  local setup companions offenders
+  setup=$(cat "$(setup_md)")
+  companions=$(cat "$(companions_md)")
+  assert_contains "$setup" 'gh auth status' "setup.md did not load; this check would be vacuous"
+  assert_contains "$companions" 'Inline fallback'     "companions.md did not load; this check would be vacuous"
+  offenders=$(printf '%s
+%s
+' "$setup" "$companions" |
+    grep -nE '(plugin (install|add)|marketplace add)' |
+    grep -E 'code-review|simplify|verify|deep-research' || true)
+  [ -z "$offenders" ] || fail "an install command is offered for a capability the host ships:
+$offenders"
 }
 
 test_setup_checks_the_hard_requirements_and_installs_nothing() {
