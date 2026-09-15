@@ -5,6 +5,11 @@ All notable changes to the **issue-to-pr** plugin will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [9.1.2] - 2026-09-15
+
+### Fixed
+- Check the new commit directly when validating a matching plugin and marketplace version bump.
+
 ## [9.1.1] - 2026-09-15
 
 ### Fixed
