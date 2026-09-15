@@ -24,14 +24,12 @@ actually be performed, report it as blocked, never passed.
 | Grilling the design (Step 3, `--grill` only) | `mattpocock-skills:grilling` over the design you just built | Discuss the design and open `asked` items in the same checkpoint, continuing until the user confirms the design. |
 | Deletion lens (Step 6) | `ponytail:ponytail-review` over the run's diff | Re-read the diff hunting only for what to delete: reinvented stdlib, one-caller abstractions, config nobody sets, flags nobody passes. |
 
-Step 6's four checks — review, security review, simplification, runtime verification — get no
-row, because a fallback table has nothing to say about a capability the host either has or does
-not. In Claude Code they are `code-review`, `/security-review`, `simplify` and `verify`: bare
-names, no install, no `if installed` branch. On a host without them, run the check directly — a
-read-only reviewer over the diff, its callers and its tests; the trust boundaries, authorization
-and secret exposure of the changed flow; the surviving code made simpler without behaviour
-change; the built change driven past its happy path. The mechanism is the host's; the check is
-not optional.
+Step 6's four checks get no row. In Claude Code they are `code-review`, `/security-review`,
+`simplify` and `run` — the skill that builds the change and drives it; there is no `verify`
+command to call. Elsewhere, perform the check directly: a read-only reviewer over the diff, its
+callers and its tests; the trust boundaries, authorization and secret exposure of the changed
+flow; the surviving code made simpler without behaviour change; the built change driven past its
+happy path.
 
 `codex-collaboration` currently orchestrates Codex from Claude Code; installing it in Codex does
 not supply a second model. Use the design-critique fallback there. Deep research is optional

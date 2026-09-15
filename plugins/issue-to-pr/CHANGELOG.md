@@ -5,10 +5,16 @@ All notable changes to the **issue-to-pr** plugin will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [9.1.4] - 2026-09-15
+
+### Fixed
+- A grill closes a decision per round; that no longer reads as closing the whole checkpoint.
+- Drop the claim that a fresh session can rebuild the checkpoint from the PR and the report. Only `auto` entries render there, and an early checkpoint happens before the PR exists.
+
 ## [9.1.3] - 2026-09-15
 
 ### Changed
-- Name the host's own review, security review, simplification and verification capabilities again. A conditional that reads the same whether the tool is there or not tells the agent nothing.
+- Name the host's own review, security review, simplification and verification capabilities again. In Claude Code runtime verification is `run`; there is no `verify` command.
 - Take the checkpoint's state from the ledger entry that already records it, rather than a second field to keep in sync.
 - Leave the runtime prerequisite check to `setup`. Every run was repeating it.
 

@@ -33,12 +33,12 @@ backstop. When the cap ends the loop with fixes unread, ledger it ("Work no revi
 ## The ask contract — what the spine's three moments mean
 
 The checkpoint needs no state of its own: the ledger already carries it. Write the `asked` entry
-when you send the question, even in Step 0, and its `decision` when the answers land — an `asked`
-entry with a `decision` is a checkpoint spent and closed, one without is a checkpoint still open.
-That survives compaction because every entry is written before the next tool call, and a resumed
-session rebuilds it the way the Ledger section says: `gh pr view` and the run's own report, which
-outrank recollection. With `--grill` the entry stays open through scope and design until the user
-confirms the design; an answered scope question does not block independent design work meanwhile.
+when you send the question, even in Step 0, and its `decision` when the answers land. The
+checkpoint is spent once every open `asked` item has a decision and, under `--grill`, the user has
+confirmed the design — a grill records a decision as each round closes and runs on until that
+confirmation, so a closed round is not a closed checkpoint. An answered scope question does not
+block independent design work meanwhile. Entries are written before the next tool call, which is
+what keeps a compaction from losing them.
 
 1. **Step 3**, which may move **earlier**, to Step 0, when the ambiguity is in the request rather
    than the design. Every open `asked` item goes into the grill's next round — including the

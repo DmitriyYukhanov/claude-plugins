@@ -79,10 +79,9 @@ Critique the design using `R/companions.md`; unresolved decisions go to the ledg
 Standard: a mini-design in the PR body. **`--grill` needs a design at
 any tier**, trivial included: there is nothing to grill otherwise.
 
-**3. Checkpoint.** The ledger says where it stands (`R/judgment.md`): an `asked` entry already
-carrying its `decision` means this checkpoint is spent — skip it, and any new user decision is a
-hard stop, not a second routine question. An `asked` entry still without one means the question is
-out; wait for it rather than asking again. Otherwise, `--grill` starts or continues
+**3. Checkpoint.** `R/judgment.md` says whether it is still owed: skip it once spent, wait rather
+than re-ask while a question is out, and treat a user decision surfacing after it as a hard stop
+rather than a second routine question. Otherwise, `--grill` starts or continues
 `mattpocock-skills:grilling` over the design (absent: discuss it directly). It **replaces** the
 batched question; include open `asked` items in the next round and record decisions as each round
 closes, never at the end — a grill is long enough to compact. It ends on the user's confirmation.
