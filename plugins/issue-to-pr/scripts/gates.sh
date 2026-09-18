@@ -13,8 +13,12 @@ source "$SCRIPT_DIR/lib/common.sh"
 if [ "$#" -eq 0 ] || [ $(($# % 2)) -ne 0 ]; then
   degrade bad-arguments "gates: expected name/command pairs, got $# arguments"
 fi
+gate_key() { printf '%s' "$1" | tr '[:lower:]' '[:upper:]' | tr -c 'A-Z0-9' '_' | sed 's/_*$//'; }
+
 args=("$@")
 for ((i = 1; i < ${#args[@]}; i += 2)); do
+  [ -n "$(gate_key "${args[$((i - 1))]}")" ] ||
+    degrade unnamed-gate "gates: gate name '${args[$((i - 1))]}' has nothing to key an exit code or a receipt entry to, so the gate would run and then vanish from the receipt the merge reads"
   [ -n "${args[$i]//[[:space:]]/}" ] ||
     degrade empty-gate-command "gates: gate '${args[$((i - 1))]}' has an empty command, and bash -c on nothing exits 0: a green gate over no command"
   # shellcheck disable=SC2016  # a literal dollar sign is what this arm looks for
@@ -42,7 +46,7 @@ while [ "$#" -gt 0 ]; do
   name=$1
   cmd=$2
   shift 2
-  key=$(printf '%s' "$name" | tr '[:lower:]' '[:upper:]' | tr -c 'A-Z0-9' '_' | sed 's/_*$//')
+  key=$(gate_key "$name")
   slug=$(printf '%s' "$key" | tr '[:upper:]' '[:lower:]')
   logf="$log_dir/$slug-$ts.log"
   bash -c "$cmd" >"$logf" 2>&1

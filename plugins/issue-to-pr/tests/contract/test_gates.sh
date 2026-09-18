@@ -103,3 +103,12 @@ test_gates_say_so_when_the_receipt_cannot_be_written() {
   assert_not_contains "$OUT" GATES_RECEIPT
   assert_contains "$ERR" "the merge will refuse this head"
 }
+
+test_gates_refuse_a_name_that_sanitizes_to_nothing() {
+  gates_repo
+  run_script gates.sh '***' true
+  assert_rc 4
+  assert_key "$OUT" DEGRADED_REASON unnamed-gate
+  [ ! -e "$(receipt_file "$REPO" feat/issue-6-x)" ] ||
+    fail "the gate would have run and then been missing from the receipt the merge reads"
+}
