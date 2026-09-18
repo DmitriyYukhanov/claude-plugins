@@ -243,3 +243,11 @@ test_a_missing_branch_value_does_not_hang() {
   [ "$rc" != 124 ] || fail "finish.sh hung on --branch with no value"
   assert_eq 4 "$rc" "should degrade, not hang"
 }
+
+test_cleanup_refuses_a_mistyped_flag_rather_than_deleting_the_branch() {
+  cleanup_setup pr-merged
+  run_script finish.sh cleanup 6 --branch feat/issue-6-x --keep-branchs
+  assert_rc 4
+  assert_key "$OUT" DEGRADED_REASON unknown-flag
+  branch_survives || fail "a typo in --keep-branch deleted the branch it was meant to save"
+}

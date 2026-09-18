@@ -16,7 +16,7 @@ while [ "$#" -gt 0 ]; do
     --branch) branch=${2:-}; shift 2 2>/dev/null || shift "$#" ;;
     --method) method=${2:-}; shift 2 2>/dev/null || shift "$#" ;;
     --keep-branch) keep_branch=1; shift ;;
-    -*) warn "finish: ignoring unknown flag: $1"; shift ;;
+    -*) degrade unknown-flag "finish: unknown flag '$1'. Ignoring it would let a mistyped --keep-branch delete the branch anyway" ;;
     *) [ -z "$issue" ] && issue=$1; shift ;;
   esac
 done
@@ -29,8 +29,10 @@ root=$(repo_root)
 
 cmd_merge() {
   local pr head_sha decision base_ref receipt push_out merge_out default_ref
-  pr=$(gh pr view "$branch" --json headRefOid,reviewDecision,baseRefName \
-    --jq '"\(.headRefOid)\t\(.reviewDecision // "")\t\(.baseRefName)"' 2>/dev/null) || pr=""
+  # reviewDecision alone is null on a base branch that does not require review, however many
+  # reviews a PR has, so the reviews themselves decide and the field only confirms them
+  pr=$(gh pr view "$branch" --json headRefOid,reviewDecision,latestReviews,baseRefName \
+    --jq '"\(.headRefOid)\t\(if .reviewDecision == "CHANGES_REQUESTED" or any(.latestReviews[]?; .state == "CHANGES_REQUESTED") then "CHANGES_REQUESTED" else .reviewDecision // "" end)\t\(.baseRefName)"' 2>/dev/null) || pr=""
   head_sha=$(printf '%s' "$pr" | cut -f1)
   decision=$(printf '%s' "$pr" | cut -f2)
   base_ref=$(printf '%s' "$pr" | cut -f3)

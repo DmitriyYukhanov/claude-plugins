@@ -84,6 +84,18 @@ test_skill_grill_reshapes_the_checkpoint_without_adding_a_moment() {
   esac
 }
 
+test_the_second_model_review_names_its_own_target() {
+  local row step
+  row=$(grep -i 'second-model review' "$(companions_md)")
+  [ -n "$row" ] || fail "companions.md lost the Step 6 second-model review row"
+  assert_contains "$row" 'cross-review' "the second-model row must name the capability it prefers"
+  assert_contains "$row" '<CHANGED>'     "the second model must be handed the file list: its own target is a three-dot diff, empty
+    until Step 7 commits, and an empty diff is where it stops to ask the user what to review"
+  assert_contains "$row" '--max-rounds 1'     "one round only, so what it applies lands inside a single pass the ratchet counts"
+  step=$(skill_step Review)
+  assert_contains "$step" 'second' "the spine must say when the second model runs"
+}
+
 test_a_host_builtin_is_never_offered_as_an_install() {
   local setup companions offenders
   setup=$(cat "$(setup_md)")

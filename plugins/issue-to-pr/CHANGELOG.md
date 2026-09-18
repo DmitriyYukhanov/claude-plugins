@@ -5,6 +5,17 @@ All notable changes to the **issue-to-pr** plugin will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [9.2.0] - 2026-09-18
+
+### Added
+- A second model reads the diff on complex runs and after an escalation, where the host supplies one: every reviewer until now shared the writer's blind spots. Its confirmed findings feed the escalation the same way.
+- An orphan sweep after every deletion: a symbol the removed code was the last to reach goes in the same PR, unless config, a hook or a reader outside the repo still names it.
+
+### Fixed
+- Let the reviews themselves block a merge: GitHub reports no review decision at all on a base branch that does not require one, so a changes-requested review used to pass the merge gate unseen.
+- Refuse an unrecognised flag instead of warning past it, so a mistyped `--keep-branch` can no longer delete the branch it was meant to save.
+- Refuse a gate name that sanitises to nothing rather than running the gate and leaving it out of the receipt the merge reads.
+
 ## [9.1.4] - 2026-09-15
 
 ### Fixed

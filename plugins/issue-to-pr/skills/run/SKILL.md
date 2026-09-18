@@ -106,7 +106,9 @@ using `R/companions.md`. Reviewers report findings with `path:line`, impact and 
 the parent applies confirmed fixes. Never let a reviewer apply its own fixes in bulk (Claude
 Code's `--fix`, or any equivalent): that sweeps findings in past the per-fix re-gate and past the
 count the ratchet reads. Add independent adversarial reviewers when the diff warrants it;
-wait for them before editing or running gates. **Security overlay:** run
+wait for them before editing or running gates. On `complex`, or after an escalation, a **second
+model** closes the passes where the host supplies one (`R/companions.md`): every reviewer so far
+shares the writer's blind spots. Budget 10–30 minutes for it, and name the files it reads. **Security overlay:** run
 `git rev-parse --verify "<BASE>^{commit}"` first, every
 time — an unresolved base still prints a plausible list — then the surface is `git diff
 --name-only <BASE>` plus `git ls-files --others --exclude-standard`. Decide from the diff, not the
@@ -119,6 +121,8 @@ each fix and again when the loop closes, all green. For any gate command you wor
 use the deletion and simplification capabilities in `R/companions.md` over `git diff <BASE>`
 plus the untracked files. Apply the cuts you agree with,
 re-run the gates, stop as soon as a pass finds nothing; the rest gets one line each in the report.
+Every deletion, the gate's own included, gets an **orphan sweep**: whatever the removed symbol left
+unreferenced goes too, unless config, a hook or a reader outside the repo still reaches it by name.
 Then **verify the result**, `standard`+ and **last**: build the change and drive it at its own
 surface, past the happy path. A FAIL is stop-and-fix and re-gate.
 

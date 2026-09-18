@@ -26,7 +26,8 @@ Depth describes review coverage, not a model ID or a required tool parameter. Re
 model settings. At every depth trace changed behavior through its callers; increase independent
 perspectives and edge-case coverage as depth rises.
 
-**Escalation:** if a review pass confirms two or more real bugs, raise the review level once and
+**Escalation:** if a review pass confirms two or more real bugs — the second model's pass counts
+like any other — raise the review level once and
 never lower it; the tier's pass cap is still the cap, and the human at the merge gate is the
 backstop. When the cap ends the loop with fixes unread, ledger it ("Work no reviewer saw", below).
 
