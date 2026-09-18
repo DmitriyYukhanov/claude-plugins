@@ -24,13 +24,14 @@ the wider scope.
 
 ### Escalation ratchet (one-way)
 
-Count CONFIRMED `code-review` verdicts per pass and consecutive failures per gate; 2+ confirmed
-bugs in one pass, or the same gate failing twice, raises the review level one notch and never
-lowers it. A `verify` FAIL is not one of those failures: it is stop-and-fix, never a count, or two
-of them buy review passes the cap exists to forbid. A `trivial` run becomes `standard`, which raises
-the cap along with the tier and gives it both a design step and the `verify` slot to re-enter;
-raising a level inside a tier buys no extra pass. The cap is then the cap — another pass is how a review loop stops terminating, and the human
-at the merge gate is the backstop. Stop, and ledger the cost ("Work no reviewer saw", below).
+Count CONFIRMED verdicts per pass, `code-review`'s and the second model's alike, and consecutive
+failures per gate; 2+ confirmed bugs in one pass, or the same gate failing twice, raises the
+review level one notch and never lowers it. A `verify` FAIL is not one of those failures: it is
+stop-and-fix, never a count, or two of them buy review passes the cap exists to forbid. A
+`trivial` run becomes `standard`, which raises the cap along with the tier and gives it both a
+design step and the `verify` slot to re-enter; raising a level inside a tier buys no extra pass.
+The cap is then the cap — another pass is how a review loop stops terminating, and the human at
+the merge gate is the backstop. Stop, and ledger the cost ("Work no reviewer saw", below).
 
 ## The ask contract — what the spine's three moments mean
 

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 
-SKILL_LINE_BUDGET=149
-ROUTINE_READ_BUDGET=320
-ALL_PROSE_BUDGET=556
+SKILL_LINE_BUDGET=151
+ROUTINE_READ_BUDGET=325
+ALL_PROSE_BUDGET=560
 ROUTINE_READ_REFERENCES='judgment.md configuration.md companions.md'
 BUILT_IN_SKILLS='code-review simplify verify deep-research'
 HOOK_RUN_SCRIPT=merge-guard.sh
@@ -175,6 +175,18 @@ test_skill_grill_reshapes_the_checkpoint_without_adding_a_moment() {
   case "$ask_contract" in
     *four*) fail "the ask contract promises a fourth moment again: $ask_contract" ;;
   esac
+}
+
+test_the_second_model_review_names_its_own_target() {
+  local row step
+  row=$(companions_table | grep -i 'second-model')
+  [ -n "$row" ] || fail "companions.md lost the Step 6 second-model review row"
+  assert_contains "$row" 'cross-review' "the second-model row must name the skill it prefers"
+  assert_contains "$row" '<CHANGED>'     "cross-review must be handed the file list: its own target is a three-dot diff, empty
+    until Step 7 commits, and an empty diff is where it stops to ask the user what to review"
+  assert_contains "$row" '--max-rounds 1'     "one round only, so its applied fixes land inside a pass the ratchet counts"
+  step=$(skill_step Review)
+  assert_contains "$step" 'second model' "the spine must say when the second model runs"
 }
 
 test_setup_names_every_builtin_the_run_leans_on() {

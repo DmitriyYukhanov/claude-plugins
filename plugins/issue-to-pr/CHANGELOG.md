@@ -5,6 +5,14 @@ All notable changes to the **issue-to-pr** plugin will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [8.2.0] - 2026-09-18
+
+### Added
+- A second model reads the diff on complex runs, and on any run the escalation ratchet has fired: reviewers from the writer's own family share its blind spots. Its confirmed findings feed the escalation ratchet like any other pass.
+
+### Fixed
+- The orphan sweep leaves a symbol alone when config, a hook or a consumer outside the repo still reaches it by name.
+
 ## [8.1.0] - 2026-09-18
 
 ### Added

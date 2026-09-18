@@ -92,23 +92,26 @@ judge a gate from an ad-hoc command; only this one surfaces the real failure. Re
 **without `--fix`**: that flag sweeps findings in past the per-fix re-gate and the count the
 ratchet reads. Add adversarial subagents when the diff earns a second opinion (`R/companions.md`).
 Run reviewers in the **foreground**, never while gates run — one editing the tree mid-gate is a
-phantom red. **Security overlay:** list the surface with `<CHANGED>` = `{ git diff --name-only
-"<BASE>...HEAD"; git diff --name-only HEAD; git ls-files --others --exclude-standard; } | sort -u`
-— committed, uncommitted and untracked. Run `git rev-parse --verify "<BASE>^{commit}"` FIRST,
-every time: an unresolved base still prints a plausible list, minus every committed file. Decide
-from the diff, not the filename, whether it reaches auth, crypto, secrets, sessions, payments or
-migrations, and add one `/security-review` if it does. `auth`, `crypto`, `secrets`, `migrations`,
-`.env*`, `*.sql`, `*.pem` and `*.key` are a floor you may escalate from and never argue down.
-Re-run the gates after each fix and again when the loop closes, all green. For any gate command
-you worked out yourself, **print** (never write) the config frontmatter block in the
-report, naming `.claude/issue-to-pr/config.md`. Then the **simplification gate**, at most two
-passes: `/ponytail:ponytail-review` when installed for what to delete, built-in `simplify` for
-what stays but gets simpler, over `git diff <BASE>` (two dots, never three) plus any untracked
-file `<CHANGED>` names. Apply the cuts you agree with, re-run the gates, stop as soon as a pass
-finds nothing; the rest gets one line each in the report. Every deletion, the gate's own included,
-gets an **orphan sweep**: whatever the removed symbol left unreferenced goes too. Then built-in
-**`verify`**, `standard`+ and **last**: build the change and drive it at its own surface, past the
-happy path. A FAIL is stop-and-fix and re-gate.
+phantom red. On `complex`, or any tier once the ratchet has fired, one round of a **second model**
+when installed closes the passes: the reviewers so far share the writer's blind spots. It costs
+10–30 minutes and needs the files named, never its own target. **Security overlay:** list the
+surface with `<CHANGED>` = `{ git diff --name-only "<BASE>...HEAD"; git diff --name-only HEAD;
+git ls-files --others --exclude-standard; } | sort -u` — committed, uncommitted and untracked. Run
+`git rev-parse --verify "<BASE>^{commit}"` FIRST, every time: an unresolved base still prints a
+plausible list, minus every committed file. Decide from the diff, not the filename, whether it
+reaches auth, crypto, secrets, sessions, payments or migrations, and add one `/security-review` if
+it does. `auth`, `crypto`, `secrets`, `migrations`, `.env*`, `*.sql`, `*.pem` and `*.key` are a
+floor you may escalate from and never argue down. Re-run the gates after each fix and again when
+the loop closes, all green. For any gate command you worked out yourself, **print** (never write)
+the config frontmatter block in the report, naming `.claude/issue-to-pr/config.md`. Then the
+**simplification gate**, at most two passes: `/ponytail:ponytail-review` when installed for what
+to delete, built-in `simplify` for what stays but gets simpler, over `git diff <BASE>` (two dots,
+never three) plus any untracked file `<CHANGED>` names. Apply the cuts you agree with, re-run the
+gates, stop as soon as a pass finds nothing; the rest gets one line each in the report. Every
+deletion, the gate's own included, gets an **orphan sweep**: whatever the removed symbol left
+unreferenced goes too, unless config, a hook or a consumer outside the repo still reaches it by
+name. Then built-in **`verify`**, `standard`+ and **last**: build the change and drive it at its
+own surface, past the happy path. A FAIL is stop-and-fix and re-gate.
 
 **7. PR and report.** `git add <explicit paths>`, conventional subjects; `git push -u origin
 <branch>`. **Re-run `run-gates.sh` on the commit** — the receipt names the HEAD it ran against, so
