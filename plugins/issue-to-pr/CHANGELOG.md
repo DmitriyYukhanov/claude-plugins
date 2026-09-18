@@ -5,6 +5,11 @@ All notable changes to the **issue-to-pr** plugin will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [8.1.0] - 2026-09-18
+
+### Added
+- An orphan sweep after every deletion: a method, field or import left with no caller or reader goes in the same PR, not the next release.
+
 ## [8.0.0] - 2026-09-07
 
 ### Changed

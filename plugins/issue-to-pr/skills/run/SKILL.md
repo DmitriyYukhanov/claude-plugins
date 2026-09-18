@@ -105,9 +105,10 @@ report, naming `.claude/issue-to-pr/config.md`. Then the **simplification gate**
 passes: `/ponytail:ponytail-review` when installed for what to delete, built-in `simplify` for
 what stays but gets simpler, over `git diff <BASE>` (two dots, never three) plus any untracked
 file `<CHANGED>` names. Apply the cuts you agree with, re-run the gates, stop as soon as a pass
-finds nothing; the rest gets one line each in the report. Then built-in **`verify`**, `standard`+
-and **last**: build the change and drive it at its own surface, past the happy path. A FAIL is
-stop-and-fix and re-gate.
+finds nothing; the rest gets one line each in the report. Every deletion, the gate's own included,
+gets an **orphan sweep**: whatever the removed symbol left unreferenced goes too. Then built-in
+**`verify`**, `standard`+ and **last**: build the change and drive it at its own surface, past the
+happy path. A FAIL is stop-and-fix and re-gate.
 
 **7. PR and report.** `git add <explicit paths>`, conventional subjects; `git push -u origin
 <branch>`. **Re-run `run-gates.sh` on the commit** — the receipt names the HEAD it ran against, so
