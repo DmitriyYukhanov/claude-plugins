@@ -112,5 +112,20 @@ skills/
     release-notify.yml   # Auto-release on push to main
 docs/                    # Documentation and plans
   skill-creation.md      # Skill authoring best practices
+  agents/                # Per-repo config the engineering skills read
 .githooks/               # Git hooks (pre-commit version enforcement)
 ```
+
+## Agent skills
+
+### Issue tracker
+
+Issues live as GitHub issues in `DmitriyYukhanov/claude-plugins`, driven through the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five canonical roles, each label string equal to its name. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: one `CONTEXT.md` and one `docs/adr/` at the repo root. See `docs/agents/domain.md`.
