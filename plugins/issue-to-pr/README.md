@@ -34,7 +34,8 @@ finds Git for Windows' own `bash.exe`. Per-project settings remain optional.
 ### Skill: `run`
 
 Invoked by the model or by you (`/issue-to-pr:run [issue-number | "free text"]
-[--tier trivial|standard|complex] [--grill] [--headless] [--auto-merge trivial|standard|complex|none]`).
+[--tier trivial|standard|complex] [--grill]
+[--headless] [--auto-merge trivial|standard|complex|none]`).
 The pipeline runs triage, research, design, implementation, review, PR, approval-gated merge,
 and cleanup. Hard gates block forward progress; everything between them scales to the task.
 

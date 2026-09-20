@@ -35,7 +35,7 @@ root=$(repo_root)
 [ -n "$root" ] || degrade not-a-git-repo "finish: not inside a git repository"
 
 cmd_merge() {
-  local pr head_sha decision base_ref receipt push_out merge_out default_ref base_rev f g
+  local pr head_sha decision base_ref receipt push_out merge_out default_ref base_rev changed f g
   # reviewDecision alone is null on a base branch that does not require review, however many
   # reviews a PR has, so the reviews themselves decide and the field only confirms them
   pr=$(gh pr view "$branch" --json headRefOid,reviewDecision,latestReviews,baseRefName \
@@ -65,15 +65,24 @@ cmd_merge() {
     elif git rev-parse --verify -q "$base_ref^{commit}" >/dev/null; then base_rev=$base_ref
     else stop auto-base-unresolved "issue-to-pr: neither origin/$base_ref nor $base_ref resolves here, so the human-path check cannot read the diff. Fetch the base and re-run."
     fi
-    for f in $(git diff --name-only "$base_rev...$branch" 2>/dev/null); do
+    # the diff runs over the local branch: the fixture's constant sha never resolves, and the
+    # receipt plus --match-head-commit already bind the merge to head_sha
+    changed=$(git diff --name-only "$base_rev...$branch" 2>/dev/null) ||
+      stop auto-diff-unreadable "issue-to-pr: could not read the diff $base_rev...$branch for \
+the human-path check, so the merge cannot be proved safe. Fetch the base and re-run."
+    set -f
+    while IFS= read -r f; do
+      [ -n "$f" ] || continue
       for g in $(config_line "$root" human_paths); do
-        # shellcheck disable=SC2254 # $g is a glob from config, matched intentionally, not literally
+        # shellcheck disable=SC2254  # $g is a glob from the config and must expand as a pattern
         case "$f" in $g)
+          set +f
           emit HUMAN_PATH "$f"
           stop auto-human-path "issue-to-pr: $f matches human_paths '$g'; this PR waits for a human 'merge'. Comment, label agent:review, end the turn." ;;
         esac
       done
-    done
+    done <<<"$changed"
+    set +f
   fi
 
   if ! push_out=$(git push origin "$branch" 2>&1); then

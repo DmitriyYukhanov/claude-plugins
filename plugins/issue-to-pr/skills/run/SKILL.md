@@ -29,7 +29,9 @@ gate's own code in `GATE_<NAME>_EXIT`.
 
 - **Merge is gated on explicit in-session approval**, runs ONLY in the main session, via
   `S/finish.sh merge` — never a bare `gh pr merge`, never `--admin`, never on the turn the PR
-  opens. Force-push only with `--force-with-lease`.
+  opens. Force-push only with `--force-with-lease`. The one exception is `--headless` with
+  `--auto-merge`, where `R/headless.md`'s policy is the approval and the self-merge happens on
+  the report's turn — still only through `S/finish.sh merge --auto`.
 - **Ask contract:** three moments, `--grill` reshapes the first (`R/judgment.md`) — (1) Step 3:
   ONE batched question if the ledger has open items, or the grill in its place, (2) the
   merge gate, (3) a hard stop. Decide everything else yourself and log it, and never ask what a
@@ -45,7 +47,7 @@ gate's own code in `GATE_<NAME>_EXIT`.
 **`--headless`** (unattended, launched by a dispatcher): Step 3's question and Step 8's approval
 travel as GitHub comments and label flips, and a PR whose tier is at or under `--auto-merge`
 (default `trivial` headless, `none` otherwise) merges without one — all of it in `R/headless.md`;
-every other step reads exactly as below.
+every other step reads exactly as below. `--auto-merge` does nothing without `--headless`.
 
 ## Steps
 
@@ -182,6 +184,6 @@ from its keys: a `LEFTOVER_DIR` is a locked directory to remove by hand once the
 when GitHub deletes head branches itself — check before calling it a failure. In-place fallback: switch off `<branch>` and delete
 it local and remote yourself. **`BASE_IS_DEFAULT`** is the one thing cleanup cannot answer:
 `false` means the work landed on `<MERGED_INTO>` and the issue is still open, `unknown` means the
-landing branch was never confirmed, so claim neither. `--headless`: then `after_merge` after a
-green smoke (`R/headless.md`). Finish with one line: what merged, what
+landing branch was never confirmed, so claim neither. `--headless`: then `after_merge` unless the
+smoke was red (`R/headless.md`). Finish with one line: what merged, what
 went, what was kept.

@@ -282,6 +282,45 @@ test_auto_merge_refuses_a_diff_touching_a_human_path() {
   assert_gh_not_called "pr merge" "a diff touching a human path merged unattended"
 }
 
+test_auto_merge_refuses_a_deleted_human_path() {
+  merge_setup happy
+  mkdir -p "$REPO/migrations" && printf 'a\n' >"$REPO/migrations/a.sql"
+  git -C "$REPO" add migrations/a.sql && git -C "$REPO" commit -qm "add migration"
+  git -C "$REPO" push -q origin main
+  git -C "$WT" rebase -q origin/main
+  git -C "$WT" rm -q migrations/a.sql
+  printf 'b\n' >"$WT/migrations/b.sql" && git -C "$WT" add migrations/b.sql
+  git -C "$WT" commit -qm "replace migration" && git -C "$WT" push -q -f origin feat/issue-6-x
+  write_config "$REPO" human_paths "migrations/*"
+  run_script finish.sh merge 6 --branch feat/issue-6-x --auto trivial --tier trivial
+  assert_rc 2
+  assert_key "$OUT" STOP_REASON auto-human-path
+  assert_gh_not_called "pr merge" "a deleted human path merged unattended"
+}
+
+test_auto_merge_refuses_a_human_path_with_a_space() {
+  merge_setup happy
+  mkdir -p "$WT/my dir" && printf 'x\n' >"$WT/my dir/x.txt"
+  git -C "$WT" add "my dir/x.txt" && git -C "$WT" commit -qm "spaced path"
+  git -C "$WT" push -q origin feat/issue-6-x
+  write_config "$REPO" human_paths "my?dir/*"
+  run_script finish.sh merge 6 --branch feat/issue-6-x --auto trivial --tier trivial
+  assert_rc 2
+  assert_key "$OUT" HUMAN_PATH "my dir/x.txt"
+  assert_gh_not_called "pr merge" "a human path with a space merged unattended"
+}
+
+test_auto_merge_refuses_when_the_base_does_not_resolve() {
+  merge_setup happy
+  git -C "$WT" update-ref -d refs/remotes/origin/main
+  git -C "$REPO" branch -q -D main 2>/dev/null || git -C "$REPO" checkout -q --detach
+  git -C "$REPO" branch -q -D main 2>/dev/null || true
+  run_script finish.sh merge 6 --branch feat/issue-6-x --auto trivial --tier trivial
+  assert_rc 2
+  assert_key "$OUT" STOP_REASON auto-base-unresolved
+  assert_gh_not_called "pr merge"
+}
+
 test_auto_merge_merges_a_clean_run_at_or_under_the_threshold() {
   merge_setup happy
   write_config "$REPO" human_paths "migrations/*"
@@ -303,10 +342,13 @@ test_auto_and_tier_are_a_pair() {
   merge_setup happy
   run_script finish.sh merge 6 --branch feat/issue-6-x --auto trivial
   assert_rc 4
+  assert_key "$OUT" DEGRADED_REASON auto-needs-tier
   run_script finish.sh merge 6 --branch feat/issue-6-x --tier trivial
   assert_rc 4
+  assert_key "$OUT" DEGRADED_REASON auto-needs-tier
   run_script finish.sh merge 6 --branch feat/issue-6-x --auto huge --tier trivial
   assert_rc 4
+  assert_key "$OUT" DEGRADED_REASON bad-tier
   assert_gh_not_called "pr merge" "a malformed --auto call merged"
 }
 

@@ -9,9 +9,17 @@ Flip with `gh issue edit <N> --add-label <a> --remove-label <b>`; one sentence, 
 label is reversible. `agent` (owner: queued) → `agent:running` (the dispatcher set it when it
 launched you) → `agent:waiting` | `agent:review` | `agent:failed`. Done is the issue closing on
 the merge. Whoever launched you resumes the session with the owner's next comment as your next
-prompt, so **end the turn after every flip** — do not poll GitHub yourself. Free text with
-`--headless` is a stop: the launcher always names an issue, and without one there is nothing to
-label or comment on.
+prompt, so **end the turn after every flip to a waiting state** (`agent:waiting`, `agent:review`,
+`agent:failed`) — do not poll GitHub yourself; `agent:running` is a flip you continue through.
+Free text with `--headless` is a stop: the launcher always names an issue, and without one there
+is nothing to label or comment on.
+
+Any stop the attended skill would hand back on (an exit-2 livelock, a red gate you cannot fix,
+Step 7's several-matches stop): comment the reason on the issue, or on the PR once one exists,
+flip to `agent:failed`, end the turn.
+
+A label the repo lacks: `gh label create <name> -f` it once and carry on — a missing label never
+blocks a comment or a stop.
 
 ## Step 3 — the resolve ladder replaces the question
 

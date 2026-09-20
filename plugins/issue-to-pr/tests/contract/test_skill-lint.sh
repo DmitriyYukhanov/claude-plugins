@@ -175,4 +175,18 @@ test_attended_steps_read_as_in_the_previous_release() {
     '## Step 8 — Merge on approval' \
     '## Step 9 — Cleanup')" "$heads" \
     "the step names changed; headless was meant to add a path, not reshape a step"
+
+  local ask checkpoint
+  ask=$(awk '
+    /^- \*\*Ask contract:\*\*/ { f = 1 }
+    f && /^- / && !/^- \*\*Ask contract:\*\*/ { exit }
+    f { print }
+  ' "$(skill_md)")
+  assert_contains "$ask" "three moments" \
+    "the Hard-rules Ask contract bullet was reshaped away from its three fixed moments"
+  assert_contains "$ask" "ONE batched question if the ledger has open items" \
+    "the Hard-rules Ask contract bullet no longer names the single batched question"
+  checkpoint=$(skill_step Checkpoint)
+  assert_contains "$checkpoint" "the only mid-run question" \
+    "Step 3 no longer closes on it being the only mid-run question"
 }
