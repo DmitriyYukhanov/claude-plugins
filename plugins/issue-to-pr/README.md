@@ -34,9 +34,16 @@ finds Git for Windows' own `bash.exe`. Per-project settings remain optional.
 ### Skill: `run`
 
 Invoked by the model or by you (`/issue-to-pr:run [issue-number | "free text"]
-[--tier trivial|standard|complex] [--grill]`). The pipeline runs triage, research, design,
-implementation, review, PR, approval-gated merge, and cleanup. Hard gates block forward
-progress; everything between them scales to the task.
+[--tier trivial|standard|complex] [--grill] [--headless] [--auto-merge trivial|standard|complex|none]`).
+The pipeline runs triage, research, design, implementation, review, PR, approval-gated merge,
+and cleanup. Hard gates block forward progress; everything between them scales to the task.
+
+**Headless.** `--headless` is for a run nobody is watching: its one question and its "ready to
+merge" become GitHub comments, labels (`agent:running`, `agent:waiting`, `agent:review`,
+`agent:failed`) carry the state, and the owner's reply comment continues the run. A PR whose tier
+is at or under `--auto-merge` (default `trivial`; `none` outside headless) merges on its own when
+its gates, reviews and ratchet were all clean and the diff touches no `human_paths`. The dispatcher
+that launches such runs from a label is a separate release.
 
 - **Isolated per task.** Each run cuts its branch inside a dedicated
   `../<repo>-worktrees/issue-<N>` git worktree, so several local agents can drive different
