@@ -284,13 +284,14 @@ test_auto_merge_refuses_a_diff_touching_a_human_path() {
 
 test_auto_merge_refuses_a_deleted_human_path() {
   merge_setup happy
-  mkdir -p "$REPO/migrations" && printf 'a\n' >"$REPO/migrations/a.sql"
-  git -C "$REPO" add migrations/a.sql && git -C "$REPO" commit -qm "add migration"
+  mkdir -p "$REPO/migrations"
+  printf 'a\n' >"$REPO/migrations/a.sql" && printf 'b\n' >"$REPO/migrations/b.sql"
+  git -C "$REPO" add migrations/a.sql migrations/b.sql
+  git -C "$REPO" commit -qm "add migrations"
   git -C "$REPO" push -q origin main
   git -C "$WT" rebase -q origin/main
   git -C "$WT" rm -q migrations/a.sql
-  printf 'b\n' >"$WT/migrations/b.sql" && git -C "$WT" add migrations/b.sql
-  git -C "$WT" commit -qm "replace migration" && git -C "$WT" push -q -f origin feat/issue-6-x
+  git -C "$WT" commit -qm "drop a migration" && git -C "$WT" push -q -f origin feat/issue-6-x
   write_config "$REPO" human_paths "migrations/*"
   run_script finish.sh merge 6 --branch feat/issue-6-x --auto trivial --tier trivial
   assert_rc 2
