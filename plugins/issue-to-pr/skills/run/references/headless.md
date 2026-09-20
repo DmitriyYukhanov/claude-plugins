@@ -8,7 +8,9 @@ travel through GitHub. Every comment below is human-facing: humanize it (the Har
 Flip with `gh issue edit <N> --add-label <a> --remove-label <b>`; one sentence, no script — a
 label is reversible. `agent` (owner: queued) → `agent:running` (the dispatcher set it when it
 launched you) → `agent:waiting` | `agent:review` | `agent:failed`. Done is the issue closing on
-the merge. Whoever launched you resumes the session with the owner's next comment as your next
+the merge. After Step 9, and after `after_merge` when there is one, remove the run's `agent:*`
+label from the issue: a closed issue carries none, so a dispatcher never mistakes it for live
+work. Whoever launched you resumes the session with the owner's next comment as your next
 prompt, so **end the turn after every flip to a waiting state** (`agent:waiting`, `agent:review`,
 `agent:failed`) — do not poll GitHub yourself; `agent:running` is a flip you continue through.
 Free text with `--headless` is a stop: the launcher always names an issue, and without one there
