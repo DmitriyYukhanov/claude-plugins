@@ -8,7 +8,7 @@ description: >-
   then merges and cleans up once you approve the PR in-session. Triggers: "take task
   N", "work on issue #N", "build/fix X" when no issue exists yet, and —
   for the merge gate later — "merge it", "approve the PR", "ship it", "lgtm merge".
-argument-hint: "[issue-number | \"free text\"] [--tier trivial|standard|complex] [--grill]"
+argument-hint: "[issue-number | \"free text\"] [--tier trivial|standard|complex] [--grill] [--headless] [--auto-merge trivial|standard|complex|none]"
 ---
 
 # issue-to-pr — issue → merge-ready PR pipeline
@@ -41,6 +41,11 @@ gate's own code in `GATE_<NAME>_EXIT`.
   about the world outside this repo before building on it, ledgered either way (`R/judgment.md`).
 - **Humanize** all human-facing text (report, PR body, UI strings > 1–2 words) at every tier,
   using the companion or its fallback — not code, logs or commit subjects.
+
+**`--headless`** (unattended, launched by a dispatcher): Step 3's question and Step 8's approval
+travel as GitHub comments and label flips, and a PR whose tier is at or under `--auto-merge`
+(default `trivial` headless, `none` otherwise) merges without one — all of it in `R/headless.md`;
+every other step reads exactly as below.
 
 ## Steps
 
@@ -86,6 +91,8 @@ rather than a second routine question. Otherwise, `--grill` starts or continues
 batched question; include open `asked` items in the next round and record decisions as each round
 closes, never at the end — a grill is long enough to compact. It ends on the user's confirmation.
 Without the flag, those items go into ONE batched question. Either way, the only mid-run question.
+`--headless`: the resolve ladder in `R/headless.md` runs first, and what it cannot settle is
+posted, not asked.
 
 **4. Build.** Turn the design into a plan (`superpowers:writing-plans` for complex); TDD: failing
 test → implement → passing. UI/layout work is verified with `<visual_cmd>` or a browser test,
@@ -137,13 +144,14 @@ design, autonomous decisions and rejected alternatives. Board-mode: move the car
 *in review* the same way. Then report, length per tier (3 lines → full): what was built and why,
 test status with the green proof, the autonomous decisions, the PR link, and how much machinery
 ran (gate runs, review passes and level). Ask when to merge, and **stop** — merging is the next
-step.
+step (`--headless`: the merge policy in `R/headless.md` decides instead of asking).
 
 ## Step 8 — Merge on approval (GATE)
 
 Return to your working tree first: `cd` into the worktree (in-place fallback: stay in the main
 checkout on `<branch>`). Read the reply against *this* PR. **Merge only on an unambiguous
-go-ahead to merge THIS PR.**
+go-ahead to merge THIS PR.** `--headless`: the go-ahead is the owner's PR comment relayed as your
+prompt (`R/headless.md`).
 Approval covers the reported commit. If new commits arrived locally or on the PR, review their
 diff and repeat Steps 5–7 as a new review cycle with the tier's pass cap, then obtain approval
 for that head. A stale receipt requires this same cycle, not just another test run.
@@ -157,8 +165,8 @@ for that head. A stale receipt requires this same cycle, not just another test r
   (Steps 5–6 on the new diff) until clean, push, re-report, wait again. Never merge unverified.
 - **Anything else** → do **not** merge. A vague ack ("ok", "looks fine") or a question → ask for
   explicit confirmation. If they'll self-merge/abandon, offer `S/finish.sh cleanup <N> --branch
-  <branch> --keep-branch`, which removes the worktree and touches nothing else. Approval is never
-  inferred.
+  <branch> --keep-branch`, which removes the worktree and touches nothing else.
+  Approval is never inferred.
 
 ## Step 9 — Cleanup (after a successful merge)
 
@@ -174,5 +182,6 @@ from its keys: a `LEFTOVER_DIR` is a locked directory to remove by hand once the
 when GitHub deletes head branches itself — check before calling it a failure. In-place fallback: switch off `<branch>` and delete
 it local and remote yourself. **`BASE_IS_DEFAULT`** is the one thing cleanup cannot answer:
 `false` means the work landed on `<MERGED_INTO>` and the issue is still open, `unknown` means the
-landing branch was never confirmed, so claim neither. Finish with one line: what merged, what
+landing branch was never confirmed, so claim neither. `--headless`: then `after_merge`
+(`R/headless.md`). Finish with one line: what merged, what
 went, what was kept.

@@ -24,6 +24,7 @@ actually be performed, report it as blocked, never passed.
 | Grilling the design (Step 3, `--grill` only) | `mattpocock-skills:grilling` over the design you just built | Discuss the design and open `asked` items in the same checkpoint, continuing until the user confirms the design. |
 | Second-model review (Step 6, `complex` or after an escalation) | `codex-collaboration:cross-review --max-rounds 1 --type code <CHANGED>` when its Claude-to-Codex runtime is available — name the files: its own target is a three-dot diff, empty until Step 7 commits, and an empty diff is where it stops to ask the user what to review, a contact moment the ask contract does not have. One round, so what both models confirm lands inside a single pass the ratchet counts. | The independent adversarial reviewers, which share the writer's model family: report that no second model read the diff. |
 | Deletion lens (Step 6) | `ponytail:ponytail-review` over the run's diff | Re-read the diff hunting only for what to delete: reinvented stdlib, one-caller abstractions, config nobody sets, flags nobody passes. |
+| Second opinion (Step 3 ladder, `--headless` only) | `codex:rescue` (or `codex-collaboration:cross-review --type design`) handed the issue, the options and the repo precedent, asked which option and why | Two rungs only; the ledger says no second model weighed in. |
 
 Step 6's four checks get no row. In Claude Code they are `code-review`, `/security-review`,
 `simplify` and `run` — the skill that builds the change and drives it; there is no `verify`
