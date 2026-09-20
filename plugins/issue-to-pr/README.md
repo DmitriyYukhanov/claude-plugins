@@ -76,10 +76,13 @@ provided on request, for the host you are actually using.
 
 ### Configuration (optional)
 
-`.claude/issue-to-pr/config.md` (YAML frontmatter) sets the board URL, base branch,
-typecheck/test/visual/smoke commands, and headless options: `human_paths` (space-separated globs that prevent self-merge; a glob cannot contain a space) and `after_merge` (the instruction headless runs after Step 9).
-Everything is optional; with no file the run works the commands out in the worktree where the gates
-execute, as literals, and prints the block to paste here once they pass. It never writes this file itself.
+`.claude/issue-to-pr/config.md` (YAML frontmatter) sets the board URL, base branch, and
+typecheck/test/visual/smoke commands. Everything is optional; with no file the run works the
+commands out in the worktree where the gates execute, as literals, and prints the block to
+paste here once they pass. It never writes this file itself. Two keys serve `--headless` runs
+only: `human_paths` is one line of space-separated shell globs, and a diff touching one never
+merges unattended (a glob cannot contain a space); `after_merge` is the instruction the run
+gives itself after cleanup, usually a deploy skill.
 
 Claude Code and Codex use this same config and state directory; the `.claude` name is retained
 for compatibility. There is no separate Codex config to keep in sync.
