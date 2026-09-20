@@ -100,3 +100,11 @@ receipt_write() { # root branch head_sha gates
 json_str_field() { # file key -> the string value, or empty
   grep -oE "\"$2\":\"[^\"]*\"" "$1" 2>/dev/null | head -1 | sed -E "s/.*\"$2\":\"([^\"]*)\".*/\1/"
 }
+
+config_line() { # root key -> the value of one top-level frontmatter line, or empty
+  sed -n "s/^$2:[[:space:]]*//p" "$(state_dir "$1")/config.md" 2>/dev/null | head -1
+}
+
+tier_rank() { # trivial|standard|complex|none -> 1|2|3|0, anything else -> empty
+  case "$1" in trivial) printf 1 ;; standard) printf 2 ;; complex) printf 3 ;; none) printf 0 ;; *) printf '' ;; esac
+}

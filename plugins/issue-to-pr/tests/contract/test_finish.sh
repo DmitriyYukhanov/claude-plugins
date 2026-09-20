@@ -251,3 +251,70 @@ test_cleanup_refuses_a_mistyped_flag_rather_than_deleting_the_branch() {
   assert_key "$OUT" DEGRADED_REASON unknown-flag
   branch_survives || fail "a typo in --keep-branch deleted the branch it was meant to save"
 }
+
+write_config() { # root key value
+  mkdir -p "$1/.claude/issue-to-pr"
+  printf -- '---\n%s: %s\n---\n' "$2" "$3" >"$1/.claude/issue-to-pr/config.md"
+}
+
+test_auto_merge_refuses_a_tier_above_the_threshold() {
+  merge_setup happy
+  run_script finish.sh merge 6 --branch feat/issue-6-x --auto trivial --tier standard
+  assert_rc 2
+  assert_key "$OUT" STOP_REASON auto-tier
+  assert_gh_not_called "pr merge" "a standard run merged under a trivial threshold"
+}
+
+test_auto_merge_none_never_merges() {
+  merge_setup happy
+  run_script finish.sh merge 6 --branch feat/issue-6-x --auto none --tier trivial
+  assert_rc 2
+  assert_gh_not_called "pr merge" "--auto none merged"
+}
+
+test_auto_merge_refuses_a_diff_touching_a_human_path() {
+  merge_setup happy
+  write_config "$REPO" human_paths "migrations/* work.txt"
+  run_script finish.sh merge 6 --branch feat/issue-6-x --auto trivial --tier trivial
+  assert_rc 2
+  assert_key "$OUT" STOP_REASON auto-human-path
+  assert_key "$OUT" HUMAN_PATH work.txt
+  assert_gh_not_called "pr merge" "a diff touching a human path merged unattended"
+}
+
+test_auto_merge_merges_a_clean_run_at_or_under_the_threshold() {
+  merge_setup happy
+  write_config "$REPO" human_paths "migrations/*"
+  run_script finish.sh merge 6 --branch feat/issue-6-x --auto standard --tier trivial
+  assert_rc 0
+  assert_key "$OUT" MERGED true
+  assert_key "$OUT" AUTO_MERGED true
+  assert_gh_called "pr merge feat/issue-6-x --squash --match-head-commit $SHA_OK"
+}
+
+test_auto_merge_without_human_paths_configured_still_merges() {
+  merge_setup happy
+  run_script finish.sh merge 6 --branch feat/issue-6-x --auto trivial --tier trivial
+  assert_rc 0
+  assert_key "$OUT" AUTO_MERGED true
+}
+
+test_auto_and_tier_are_a_pair() {
+  merge_setup happy
+  run_script finish.sh merge 6 --branch feat/issue-6-x --auto trivial
+  assert_rc 4
+  run_script finish.sh merge 6 --branch feat/issue-6-x --tier trivial
+  assert_rc 4
+  run_script finish.sh merge 6 --branch feat/issue-6-x --auto huge --tier trivial
+  assert_rc 4
+  assert_gh_not_called "pr merge" "a malformed --auto call merged"
+}
+
+test_merge_without_auto_is_unchanged() {
+  merge_setup happy
+  write_config "$REPO" human_paths "work.txt"
+  run_script finish.sh merge 6 --branch feat/issue-6-x
+  assert_rc 0
+  assert_key "$OUT" MERGED true
+  assert_not_contains "$OUT" "AUTO_MERGED" "an attended merge must not report an auto verdict"
+}

@@ -5,6 +5,14 @@ All notable changes to the **issue-to-pr** plugin will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [9.3.0] - 2026-09-21
+
+### Added
+- `--headless`: a run launched with nobody at the keyboard posts its one question and its "ready to merge" as GitHub comments, marks the state with labels, and continues from the owner's reply.
+- `--auto-merge <tier>`: a headless run at or under the tier merges on its own when its gates, reviews and ratchet were all clean; `trivial` by default, `none` outside headless.
+- `human_paths` in the config: a diff touching one never merges unattended, enforced where the merge happens.
+- `after_merge` in the config: the instruction a headless run gives itself after cleanup, usually a deploy.
+
 ## [9.2.0] - 2026-09-18
 
 ### Added

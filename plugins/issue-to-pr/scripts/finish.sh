@@ -10,12 +10,14 @@ source "$SCRIPT_DIR/lib/common.sh"
 # The two actions a run cannot take back: merging the PR and deleting its branch and worktree.
 subcmd=${1:-}
 shift || true
-issue="" branch="" method=squash keep_branch=0
+issue="" branch="" method=squash keep_branch=0 auto="" tier=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --branch) branch=${2:-}; shift 2 2>/dev/null || shift "$#" ;;
     --method) method=${2:-}; shift 2 2>/dev/null || shift "$#" ;;
     --keep-branch) keep_branch=1; shift ;;
+    --auto) auto=${2:-}; shift 2 2>/dev/null || shift "$#" ;;
+    --tier) tier=${2:-}; shift 2 2>/dev/null || shift "$#" ;;
     -*) degrade unknown-flag "finish: unknown flag '$1'. Ignoring it would let a mistyped --keep-branch delete the branch anyway" ;;
     *) [ -z "$issue" ] && issue=$1; shift ;;
   esac
@@ -23,12 +25,17 @@ done
 [ -n "$branch" ] || degrade missing-branch "finish: --branch required"
 case "$method" in squash | merge | rebase) : ;; *) degrade bad-method "finish: --method must be squash, merge or rebase, got '$method'" ;; esac
 [ -n "$issue" ] || degrade missing-issue "finish: issue number required"
+if [ -n "$auto" ] || [ -n "$tier" ]; then
+  [ -n "$auto" ] && [ -n "$tier" ] || degrade auto-needs-tier "finish: --auto and --tier go together: the threshold means nothing without the run's tier"
+  [ -n "$(tier_rank "$auto")" ] || degrade bad-tier "finish: --auto must be trivial, standard, complex or none, got '$auto'"
+  case "$tier" in trivial | standard | complex) : ;; *) degrade bad-tier "finish: --tier must be trivial, standard or complex, got '$tier'" ;; esac
+fi
 assert_numeric_issue "$issue" finish
 root=$(repo_root)
 [ -n "$root" ] || degrade not-a-git-repo "finish: not inside a git repository"
 
 cmd_merge() {
-  local pr head_sha decision base_ref receipt push_out merge_out default_ref
+  local pr head_sha decision base_ref receipt push_out merge_out default_ref base_rev f g
   # reviewDecision alone is null on a base branch that does not require review, however many
   # reviews a PR has, so the reviews themselves decide and the field only confirms them
   pr=$(gh pr view "$branch" --json headRefOid,reviewDecision,latestReviews,baseRefName \
@@ -51,6 +58,24 @@ cmd_merge() {
   [ "$decision" != CHANGES_REQUESTED ] ||
     stop review-blocked "issue-to-pr: $branch has a review requesting changes. Address it, push, re-run the gates, and re-approve."
 
+  if [ -n "$auto" ]; then
+    [ "$(tier_rank "$tier")" -le "$(tier_rank "$auto")" ] ||
+      stop auto-tier "issue-to-pr: a $tier run does not merge unattended under an --auto-merge $auto threshold. Comment on the PR that it waits for 'merge', label agent:review, and end the turn."
+    if git rev-parse --verify -q "origin/$base_ref^{commit}" >/dev/null; then base_rev="origin/$base_ref"
+    elif git rev-parse --verify -q "$base_ref^{commit}" >/dev/null; then base_rev=$base_ref
+    else stop auto-base-unresolved "issue-to-pr: neither origin/$base_ref nor $base_ref resolves here, so the human-path check cannot read the diff. Fetch the base and re-run."
+    fi
+    for f in $(git diff --name-only "$base_rev...$branch" 2>/dev/null); do
+      for g in $(config_line "$root" human_paths); do
+        # shellcheck disable=SC2254 # $g is a glob from config, matched intentionally, not literally
+        case "$f" in $g)
+          emit HUMAN_PATH "$f"
+          stop auto-human-path "issue-to-pr: $f matches human_paths '$g'; this PR waits for a human 'merge'. Comment, label agent:review, end the turn." ;;
+        esac
+      done
+    done
+  fi
+
   if ! push_out=$(git push origin "$branch" 2>&1); then
     emit PUSH_ERROR "$(printf '%s' "$push_out" | tr '\n' ' ')"
     stop push-rejected "issue-to-pr: git push was rejected. The remote branch moved under you: fetch, look at what landed, and re-approve rather than assuming the approval still covers the diff you showed."
@@ -60,6 +85,10 @@ cmd_merge() {
     stop merge-failed "issue-to-pr: gh pr merge refused; report MERGE_ERROR verbatim. If it says this merge method is not allowed, re-run once with --method merge (then rebase). If checks are still pending, 'gh pr checks $branch --watch', then re-run. The same refusal a third time is a livelock: hand back."
   fi
   emit MERGED true
+  if [ -n "$auto" ]; then
+    emit AUTO_MERGED true
+    emit AUTO_TIER "$tier"
+  fi
   emit MERGE_METHOD "$method"
   emit MERGED_INTO "$base_ref"
   default_ref=$(gh repo view --json defaultBranchRef --jq .defaultBranchRef.name 2>/dev/null || printf '')
