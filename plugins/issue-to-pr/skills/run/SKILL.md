@@ -182,6 +182,6 @@ from its keys: a `LEFTOVER_DIR` is a locked directory to remove by hand once the
 when GitHub deletes head branches itself — check before calling it a failure. In-place fallback: switch off `<branch>` and delete
 it local and remote yourself. **`BASE_IS_DEFAULT`** is the one thing cleanup cannot answer:
 `false` means the work landed on `<MERGED_INTO>` and the issue is still open, `unknown` means the
-landing branch was never confirmed, so claim neither. `--headless`: then `after_merge`
-(`R/headless.md`). Finish with one line: what merged, what
+landing branch was never confirmed, so claim neither. `--headless`: then `after_merge` after a
+green smoke (`R/headless.md`). Finish with one line: what merged, what
 went, what was kept.

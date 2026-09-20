@@ -9,7 +9,9 @@ Flip with `gh issue edit <N> --add-label <a> --remove-label <b>`; one sentence, 
 label is reversible. `agent` (owner: queued) → `agent:running` (the dispatcher set it when it
 launched you) → `agent:waiting` | `agent:review` | `agent:failed`. Done is the issue closing on
 the merge. Whoever launched you resumes the session with the owner's next comment as your next
-prompt, so **end the turn after every flip** — do not poll GitHub yourself.
+prompt, so **end the turn after every flip** — do not poll GitHub yourself. Free text with
+`--headless` is a stop: the launcher always names an issue, and without one there is nothing to
+label or comment on.
 
 ## Step 3 — the resolve ladder replaces the question
 
@@ -36,7 +38,7 @@ second question.
 After the report, decide whether this PR self-merges. All of:
 
 - tier rank ≤ `--auto-merge` (`trivial` < `standard` < `complex`; `none` never);
-- nothing in this run reached the owner (an escalated run waits for the word);
+- nothing in this run reached the owner (a run that asked the owner waits for the word);
 - the ratchet never fired;
 - the final review pass found nothing (so no "Work no reviewer saw" entry exists);
 - `S/finish.sh merge <N> --branch <b> --auto <threshold> --tier <tier>` does not stop — it
@@ -55,6 +57,8 @@ Step 8's change-request branch, unchanged.
 If the config has `after_merge`, run its value as your next instruction, with these rules on
 top of whatever skill it names:
 
+- A red smoke in Step 9 is not a merge to deploy: `agent:failed`, the draft revert PR named in
+  the comment, end the turn.
 - `git status --porcelain` in the main checkout non-empty → do not deploy; comment on the PR what
   is dirty, flip to `agent:failed`, end the turn. This is the only guard against the owner being
   mid-edit in that checkout.
@@ -66,5 +70,6 @@ top of whatever skill it names:
 
 ## What headless never does
 
-Ask through the host's question tool (it may not exist), merge outside `finish.sh --auto`,
-poll GitHub for the reply, or add a contact moment: three, as always.
+Ask through the host's question tool (it may not exist), merge by any path but `finish.sh`
+(`--auto` when it self-merges, plain on the owner's word), poll GitHub for the reply, or add a
+contact moment: three, as always.
