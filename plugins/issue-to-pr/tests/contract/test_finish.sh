@@ -421,24 +421,26 @@ test_human_paths_value_may_be_quoted_or_commented() {
 
 test_auto_merge_refuses_a_human_path_with_a_quote() {
   merge_setup happy
-  mkdir -p "$WT/migrations"
-  printf 'x\n' >"$WT/migrations/a\"b.sql" 2>/dev/null
-  git -C "$WT" add migrations >/dev/null 2>&1
-  # Windows takes the name and stores U+F022 in place of the quote, and the C runtime maps it
-  # back, so only git - which reads the real bytes - can say whether the quote is there
-  case "$(git -C "$WT" ls-files -z 'migrations/*' | tr -d '\0')" in
-    *'"'*) : ;;
-    *)
-      printf 'SKIP: filesystem forbids a quote in a name\n'
-      return 0
-      ;;
-  esac
-  git -C "$WT" commit -qm "a quoted migration"
-  git -C "$WT" push -q origin feat/issue-6-x
+  # Windows refuses a quote in a filename and update-index rejects the name, so build the commit
+  # with plumbing - mktree takes the raw bytes - and let git, not the filesystem, hold the path
+  local blob subtree tree commit
+  blob=$(printf 'x
+' | git -C "$WT" hash-object -w --stdin)
+  subtree=$(printf '100644 blob %s	a"b.sql
+' "$blob" | git -C "$WT" mktree)
+  tree=$(
+    { git -C "$WT" ls-tree HEAD; printf '040000 tree %s	migrations
+' "$subtree"; } |
+      git -C "$WT" mktree
+  )
+  commit=$(git -C "$WT" commit-tree "$tree" -p HEAD -m "quoted path")
+  git -C "$WT" update-ref refs/heads/feat/issue-6-x "$commit"
+  git -C "$WT" push -q -f origin feat/issue-6-x
   write_config "$REPO" human_paths "migrations/*"
   run_script finish.sh merge 6 --branch feat/issue-6-x --auto trivial --tier trivial
   assert_rc 2
   assert_key "$OUT" STOP_REASON auto-human-path
+  assert_key "$OUT" HUMAN_PATH 'migrations/a"b.sql'
   assert_gh_not_called "pr merge" "a C-quoted human path with a double quote merged unattended"
 }
 

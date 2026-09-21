@@ -90,7 +90,8 @@ the human-path check, so the merge cannot be proved safe. Fetch the base and re-
           stop auto-human-path "issue-to-pr: $f matches human_paths '$g'; this PR waits for a human 'merge'. Comment, label agent:review, end the turn." ;;
         esac
       done
-    done <"$listfile"
+    done <"$listfile" || stop auto-diff-unreadable "issue-to-pr: could not read the path list for \
+the human-path check, so the merge cannot be proved safe. Re-run."
     set +f
     rm -f "$listfile"
   fi

@@ -78,6 +78,9 @@ Step 8's change-request branch, unchanged.
 
 ## After Step 9
 
+On entering Step 9, `git status --porcelain` in the main checkout non-empty is `agent:failed`
+before any pull or smoke: comment what is dirty, flip, end the turn.
+
 Step 9 red smoke, headless: the draft revert PR named in a comment on the PR, `agent:failed`,
 end the turn; nothing after this line runs.
 
