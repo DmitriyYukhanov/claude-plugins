@@ -5,6 +5,12 @@ All notable changes to the **issue-to-pr** plugin will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [9.2.1] - 2026-09-21
+
+### Fixed
+- `finish.sh cleanup` finds the worktree by `--branch` first and only then by the `issue-<N>` path. A PR number passed as `<N>` used to make it look for a tree that never existed and report `REMOVED=true` while the real tree stayed registered and its branch undeletable.
+- `companions.md` says that Claude Code's `/security-review` reads the committed range, which is empty before Step 7's commit; the overlay runs inline over the working tree until then.
+
 ## [9.2.0] - 2026-09-18
 
 ### Added

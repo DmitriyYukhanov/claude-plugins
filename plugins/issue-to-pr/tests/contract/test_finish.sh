@@ -142,6 +142,20 @@ test_cleanup_removes_the_tree_both_branches_and_the_run_dir() {
   [ ! -e "$(run_dir_of "$REPO" feat/issue-6-x)" ] || fail "the run directory survived cleanup"
 }
 
+# The number is the weakest key: merge never reads it, so a PR number passed by mistake used to make
+# cleanup look for issue-<PR>, find nothing, and report the prune of nothing as REMOVED=true while
+# the real tree stayed registered and its branch undeletable.
+test_cleanup_finds_the_tree_by_branch_when_the_number_is_wrong() {
+  cleanup_setup pr-merged
+  write_receipt "$REPO" feat/issue-6-x "$SHA_OK"
+  run_script finish.sh cleanup 999 --branch feat/issue-6-x
+  assert_rc 0
+  assert_key "$OUT" REMOVED true
+  assert_key "$OUT" DELETED_LOCAL true
+  [ ! -d "$WT" ] || fail "the worktree on --branch survived a cleanup keyed on the wrong number"
+  ! branch_survives || fail "the local branch survived cleanup"
+}
+
 test_cleanup_refuses_an_unmerged_pr() {
   cleanup_setup pr-open
   run_script finish.sh cleanup 6 --branch feat/issue-6-x

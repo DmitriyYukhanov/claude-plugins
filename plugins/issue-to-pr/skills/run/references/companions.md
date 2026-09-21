@@ -26,7 +26,9 @@ actually be performed, report it as blocked, never passed.
 | Deletion lens (Step 6) | `ponytail:ponytail-review` over the run's diff | Re-read the diff hunting only for what to delete: reinvented stdlib, one-caller abstractions, config nobody sets, flags nobody passes. |
 
 Step 6's four checks get no row. In Claude Code they are `code-review`, `/security-review`,
-`simplify` and `run` — the skill that builds the change and drives it; there is no `verify`
+`simplify` and `run`. Claude Code's `/security-review` diffs the committed branch range, so before
+Step 7's commit it sees an empty diff: run that check inline over `git diff <BASE>` plus the
+untracked files, and say so — the skill that builds the change and drives it; there is no `verify`
 command to call. Elsewhere, perform the check directly: a read-only reviewer over the diff, its
 callers and its tests; the trust boundaries, authorization and secret exposure of the changed
 flow; the surviving code made simpler without behaviour change; the built change driven past its
