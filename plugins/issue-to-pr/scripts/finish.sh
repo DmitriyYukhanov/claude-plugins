@@ -74,8 +74,12 @@ cmd_merge() {
   done_ok
 }
 
-registered_wt() { # the registered worktree ending in /issue-<N>, or empty
-  git -C "$root" worktree list --porcelain 2>/dev/null | sed -n 's/^worktree //p' | grep -E "/issue-$issue\$" | head -1
+registered_wt() { # the registered worktree on --branch, else the one ending in /issue-<N>, else empty
+  local list by_branch
+  list=$(git -C "$root" worktree list --porcelain 2>/dev/null) || return 0
+  by_branch=$(printf '%s\n' "$list" | awk -v b="refs/heads/$branch" '/^worktree /{p=substr($0,10)} $1=="branch" && $2==b {print p; exit}')
+  if [ -n "$by_branch" ]; then printf '%s\n' "$by_branch"; return 0; fi
+  printf '%s\n' "$list" | sed -n 's/^worktree //p' | grep -E "/issue-$issue\$" | head -1
 }
 
 remove_worktree() { # path -> REMOVED, LEFTOVER; stops on a dirty tree, never forces
