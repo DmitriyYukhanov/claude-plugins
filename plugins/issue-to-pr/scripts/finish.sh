@@ -5,19 +5,19 @@ SCRIPT_DIR=${BASH_SOURCE[0]%/*}
 # shellcheck source=lib/common.sh
 source "$SCRIPT_DIR/lib/common.sh"
 
-# finish.sh merge   <N> --branch <b> [--method squash|merge|rebase]
+# finish.sh merge   <N> --branch <b> [--method squash|merge|rebase] [--auto <threshold> --tier <tier>]
 # finish.sh cleanup <N> --branch <b> [--keep-branch]
 # The two actions a run cannot take back: merging the PR and deleting its branch and worktree.
 subcmd=${1:-}
 shift || true
-issue="" branch="" method=squash keep_branch=0 auto="" tier=""
+issue="" branch="" method=squash keep_branch=0 auto="" tier="" auto_given=0 tier_given=0
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --branch) branch=${2:-}; shift 2 2>/dev/null || shift "$#" ;;
     --method) method=${2:-}; shift 2 2>/dev/null || shift "$#" ;;
     --keep-branch) keep_branch=1; shift ;;
-    --auto) auto=${2:-}; shift 2 2>/dev/null || shift "$#" ;;
-    --tier) tier=${2:-}; shift 2 2>/dev/null || shift "$#" ;;
+    --auto) auto=${2:-}; auto_given=1; shift 2 2>/dev/null || shift "$#" ;;
+    --tier) tier=${2:-}; tier_given=1; shift 2 2>/dev/null || shift "$#" ;;
     -*) degrade unknown-flag "finish: unknown flag '$1'. Ignoring it would let a mistyped --keep-branch delete the branch anyway" ;;
     *) [ -z "$issue" ] && issue=$1; shift ;;
   esac
@@ -25,8 +25,9 @@ done
 [ -n "$branch" ] || degrade missing-branch "finish: --branch required"
 case "$method" in squash | merge | rebase) : ;; *) degrade bad-method "finish: --method must be squash, merge or rebase, got '$method'" ;; esac
 [ -n "$issue" ] || degrade missing-issue "finish: issue number required"
-if [ -n "$auto" ] || [ -n "$tier" ]; then
-  [ -n "$auto" ] && [ -n "$tier" ] || degrade auto-needs-tier "finish: --auto and --tier go together: the threshold means nothing without the run's tier"
+if [ "$auto_given" = 1 ] || [ "$tier_given" = 1 ]; then
+  # presence, not value: an empty --auto would otherwise skip the guard and merge attended
+  [ -n "$auto" ] && [ -n "$tier" ] || degrade auto-needs-tier "finish: --auto and --tier go together, each with a value: the threshold means nothing without the run's tier"
   [ -n "$(tier_rank "$auto")" ] || degrade bad-tier "finish: --auto must be trivial, standard, complex or none, got '$auto'"
   case "$tier" in trivial | standard | complex) : ;; *) degrade bad-tier "finish: --tier must be trivial, standard or complex, got '$tier'" ;; esac
 fi
@@ -35,7 +36,7 @@ root=$(repo_root)
 [ -n "$root" ] || degrade not-a-git-repo "finish: not inside a git repository"
 
 cmd_merge() {
-  local pr head_sha decision base_ref receipt push_out merge_out default_ref base_rev changed f g
+  local pr head_sha decision base_ref receipt push_out merge_out default_ref base_rev changed globs f g
   # reviewDecision alone is null on a base branch that does not require review, however many
   # reviews a PR has, so the reviews themselves decide and the field only confirms them
   pr=$(gh pr view "$branch" --json headRefOid,reviewDecision,latestReviews,baseRefName \
@@ -66,14 +67,18 @@ cmd_merge() {
     else stop auto-base-unresolved "issue-to-pr: neither origin/$base_ref nor $base_ref resolves here, so the human-path check cannot read the diff. Fetch the base and re-run."
     fi
     # the diff runs over the local branch: the fixture's constant sha never resolves, and the
-    # receipt plus --match-head-commit already bind the merge to head_sha
-    changed=$(git diff --name-only "$base_rev...$branch" 2>/dev/null) ||
+    # receipt plus --match-head-commit already bind the merge to head_sha.
+    # --no-renames prints the source path too, quotePath=false keeps non-ASCII paths unescaped
+    changed=$(git -c core.quotePath=false diff --no-renames --name-only "$base_rev...$branch" 2>/dev/null) ||
       stop auto-diff-unreadable "issue-to-pr: could not read the diff $base_rev...$branch for \
 the human-path check, so the merge cannot be proved safe. Fetch the base and re-run."
+    [ -n "$changed" ] ||
+      stop auto-diff-empty "issue-to-pr: the diff $base_rev...$branch is empty, so the human-path check has nothing to prove; a PR with no diff against its base does not merge unattended."
     set -f
+    globs=$(config_line "$root" human_paths)
     while IFS= read -r f; do
       [ -n "$f" ] || continue
-      for g in $(config_line "$root" human_paths); do
+      for g in $globs; do
         # shellcheck disable=SC2254  # $g is a glob from the config and must expand as a pattern
         case "$f" in $g)
           set +f

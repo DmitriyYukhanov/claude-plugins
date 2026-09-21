@@ -46,8 +46,10 @@ gate's own code in `GATE_<NAME>_EXIT`.
 
 **`--headless`** (unattended, launched by a dispatcher): Step 3's question and Step 8's approval
 travel as GitHub comments and label flips, and a PR whose tier is at or under `--auto-merge`
-(default `trivial` headless, `none` otherwise) merges without one — all of it in `R/headless.md`;
-every other step reads exactly as below. `--auto-merge` does nothing without `--headless`.
+(default `trivial` headless, `none` otherwise) merges without one — all of it in `R/headless.md`.
+Step 0 takes an issue number only (free text is a stop), `--grill` has nobody to confirm the
+design and is a stop too; every other step reads exactly as below. `--auto-merge` does nothing
+without `--headless`.
 
 ## Steps
 

@@ -16,8 +16,10 @@ typecheck_cmd: npm run typecheck
 test_cmd: npm test
 visual_cmd: npm run visual   # optional; UI/visual verification
 smoke_cmd: npm run smoke     # optional; post-merge smoke
-human_paths: migrations/* wrangler*.jsonc render.yaml   # optional; headless never self-merges a diff touching these
-after_merge: /deploy patch --no-announce                 # optional; headless runs this after Step 9
+# optional; headless never self-merges a diff touching these
+human_paths: migrations/* wrangler*.jsonc render.yaml
+# optional; headless runs this after Step 9
+after_merge: /deploy patch --no-announce
 ---
 ```
 
@@ -26,7 +28,8 @@ an accepted alias before 7.0.0 and is not read now: if you see one, say so rathe
 working the commands out again.
 
 `human_paths` is one line of space-separated shell globs matched against each path in the PR's
-diff (`*` crosses `/`); a glob cannot contain a space. `finish.sh merge --auto` reads it and refuses
+diff (`*` crosses `/`); a glob cannot contain a space — use `?`, which matches any single
+character, where a path has one. `finish.sh merge --auto` reads it and refuses
 the merge on a hit, so the list is authoritative even when the prose forgets. `after_merge` is the
 instruction a headless run gives itself after cleanup, usually a deploy skill; an attended run
 ignores it. Both are `--headless` keys: `R/headless.md`.

@@ -102,7 +102,10 @@ json_str_field() { # file key -> the string value, or empty
 }
 
 config_line() { # root key -> the value of one top-level frontmatter line, or empty
-  sed -n "s/^$2:[[:space:]]*//p" "$(state_dir "$1")/config.md" 2>/dev/null | head -1
+  # a trailing " #..." comment and quotes around the whole value are punctuation, not value:
+  # left in, they reach the globs as junk patterns
+  sed -n "s/^$2:[[:space:]]*//p" "$(state_dir "$1")/config.md" 2>/dev/null | head -1 |
+    sed -E 's/[[:space:]]+#.*$//; s/^"(.*)"$/\1/; s/^'\''(.*)'\''$/\1/'
 }
 
 tier_rank() { # trivial|standard|complex|none -> 1|2|3|0, anything else -> empty
