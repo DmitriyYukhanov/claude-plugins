@@ -5,6 +5,12 @@ All notable changes to the **issue-to-pr** plugin will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [9.5.2] - 2026-10-01
+
+### Fixed
+- Remove the correct worktree when PR and issue numbers differ.
+- Review uncommitted changes during the pre-commit security check.
+
 ## [9.5.1] - 2026-09-29
 
 ### Fixed

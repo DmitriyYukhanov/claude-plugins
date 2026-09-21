@@ -142,6 +142,30 @@ test_cleanup_removes_the_tree_both_branches_and_the_run_dir() {
   [ ! -e "$(run_dir_of "$REPO" feat/issue-6-x)" ] || fail "the run directory survived cleanup"
 }
 
+# A PR number must not hide the worktree checked out on --branch.
+test_cleanup_finds_the_tree_by_branch_when_the_number_is_wrong() {
+  cleanup_setup pr-merged
+  run_script finish.sh cleanup 999 --branch feat/issue-6-x
+  assert_rc 0
+  assert_key "$OUT" REMOVED true
+  assert_key "$OUT" DELETED_LOCAL true
+  [ ! -d "$WT" ] || fail "the worktree on --branch survived a cleanup keyed on the wrong number"
+  ! branch_survives || fail "the local branch survived cleanup"
+}
+
+test_cleanup_prefers_the_branch_to_an_unrelated_numbered_tree() {
+  cleanup_setup pr-merged
+  local other="$TEST_TMPDIR/repo-worktrees/issue-999"
+  git -C "$REPO" worktree add "$other" -b another-task main >/dev/null 2>&1
+  run_script finish.sh cleanup 999 --branch feat/issue-6-x
+  assert_rc 0
+  [ ! -d "$WT" ] || fail "the requested worktree survived cleanup"
+  ! branch_survives || fail "the requested branch survived cleanup"
+  [ -d "$other" ] || fail "cleanup removed the unrelated worktree"
+  git -C "$other" symbolic-ref --quiet --short HEAD | grep -qx another-task ||
+    fail "cleanup changed the unrelated worktree's branch"
+}
+
 test_cleanup_refuses_an_unmerged_pr() {
   cleanup_setup pr-open
   run_script finish.sh cleanup 6 --branch feat/issue-6-x
