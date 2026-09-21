@@ -61,14 +61,12 @@ After the report, decide whether this PR self-merges. All of:
   re-checks the tier and refuses any diff touching `human_paths` from the config, then merges as
   Step 8 would.
 
-Merged → Step 9, then `after_merge`. Three `STOP_REASON`s are policy rather than fault —
-`auto-tier`, `auto-human-path`, `auto-diff-empty` — and they, or any failed condition above,
-mean: comment on the PR why it waits ("waiting for `merge`: <the failed condition>"), flip to
-`agent:review`, end the turn. `push-rejected` is not one of them: the branch moved under you, so
-it is `agent:failed`. Any other exit-2 stop carries its own instruction on stderr — do what it
-says once, and a stop its own instruction does not clear (the third time, where the script names
-a retry) is the `agent:failed` rule above. An exit 4 gets ONE fix-the-call-and-re-run, then the
-same rule — comment the reason, flip, end the turn.
+Merged → Step 9, then `after_merge`. A failed condition above means: comment on the PR why it
+waits ("waiting for `merge`: <the failed condition>"), flip to `agent:review`, end the turn. A
+stop (exit 2) carries its next move on stderr: do what it says — the policy stops say "comment,
+label `agent:review`, end the turn", a fetch-and-re-run says that. A stop whose instruction names
+no move you can make alone (`push-rejected`: the branch moved under you), one that does not clear
+on its single retry, or an exit 4 after one fix-and-re-run, is `agent:failed`.
 
 The owner's `merge` / `мерж` comment arrives as your next prompt: flip `agent:review` →
 `agent:running` first, then read it against this PR as Step 8 does. It is Step 8's go-ahead for

@@ -257,6 +257,13 @@ write_config() { # root key value
   printf -- '---\n%s: %s\n---\n' "$2" "$3" >"$1/.claude/issue-to-pr/config.md"
 }
 
+assert_human_path_blocks_merge() { # msg
+  run_script finish.sh merge 6 --branch feat/issue-6-x --auto trivial --tier trivial
+  assert_rc 2
+  assert_key "$OUT" STOP_REASON auto-human-path
+  assert_gh_not_called "pr merge" "$1"
+}
+
 test_auto_merge_refuses_a_tier_above_the_threshold() {
   merge_setup happy
   run_script finish.sh merge 6 --branch feat/issue-6-x --auto trivial --tier standard
@@ -276,11 +283,8 @@ test_auto_merge_none_never_merges() {
 test_auto_merge_refuses_a_diff_touching_a_human_path() {
   merge_setup happy
   write_config "$REPO" human_paths "migrations/* work.txt"
-  run_script finish.sh merge 6 --branch feat/issue-6-x --auto trivial --tier trivial
-  assert_rc 2
-  assert_key "$OUT" STOP_REASON auto-human-path
+  assert_human_path_blocks_merge "a diff touching a human path merged unattended"
   assert_key "$OUT" HUMAN_PATH work.txt
-  assert_gh_not_called "pr merge" "a diff touching a human path merged unattended"
 }
 
 test_auto_merge_refuses_a_deleted_human_path() {
@@ -294,10 +298,7 @@ test_auto_merge_refuses_a_deleted_human_path() {
   git -C "$WT" rm -q migrations/a.sql
   git -C "$WT" commit -qm "drop a migration" && git -C "$WT" push -q -f origin feat/issue-6-x
   write_config "$REPO" human_paths "migrations/*"
-  run_script finish.sh merge 6 --branch feat/issue-6-x --auto trivial --tier trivial
-  assert_rc 2
-  assert_key "$OUT" STOP_REASON auto-human-path
-  assert_gh_not_called "pr merge" "a deleted human path merged unattended"
+  assert_human_path_blocks_merge "a deleted human path merged unattended"
 }
 
 test_auto_merge_refuses_a_human_path_with_a_space() {
@@ -306,10 +307,8 @@ test_auto_merge_refuses_a_human_path_with_a_space() {
   git -C "$WT" add "my dir/x.txt" && git -C "$WT" commit -qm "spaced path"
   git -C "$WT" push -q origin feat/issue-6-x
   write_config "$REPO" human_paths "my?dir/*"
-  run_script finish.sh merge 6 --branch feat/issue-6-x --auto trivial --tier trivial
-  assert_rc 2
+  assert_human_path_blocks_merge "a human path with a space merged unattended"
   assert_key "$OUT" HUMAN_PATH "my dir/x.txt"
-  assert_gh_not_called "pr merge" "a human path with a space merged unattended"
 }
 
 test_auto_merge_refuses_when_the_base_does_not_resolve() {
@@ -319,7 +318,7 @@ test_auto_merge_refuses_when_the_base_does_not_resolve() {
   git -C "$REPO" branch -q -D main 2>/dev/null || true
   run_script finish.sh merge 6 --branch feat/issue-6-x --auto trivial --tier trivial
   assert_rc 2
-  assert_key "$OUT" STOP_REASON auto-base-unresolved
+  assert_key "$OUT" STOP_REASON auto-unprovable
   assert_gh_not_called "pr merge"
 }
 
@@ -376,10 +375,7 @@ test_auto_merge_refuses_a_renamed_human_path() {
   git -C "$WT" commit -qm "move the migration out of migrations/"
   git -C "$WT" push -q -f origin feat/issue-6-x
   write_config "$REPO" human_paths "migrations/*"
-  run_script finish.sh merge 6 --branch feat/issue-6-x --auto trivial --tier trivial
-  assert_rc 2
-  assert_key "$OUT" STOP_REASON auto-human-path
-  assert_gh_not_called "pr merge" "a rename out of a human path merged unattended"
+  assert_human_path_blocks_merge "a rename out of a human path merged unattended"
 }
 
 test_auto_merge_refuses_a_non_ascii_human_path() {
@@ -389,10 +385,7 @@ test_auto_merge_refuses_a_non_ascii_human_path() {
   git -C "$WT" add "migrations/café.sql"
   git -C "$WT" commit -qm "add an accented migration"
   write_config "$REPO" human_paths "migrations/*"
-  run_script finish.sh merge 6 --branch feat/issue-6-x --auto trivial --tier trivial
-  assert_rc 2
-  assert_key "$OUT" STOP_REASON auto-human-path
-  assert_gh_not_called "pr merge" "a C-quoted non-ASCII human path merged unattended"
+  assert_human_path_blocks_merge "a C-quoted non-ASCII human path merged unattended"
 }
 
 test_auto_with_an_empty_value_degrades() {
@@ -406,17 +399,19 @@ test_auto_with_an_empty_value_degrades() {
   assert_gh_not_called "pr merge" "an --auto with no value merged with no guard"
 }
 
-test_human_paths_value_may_be_quoted_or_commented() {
+test_human_paths_value_may_be_commented() {
   merge_setup happy
-  write_config "$REPO" human_paths '"work.txt"   # never unattended'
+  write_config "$REPO" human_paths 'work.txt   # never unattended'
+  assert_human_path_blocks_merge "a trailing comment defeated the glob"
+}
+
+test_human_paths_with_quotes_is_refused() {
+  merge_setup happy
+  write_config "$REPO" human_paths '"work.txt"'
   run_script finish.sh merge 6 --branch feat/issue-6-x --auto trivial --tier trivial
   assert_rc 2
-  assert_key "$OUT" STOP_REASON auto-human-path
-  write_config "$REPO" human_paths '"work.txt"   '
-  run_script finish.sh merge 6 --branch feat/issue-6-x --auto trivial --tier trivial
-  assert_rc 2
-  assert_key "$OUT" STOP_REASON auto-human-path
-  assert_gh_not_called "pr merge" "quotes, a comment or trailing space defeated the glob"
+  assert_key "$OUT" STOP_REASON auto-unprovable
+  assert_gh_not_called "pr merge" "a quoted human_paths value merged unattended"
 }
 
 test_auto_merge_refuses_a_human_path_with_a_quote() {
@@ -437,11 +432,8 @@ test_auto_merge_refuses_a_human_path_with_a_quote() {
   git -C "$WT" update-ref refs/heads/feat/issue-6-x "$commit"
   git -C "$WT" push -q -f origin feat/issue-6-x
   write_config "$REPO" human_paths "migrations/*"
-  run_script finish.sh merge 6 --branch feat/issue-6-x --auto trivial --tier trivial
-  assert_rc 2
-  assert_key "$OUT" STOP_REASON auto-human-path
-  assert_key "$OUT" HUMAN_PATH 'migrations/a"b.sql'
-  assert_gh_not_called "pr merge" "a C-quoted human path with a double quote merged unattended"
+  assert_human_path_blocks_merge "a C-quoted human path with a double quote merged unattended"
+  assert_key "$OUT" HUMAN_PATH '"migrations/a\"b.sql"'
 }
 
 test_auto_merge_refuses_an_empty_diff() {
@@ -465,6 +457,6 @@ test_auto_merge_refuses_when_the_diff_cannot_be_read() {
   git -C "$REPO" branch -q -D feat/issue-6-x
   run_script finish.sh merge 6 --branch feat/issue-6-x --auto trivial --tier trivial
   assert_rc 2
-  assert_key "$OUT" STOP_REASON auto-diff-unreadable
+  assert_key "$OUT" STOP_REASON auto-unprovable
   assert_gh_not_called "pr merge" "an unreadable diff merged unattended"
 }

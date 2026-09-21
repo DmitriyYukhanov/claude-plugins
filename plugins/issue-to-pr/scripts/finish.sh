@@ -36,7 +36,7 @@ root=$(repo_root)
 [ -n "$root" ] || degrade not-a-git-repo "finish: not inside a git repository"
 
 cmd_merge() {
-  local pr head_sha decision base_ref receipt push_out merge_out default_ref base_rev listfile globs f g
+  local pr head_sha decision base_ref receipt push_out merge_out default_ref base_rev globs changed hit
   # reviewDecision alone is null on a base branch that does not require review, however many
   # reviews a PR has, so the reviews themselves decide and the field only confirms them
   pr=$(gh pr view "$branch" --json headRefOid,reviewDecision,latestReviews,baseRefName \
@@ -64,36 +64,30 @@ cmd_merge() {
       stop auto-tier "issue-to-pr: a $tier run does not merge unattended under an --auto-merge $auto threshold. Comment on the PR that it waits for 'merge', label agent:review, and end the turn."
     if git rev-parse --verify -q "origin/$base_ref^{commit}" >/dev/null; then base_rev="origin/$base_ref"
     elif git rev-parse --verify -q "$base_ref^{commit}" >/dev/null; then base_rev=$base_ref
-    else stop auto-base-unresolved "issue-to-pr: neither origin/$base_ref nor $base_ref resolves here, so the human-path check cannot read the diff. Fetch the base and re-run."
+    else stop auto-unprovable "issue-to-pr: neither origin/$base_ref nor $base_ref resolves here, so the human-path check cannot read the diff. Fetch the base and re-run."
     fi
     # the diff runs over the local branch: the fixture's constant sha never resolves, and the
     # receipt plus --match-head-commit already bind the merge to head_sha.
-    # --no-renames prints the source path too; -z prints each path raw and NUL-terminated, which
-    # is the only form git never C-quotes - a path holding " or \ is quoted whatever
-    # core.quotePath says, and a quoted path matches no glob a human wrote
-    listfile="$(branch_dir "$root" "$branch")/logs/auto-diff.list"
-    mkdir -p "${listfile%/*}" 2>/dev/null
-    git diff --no-renames --name-only -z "$base_rev...$branch" >"$listfile" 2>/dev/null ||
-      stop auto-diff-unreadable "issue-to-pr: could not read the diff $base_rev...$branch for \
-the human-path check, so the merge cannot be proved safe. Fetch the base and re-run."
-    [ -s "$listfile" ] ||
-      stop auto-diff-empty "issue-to-pr: the diff $base_rev...$branch is empty, so the human-path check has nothing to prove; a PR with no diff against its base does not merge unattended. Comment on the PR that it waits for 'merge', label agent:review, and end the turn."
-    set -f
+    set -f   # $globs must reach git unexpanded
     globs=$(config_line "$root" human_paths) ||
-      stop auto-config-unreadable "issue-to-pr: .claude/issue-to-pr/config.md exists but could not be read, so human_paths is unknown; fix the file and re-run."
-    while IFS= read -r -d '' f; do
-      for g in $globs; do
-        # shellcheck disable=SC2254  # $g is a glob from the config and must expand as a pattern
-        case "$f" in $g)
-          set +f
-          emit HUMAN_PATH "$f"
-          stop auto-human-path "issue-to-pr: $f matches human_paths '$g'; this PR waits for a human 'merge'. Comment, label agent:review, end the turn." ;;
-        esac
-      done
-    done <"$listfile" || stop auto-diff-unreadable "issue-to-pr: could not read the path list for \
-the human-path check, so the merge cannot be proved safe. Re-run."
+      stop auto-unprovable "issue-to-pr: .claude/issue-to-pr/config.md exists but could not be read, so human_paths is unknown; fix the file and re-run."
+    case "$globs" in *\"* | *\'*)
+      stop auto-unprovable "issue-to-pr: human_paths must be bare space-separated globs, no quotes (got: $globs); fix the config and re-run." ;;
+    esac
+    changed=$(git diff --no-renames --name-only "$base_rev...$branch" 2>/dev/null) ||
+      stop auto-unprovable "issue-to-pr: could not read the diff $base_rev...$branch, so the merge cannot be proved safe. Fetch the base and re-run."
+    [ -n "$changed" ] ||
+      stop auto-diff-empty "issue-to-pr: the diff $base_rev...$branch is empty, so the human-path check has nothing to prove; a PR with no diff against its base does not merge unattended. Comment on the PR that it waits for 'merge', label agent:review, and end the turn."
+    if [ -n "$globs" ]; then
+      # shellcheck disable=SC2086  # the globs are git pathspecs, one per word, matched by git not the shell
+      hit=$(git diff --no-renames --name-only "$base_rev...$branch" -- $globs 2>/dev/null) ||
+        stop auto-unprovable "issue-to-pr: git rejected human_paths as pathspecs ($globs); fix the config and re-run."
+      [ -z "$hit" ] || {
+        emit HUMAN_PATH "${hit%%$'\n'*}"
+        stop auto-human-path "issue-to-pr: ${hit%%$'\n'*} matches human_paths; this PR waits for a human 'merge'. Comment, label agent:review, end the turn."
+      }
+    fi
     set +f
-    rm -f "$listfile"
   fi
 
   if ! push_out=$(git push origin "$branch" 2>&1); then

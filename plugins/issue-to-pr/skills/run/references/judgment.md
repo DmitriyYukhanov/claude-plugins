@@ -49,8 +49,7 @@ what keeps a compaction from losing them.
 3. **A hard stop**: an exit-2, a gate-critical unknown, or a preference-bound choice that surfaced
    too late for moment (1). The checkpoint being spent is not a licence to decide it alone.
 
-Under `--headless` all three moments are GitHub comments — (1) preceded by the resolve ladder in
-`R/headless.md`, (3) through the same comment-and-wait; the count does not change.
+Under `--headless` every moment is a GitHub comment: `R/headless.md`.
 
 A question is for the user (`kind: asked`) only when it is **preference-bound** — public API
 naming, user-visible UX/copy, paid or external resources, a new external dependency or license, or

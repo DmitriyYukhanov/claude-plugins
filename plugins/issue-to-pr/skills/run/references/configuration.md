@@ -27,9 +27,9 @@ Every field is optional; unknown keys are ignored. Never invent a command. A `co
 an accepted alias before 7.0.0 and is not read now: if you see one, say so rather than silently
 working the commands out again.
 
-`human_paths` is one line of space-separated shell globs matched against each path in the PR's
-diff (`*` crosses `/`); a glob cannot contain a space — use `?`, which matches any single
-character, where a path has one — and a glob cannot start with `#` (that begins a comment).
+`human_paths` is one line of bare, space-separated globs matched by git as pathspecs (`*` crosses
+`/`, `?` matches any single character, no quotes, no spaces inside a glob, nothing starting with
+`#` or `:`); a quoted value is refused rather than silently ignored.
 `finish.sh merge --auto` reads it and refuses the merge on a hit, so the list is authoritative
 even when the prose forgets. `after_merge` is the instruction a headless run gives itself after
 cleanup, usually a deploy skill; an attended run ignores it. Both are `--headless` keys:
