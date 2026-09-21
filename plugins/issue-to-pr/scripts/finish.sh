@@ -36,7 +36,7 @@ root=$(repo_root)
 [ -n "$root" ] || degrade not-a-git-repo "finish: not inside a git repository"
 
 cmd_merge() {
-  local pr head_sha decision base_ref receipt push_out merge_out default_ref base_rev changed globs f g
+  local pr head_sha decision base_ref receipt push_out merge_out default_ref base_rev listfile globs f g
   # reviewDecision alone is null on a base branch that does not require review, however many
   # reviews a PR has, so the reviews themselves decide and the field only confirms them
   pr=$(gh pr view "$branch" --json headRefOid,reviewDecision,latestReviews,baseRefName \
@@ -68,16 +68,20 @@ cmd_merge() {
     fi
     # the diff runs over the local branch: the fixture's constant sha never resolves, and the
     # receipt plus --match-head-commit already bind the merge to head_sha.
-    # --no-renames prints the source path too, quotePath=false keeps non-ASCII paths unescaped
-    changed=$(git -c core.quotePath=false diff --no-renames --name-only "$base_rev...$branch" 2>/dev/null) ||
+    # --no-renames prints the source path too; -z prints each path raw and NUL-terminated, which
+    # is the only form git never C-quotes - a path holding " or \ is quoted whatever
+    # core.quotePath says, and a quoted path matches no glob a human wrote
+    listfile="$(branch_dir "$root" "$branch")/logs/auto-diff.list"
+    mkdir -p "${listfile%/*}" 2>/dev/null
+    git diff --no-renames --name-only -z "$base_rev...$branch" >"$listfile" 2>/dev/null ||
       stop auto-diff-unreadable "issue-to-pr: could not read the diff $base_rev...$branch for \
 the human-path check, so the merge cannot be proved safe. Fetch the base and re-run."
-    [ -n "$changed" ] ||
-      stop auto-diff-empty "issue-to-pr: the diff $base_rev...$branch is empty, so the human-path check has nothing to prove; a PR with no diff against its base does not merge unattended."
+    [ -s "$listfile" ] ||
+      stop auto-diff-empty "issue-to-pr: the diff $base_rev...$branch is empty, so the human-path check has nothing to prove; a PR with no diff against its base does not merge unattended. Comment on the PR that it waits for 'merge', label agent:review, and end the turn."
     set -f
-    globs=$(config_line "$root" human_paths)
-    while IFS= read -r f; do
-      [ -n "$f" ] || continue
+    globs=$(config_line "$root" human_paths) ||
+      stop auto-config-unreadable "issue-to-pr: .claude/issue-to-pr/config.md exists but could not be read, so human_paths is unknown; fix the file and re-run."
+    while IFS= read -r -d '' f; do
       for g in $globs; do
         # shellcheck disable=SC2254  # $g is a glob from the config and must expand as a pattern
         case "$f" in $g)
@@ -86,8 +90,9 @@ the human-path check, so the merge cannot be proved safe. Fetch the base and re-
           stop auto-human-path "issue-to-pr: $f matches human_paths '$g'; this PR waits for a human 'merge'. Comment, label agent:review, end the turn." ;;
         esac
       done
-    done <<<"$changed"
+    done <"$listfile"
     set +f
+    rm -f "$listfile"
   fi
 
   if ! push_out=$(git push origin "$branch" 2>&1); then

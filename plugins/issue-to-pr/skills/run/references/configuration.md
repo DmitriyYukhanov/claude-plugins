@@ -29,10 +29,11 @@ working the commands out again.
 
 `human_paths` is one line of space-separated shell globs matched against each path in the PR's
 diff (`*` crosses `/`); a glob cannot contain a space — use `?`, which matches any single
-character, where a path has one. `finish.sh merge --auto` reads it and refuses
-the merge on a hit, so the list is authoritative even when the prose forgets. `after_merge` is the
-instruction a headless run gives itself after cleanup, usually a deploy skill; an attended run
-ignores it. Both are `--headless` keys: `R/headless.md`.
+character, where a path has one — and a glob cannot start with `#` (that begins a comment).
+`finish.sh merge --auto` reads it and refuses the merge on a hit, so the list is authoritative
+even when the prose forgets. `after_merge` is the instruction a headless run gives itself after
+cleanup, usually a deploy skill; an attended run ignores it. Both are `--headless` keys:
+`R/headless.md`.
 
 ## Resolving the base
 

@@ -412,7 +412,34 @@ test_human_paths_value_may_be_quoted_or_commented() {
   run_script finish.sh merge 6 --branch feat/issue-6-x --auto trivial --tier trivial
   assert_rc 2
   assert_key "$OUT" STOP_REASON auto-human-path
-  assert_gh_not_called "pr merge" "quotes or a comment defeated the glob"
+  write_config "$REPO" human_paths '"work.txt"   '
+  run_script finish.sh merge 6 --branch feat/issue-6-x --auto trivial --tier trivial
+  assert_rc 2
+  assert_key "$OUT" STOP_REASON auto-human-path
+  assert_gh_not_called "pr merge" "quotes, a comment or trailing space defeated the glob"
+}
+
+test_auto_merge_refuses_a_human_path_with_a_quote() {
+  merge_setup happy
+  mkdir -p "$WT/migrations"
+  printf 'x\n' >"$WT/migrations/a\"b.sql" 2>/dev/null
+  git -C "$WT" add migrations >/dev/null 2>&1
+  # Windows takes the name and stores U+F022 in place of the quote, and the C runtime maps it
+  # back, so only git - which reads the real bytes - can say whether the quote is there
+  case "$(git -C "$WT" ls-files -z 'migrations/*' | tr -d '\0')" in
+    *'"'*) : ;;
+    *)
+      printf 'SKIP: filesystem forbids a quote in a name\n'
+      return 0
+      ;;
+  esac
+  git -C "$WT" commit -qm "a quoted migration"
+  git -C "$WT" push -q origin feat/issue-6-x
+  write_config "$REPO" human_paths "migrations/*"
+  run_script finish.sh merge 6 --branch feat/issue-6-x --auto trivial --tier trivial
+  assert_rc 2
+  assert_key "$OUT" STOP_REASON auto-human-path
+  assert_gh_not_called "pr merge" "a C-quoted human path with a double quote merged unattended"
 }
 
 test_auto_merge_refuses_an_empty_diff() {
