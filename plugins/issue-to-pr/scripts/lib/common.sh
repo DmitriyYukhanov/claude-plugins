@@ -103,15 +103,18 @@ json_str_field() { # file key -> the string value, or empty
 
 config_line() { # root key -> the value of one top-level frontmatter line, or empty
   # a trailing " #..." comment is punctuation, not value: left in, it reaches the globs as a junk
-  # pattern. No config file is no value (rc 0); a file that exists and cannot be read is rc 1, so
-  # the caller can fail closed instead of reading it as "nothing configured".
+  # pattern. No file or no key is no value (rc 0); an unreadable file or a key with an empty value
+  # (a YAML block list) is rc 1, so the caller can fail closed instead of reading "nothing set".
   local f value
   f="$(state_dir "$1")/config.md"
   [ -f "$f" ] || return 0
-  value=$(sed -n "s/^$2:[[:space:]]*//p" "$f" 2>/dev/null) || return 1
+  value=$(sed -n "s/^$2:[[:space:]]*/=/p" "$f" 2>/dev/null) || return 1
+  [ -n "$value" ] || return 0
   value=${value%%$'\n'*}
   value=${value%$'\r'}
-  printf '%s' "$value" | sed -E 's/[[:space:]]+#.*$//'
+  value=$(printf '%s' "${value#=}" | sed -E 's/[[:space:]]+#.*$//')
+  [ -n "$value" ] || return 1
+  printf '%s' "$value"
 }
 
 tier_rank() { # trivial|standard|complex|none -> 1|2|3|0, anything else -> empty
