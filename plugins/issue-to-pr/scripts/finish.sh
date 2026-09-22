@@ -27,7 +27,7 @@ case "$method" in squash | merge | rebase) : ;; *) degrade bad-method "finish: -
 [ -n "$issue" ] || degrade missing-issue "finish: issue number required"
 if [ "$auto_given" = 1 ] || [ "$tier_given" = 1 ]; then
   # presence, not value: an empty --auto would otherwise skip the guard and merge attended
-  [ "$auto_given" = 1 ] && [ "$tier_given" = 1 ] || degrade auto-needs-tier "finish: --auto and --tier go together: the threshold means nothing without the run's tier"
+  [ "$auto_given$tier_given" = 11 ] || degrade auto-needs-tier "finish: --auto and --tier go together: the threshold means nothing without the run's tier"
   [ -n "$(tier_rank "$auto")" ] || degrade bad-tier "finish: --auto must be trivial, standard, complex or none, got '$auto'"
   case "$tier" in trivial | standard | complex) : ;; *) degrade bad-tier "finish: --tier must be trivial, standard or complex, got '$tier'" ;; esac
 fi
