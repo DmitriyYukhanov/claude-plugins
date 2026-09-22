@@ -8,7 +8,7 @@ description: >-
   then merges and cleans up once you approve the PR in-session. Triggers: "take task
   N", "work on issue #N", "build/fix X" when no issue exists yet, and —
   for the merge gate later — "merge it", "approve the PR", "ship it", "lgtm merge".
-argument-hint: "[issue-number | \"free text\"] [--tier trivial|standard|complex] [--grill]"
+argument-hint: "[issue-number | \"free text\"] [--tier trivial|standard|complex] [--grill] [--headless] [--auto-merge trivial|standard|complex|none]"
 ---
 
 # issue-to-pr — issue → merge-ready PR pipeline
@@ -29,7 +29,9 @@ gate's own code in `GATE_<NAME>_EXIT`.
 
 - **Merge is gated on explicit in-session approval**, runs ONLY in the main session, via
   `S/finish.sh merge` — never a bare `gh pr merge`, never `--admin`, never on the turn the PR
-  opens. Force-push only with `--force-with-lease`.
+  opens. Force-push only with `--force-with-lease`. The one exception is `--headless` with
+  `--auto-merge`, where `R/headless.md`'s policy is the approval and the self-merge happens on
+  the report's turn — still only through `S/finish.sh merge --auto`.
 - **Ask contract:** three moments, `--grill` reshapes the first (`R/judgment.md`) — (1) Step 3:
   ONE batched question if the ledger has open items, or the grill in its place, (2) the
   merge gate, (3) a hard stop. Decide everything else yourself and log it, and never ask what a
@@ -41,6 +43,13 @@ gate's own code in `GATE_<NAME>_EXIT`.
   about the world outside this repo before building on it, ledgered either way (`R/judgment.md`).
 - **Humanize** all human-facing text (report, PR body, UI strings > 1–2 words) at every tier,
   using the companion or its fallback — not code, logs or commit subjects.
+
+**`--headless`** (unattended, launched by a dispatcher): Step 3's question and Step 8's approval
+travel as GitHub comments and label flips, and a PR whose tier is at or under `--auto-merge`
+(default `trivial` headless, `none` otherwise) merges without one — all of it in `R/headless.md`.
+Step 0 takes an issue number only (free text is a stop), `--grill` has nobody to confirm the
+design and is a stop too; every other step reads exactly as below. `--auto-merge` does nothing
+without `--headless`.
 
 ## Steps
 
@@ -157,8 +166,8 @@ for that head. A stale receipt requires this same cycle, not just another test r
   (Steps 5–6 on the new diff) until clean, push, re-report, wait again. Never merge unverified.
 - **Anything else** → do **not** merge. A vague ack ("ok", "looks fine") or a question → ask for
   explicit confirmation. If they'll self-merge/abandon, offer `S/finish.sh cleanup <N> --branch
-  <branch> --keep-branch`, which removes the worktree and touches nothing else. Approval is never
-  inferred.
+  <branch> --keep-branch`, which removes the worktree and touches nothing else.
+  Approval is never inferred.
 
 ## Step 9 — Cleanup (after a successful merge)
 
@@ -174,5 +183,6 @@ from its keys: a `LEFTOVER_DIR` is a locked directory to remove by hand once the
 when GitHub deletes head branches itself — check before calling it a failure. In-place fallback: switch off `<branch>` and delete
 it local and remote yourself. **`BASE_IS_DEFAULT`** is the one thing cleanup cannot answer:
 `false` means the work landed on `<MERGED_INTO>` and the issue is still open, `unknown` means the
-landing branch was never confirmed, so claim neither. Finish with one line: what merged, what
+landing branch was never confirmed, so claim neither. `--headless`: then `after_merge` unless the
+smoke was red (`R/headless.md`). Finish with one line: what merged, what
 went, what was kept.

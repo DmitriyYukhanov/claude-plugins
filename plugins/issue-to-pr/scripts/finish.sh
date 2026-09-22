@@ -5,17 +5,19 @@ SCRIPT_DIR=${BASH_SOURCE[0]%/*}
 # shellcheck source=lib/common.sh
 source "$SCRIPT_DIR/lib/common.sh"
 
-# finish.sh merge   <N> --branch <b> [--method squash|merge|rebase]
+# finish.sh merge   <N> --branch <b> [--method squash|merge|rebase] [--auto <threshold> --tier <tier>]
 # finish.sh cleanup <N> --branch <b> [--keep-branch]
 # The two actions a run cannot take back: merging the PR and deleting its branch and worktree.
 subcmd=${1:-}
 shift || true
-issue="" branch="" method=squash keep_branch=0
+issue="" branch="" method=squash keep_branch=0 auto="" tier="" auto_given=0 tier_given=0
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --branch) branch=${2:-}; shift 2 2>/dev/null || shift "$#" ;;
     --method) method=${2:-}; shift 2 2>/dev/null || shift "$#" ;;
     --keep-branch) keep_branch=1; shift ;;
+    --auto) auto=${2:-}; auto_given=1; shift 2 2>/dev/null || shift "$#" ;;
+    --tier) tier=${2:-}; tier_given=1; shift 2 2>/dev/null || shift "$#" ;;
     -*) degrade unknown-flag "finish: unknown flag '$1'. Ignoring it would let a mistyped --keep-branch delete the branch anyway" ;;
     *) [ -z "$issue" ] && issue=$1; shift ;;
   esac
@@ -23,12 +25,18 @@ done
 [ -n "$branch" ] || degrade missing-branch "finish: --branch required"
 case "$method" in squash | merge | rebase) : ;; *) degrade bad-method "finish: --method must be squash, merge or rebase, got '$method'" ;; esac
 [ -n "$issue" ] || degrade missing-issue "finish: issue number required"
+if [ "$auto_given" = 1 ] || [ "$tier_given" = 1 ]; then
+  # presence, not value: an empty --auto would otherwise skip the guard and merge attended
+  [ "$auto_given$tier_given" = 11 ] || degrade auto-needs-tier "finish: --auto and --tier go together: the threshold means nothing without the run's tier"
+  [ -n "$(tier_rank "$auto")" ] || degrade bad-tier "finish: --auto must be trivial, standard, complex or none, got '$auto'"
+  case "$tier" in trivial | standard | complex) : ;; *) degrade bad-tier "finish: --tier must be trivial, standard or complex, got '$tier'" ;; esac
+fi
 assert_numeric_issue "$issue" finish
 root=$(repo_root)
 [ -n "$root" ] || degrade not-a-git-repo "finish: not inside a git repository"
 
 cmd_merge() {
-  local pr head_sha decision base_ref receipt push_out merge_out default_ref
+  local pr head_sha decision base_ref receipt push_out merge_out default_ref base_rev globs pathspecs changed hit
   # reviewDecision alone is null on a base branch that does not require review, however many
   # reviews a PR has, so the reviews themselves decide and the field only confirms them
   pr=$(gh pr view "$branch" --json headRefOid,reviewDecision,latestReviews,baseRefName \
@@ -50,6 +58,36 @@ cmd_merge() {
   esac
   [ "$decision" != CHANGES_REQUESTED ] ||
     stop review-blocked "issue-to-pr: $branch has a review requesting changes. Address it, push, re-run the gates, and re-approve."
+
+  if [ -n "$auto" ]; then
+    [ "$(tier_rank "$tier")" -le "$(tier_rank "$auto")" ] ||
+      stop auto-tier "issue-to-pr: a $tier run does not merge unattended under an --auto-merge $auto threshold. Comment on the PR that it waits for 'merge', label agent:review, and end the turn."
+    if git rev-parse --verify -q "origin/$base_ref^{commit}" >/dev/null; then base_rev="origin/$base_ref"
+    elif git rev-parse --verify -q "$base_ref^{commit}" >/dev/null; then base_rev=$base_ref
+    else stop auto-unprovable "issue-to-pr: neither origin/$base_ref nor $base_ref resolves here, so the human-path check cannot read the diff. Fetch the base and re-run."
+    fi
+    # the diff runs over the local branch: the fixture's constant sha never resolves, and the
+    # receipt plus --match-head-commit already bind the merge to head_sha.
+    globs=$(config_line "$root" human_paths) ||
+      stop auto-unprovable "issue-to-pr: human_paths in .claude/issue-to-pr/config.md is unreadable or empty on its line; put the globs on that line or delete the key, then re-run."
+    case "$globs" in *[\"\'[]* | -*)
+      stop auto-unprovable "issue-to-pr: human_paths must be one line of bare space-separated globs, no quotes, no YAML list (got: $globs); fix the config and re-run." ;;
+    esac
+    pathspecs=()
+    read -ra pathspecs <<<"$globs"   # read never globs, so the shell cannot expand them
+    changed=$(git -C "$root" diff --no-renames --name-only "$base_rev...$branch" 2>/dev/null) ||
+      stop auto-unprovable "issue-to-pr: could not read the diff $base_rev...$branch, so the merge cannot be proved safe. Fetch the base and re-run."
+    [ -n "$changed" ] ||
+      stop auto-diff-empty "issue-to-pr: the diff $base_rev...$branch is empty, so the human-path check has nothing to prove; a PR with no diff against its base does not merge unattended. Comment on the PR that it waits for 'merge', label agent:review, and end the turn."
+    if [ "${#pathspecs[@]}" -gt 0 ]; then
+      hit=$(git -C "$root" diff --no-renames --name-only "$base_rev...$branch" -- "${pathspecs[@]}" 2>/dev/null) ||
+        stop auto-unprovable "issue-to-pr: git rejected human_paths as pathspecs ($globs); fix the config and re-run."
+      [ -z "$hit" ] || {
+        emit HUMAN_PATH "${hit%%$'\n'*}"
+        stop auto-human-path "issue-to-pr: ${hit%%$'\n'*} matches human_paths; this PR waits for a human 'merge'. Comment, label agent:review, end the turn."
+      }
+    fi
+  fi
 
   if ! push_out=$(git push origin "$branch" 2>&1); then
     emit PUSH_ERROR "$(printf '%s' "$push_out" | tr '\n' ' ')"

@@ -34,9 +34,17 @@ finds Git for Windows' own `bash.exe`. Per-project settings remain optional.
 ### Skill: `run`
 
 Invoked by the model or by you (`/issue-to-pr:run [issue-number | "free text"]
-[--tier trivial|standard|complex] [--grill]`). The pipeline runs triage, research, design,
-implementation, review, PR, approval-gated merge, and cleanup. Hard gates block forward
-progress; everything between them scales to the task.
+[--tier trivial|standard|complex] [--grill]
+[--headless] [--auto-merge trivial|standard|complex|none]`).
+The pipeline runs triage, research, design, implementation, review, PR, approval-gated merge,
+and cleanup. Hard gates block forward progress; everything between them scales to the task.
+
+**Headless.** `--headless` is for a run nobody is watching: its one question and its "ready to
+merge" become GitHub comments, labels (`agent:running`, `agent:waiting`, `agent:review`,
+`agent:failed`) carry the state, and the owner's reply comment continues the run. A PR whose tier
+is at or under `--auto-merge` (default `trivial`; `none` outside headless) merges on its own when
+its gates, reviews and ratchet were all clean and the diff touches no `human_paths`. The dispatcher
+that launches such runs from a label is a separate release.
 
 - **Isolated per task.** Each run cuts its branch inside a dedicated
   `../<repo>-worktrees/issue-<N>` git worktree, so several local agents can drive different
@@ -79,7 +87,10 @@ provided on request, for the host you are actually using.
 `.claude/issue-to-pr/config.md` (YAML frontmatter) sets the board URL, base branch, and
 typecheck/test/visual/smoke commands. Everything is optional; with no file the run works the
 commands out in the worktree where the gates execute, as literals, and prints the block to
-paste here once they pass. It never writes this file itself.
+paste here once they pass. It never writes this file itself. Two keys serve `--headless` runs
+only: a diff touching `human_paths` never merges unattended (glob syntax in
+`skills/run/references/configuration.md`); `after_merge` is the instruction the run gives itself
+after cleanup, usually a deploy skill.
 
 Claude Code and Codex use this same config and state directory; the `.claude` name is retained
 for compatibility. There is no separate Codex config to keep in sync.

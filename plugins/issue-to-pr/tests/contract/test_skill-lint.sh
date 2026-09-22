@@ -135,3 +135,51 @@ test_manifests_agree_on_what_the_plugin_does() {
     plugin.json:      $plugin
     marketplace.json: $market"
 }
+
+test_headless_is_one_flag_that_reshapes_two_contacts_and_adds_none() {
+  local hl merge
+  grep -q 'argument-hint:.*--headless' "$(skill_md)" || fail "argument-hint must advertise --headless"
+  grep -q 'argument-hint:.*--auto-merge' "$(skill_md)" || fail "argument-hint must advertise --auto-merge"
+  hl=$(cat "$(references_dir)/headless.md") || fail "R/headless.md missing"
+  assert_contains "$hl" 'agent:waiting' "headless.md must name the label a posted question sets"
+  assert_contains "$hl" 'agent:review'  "headless.md must name the label an unmerged PR sets"
+  assert_contains "$hl" 'OWNER'         "headless.md must say only the owner's comment continues a run"
+  assert_contains "$hl" 'finish.sh merge <N> --branch <b> --auto' \
+    "the self-merge must pass --auto so the script checks the tier and human paths"
+  assert_contains "$hl" 'git status --porcelain' "a headless deploy must refuse a dirty main checkout"
+  merge=$(skill_step Merge)
+  assert_contains "$merge" 'Approval is never inferred' "the attended merge gate lost its closing rule"
+  case "$hl" in *"fourth"* | *"four moments"*) fail "headless.md adds a contact moment" ;; esac
+  case "$hl" in *"gh pr merge"*) fail "headless.md names a merge path other than finish.sh" ;; esac
+}
+
+test_attended_steps_read_as_in_the_previous_release() {
+  local heads
+  heads=$(grep -oE '^\*\*[0-9]+\. [A-Za-z ]+|^## Step [0-9]+ — [A-Za-z ]+' "$(skill_md)" | sed 's/\*\*//; s/ *$//')
+  assert_eq "$(printf '%s\n' \
+    '0. Resolve' \
+    '1. Worktree' \
+    '2. Design' \
+    '3. Checkpoint' \
+    '4. Build' \
+    '5. Gates' \
+    '6. Review and harden' \
+    '7. PR and report' \
+    '## Step 8 — Merge on approval' \
+    '## Step 9 — Cleanup')" "$heads" \
+    "the step names changed; headless was meant to add a path, not reshape a step"
+
+  local ask checkpoint
+  ask=$(awk '
+    /^- \*\*Ask contract:\*\*/ { f = 1 }
+    f && /^- / && !/^- \*\*Ask contract:\*\*/ { exit }
+    f { print }
+  ' "$(skill_md)")
+  assert_contains "$ask" "three moments" \
+    "the Hard-rules Ask contract bullet was reshaped away from its three fixed moments"
+  assert_contains "$ask" "ONE batched question if the ledger has open items" \
+    "the Hard-rules Ask contract bullet no longer names the single batched question"
+  checkpoint=$(skill_step Checkpoint)
+  assert_contains "$checkpoint" "the only mid-run question" \
+    "Step 3 no longer closes on it being the only mid-run question"
+}

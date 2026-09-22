@@ -251,3 +251,224 @@ test_cleanup_refuses_a_mistyped_flag_rather_than_deleting_the_branch() {
   assert_key "$OUT" DEGRADED_REASON unknown-flag
   branch_survives || fail "a typo in --keep-branch deleted the branch it was meant to save"
 }
+
+write_config() { # root key value
+  mkdir -p "$1/.claude/issue-to-pr"
+  printf -- '---\n%s: %s\n---\n' "$2" "$3" >"$1/.claude/issue-to-pr/config.md"
+}
+
+assert_human_path_blocks_merge() { # msg
+  run_script finish.sh merge 6 --branch feat/issue-6-x --auto trivial --tier trivial
+  assert_rc 2
+  assert_key "$OUT" STOP_REASON auto-human-path
+  assert_gh_not_called "pr merge" "$1"
+}
+
+test_auto_merge_refuses_a_tier_above_the_threshold() {
+  merge_setup happy
+  run_script finish.sh merge 6 --branch feat/issue-6-x --auto trivial --tier standard
+  assert_rc 2
+  assert_key "$OUT" STOP_REASON auto-tier
+  assert_gh_not_called "pr merge" "a standard run merged under a trivial threshold"
+}
+
+test_auto_merge_none_never_merges() {
+  merge_setup happy
+  run_script finish.sh merge 6 --branch feat/issue-6-x --auto none --tier trivial
+  assert_rc 2
+  assert_key "$OUT" STOP_REASON auto-tier
+  assert_gh_not_called "pr merge" "--auto none merged"
+}
+
+test_auto_merge_refuses_a_diff_touching_a_human_path() {
+  merge_setup happy
+  write_config "$REPO" human_paths "migrations/* work.txt"
+  assert_human_path_blocks_merge "a diff touching a human path merged unattended"
+  assert_key "$OUT" HUMAN_PATH work.txt
+}
+
+test_auto_merge_refuses_a_deleted_human_path() {
+  merge_setup happy
+  mkdir -p "$REPO/migrations"
+  printf 'a\n' >"$REPO/migrations/a.sql" && printf 'b\n' >"$REPO/migrations/b.sql"
+  git -C "$REPO" add migrations/a.sql migrations/b.sql
+  git -C "$REPO" commit -qm "add migrations"
+  git -C "$REPO" push -q origin main
+  git -C "$WT" rebase -q origin/main
+  git -C "$WT" rm -q migrations/a.sql
+  git -C "$WT" commit -qm "drop a migration" && git -C "$WT" push -q -f origin feat/issue-6-x
+  write_config "$REPO" human_paths "migrations/*"
+  assert_human_path_blocks_merge "a deleted human path merged unattended"
+}
+
+test_auto_merge_refuses_a_human_path_with_a_space() {
+  merge_setup happy
+  mkdir -p "$WT/my dir" && printf 'x\n' >"$WT/my dir/x.txt"
+  git -C "$WT" add "my dir/x.txt" && git -C "$WT" commit -qm "spaced path"
+  git -C "$WT" push -q origin feat/issue-6-x
+  write_config "$REPO" human_paths "my?dir/*"
+  assert_human_path_blocks_merge "a human path with a space merged unattended"
+  assert_key "$OUT" HUMAN_PATH "my dir/x.txt"
+}
+
+test_auto_merge_refuses_when_the_base_does_not_resolve() {
+  merge_setup happy
+  git -C "$WT" update-ref -d refs/remotes/origin/main
+  git -C "$REPO" branch -q -D main 2>/dev/null || git -C "$REPO" checkout -q --detach
+  git -C "$REPO" branch -q -D main 2>/dev/null || true
+  run_script finish.sh merge 6 --branch feat/issue-6-x --auto trivial --tier trivial
+  assert_rc 2
+  assert_key "$OUT" STOP_REASON auto-unprovable
+  assert_gh_not_called "pr merge"
+}
+
+test_auto_merge_merges_a_clean_run_at_or_under_the_threshold() {
+  merge_setup happy
+  write_config "$REPO" human_paths "migrations/*"
+  run_script finish.sh merge 6 --branch feat/issue-6-x --auto standard --tier trivial
+  assert_rc 0
+  assert_key "$OUT" MERGED true
+  assert_gh_called "pr merge feat/issue-6-x --squash --match-head-commit $SHA_OK"
+}
+
+test_auto_merge_without_human_paths_configured_still_merges() {
+  merge_setup happy
+  run_script finish.sh merge 6 --branch feat/issue-6-x --auto trivial --tier trivial
+  assert_rc 0
+  assert_key "$OUT" MERGED true
+}
+
+test_auto_and_tier_are_a_pair() {
+  merge_setup happy
+  run_script finish.sh merge 6 --branch feat/issue-6-x --auto trivial
+  assert_rc 4
+  assert_key "$OUT" DEGRADED_REASON auto-needs-tier
+  run_script finish.sh merge 6 --branch feat/issue-6-x --tier trivial
+  assert_rc 4
+  assert_key "$OUT" DEGRADED_REASON auto-needs-tier
+  run_script finish.sh merge 6 --branch feat/issue-6-x --auto huge --tier trivial
+  assert_rc 4
+  assert_key "$OUT" DEGRADED_REASON bad-tier
+  run_script finish.sh merge 6 --branch feat/issue-6-x --auto "" --tier ""
+  assert_rc 4
+  assert_key "$OUT" DEGRADED_REASON bad-tier
+  run_script finish.sh merge 6 --branch feat/issue-6-x --tier trivial --auto
+  assert_rc 4
+  assert_key "$OUT" DEGRADED_REASON bad-tier
+  assert_gh_not_called "pr merge" "a malformed --auto call merged"
+}
+
+test_merge_without_auto_is_unchanged() {
+  merge_setup happy
+  write_config "$REPO" human_paths "work.txt"
+  run_script finish.sh merge 6 --branch feat/issue-6-x
+  assert_rc 0
+  assert_key "$OUT" MERGED true
+}
+
+test_auto_merge_refuses_a_renamed_human_path() {
+  merge_setup happy
+  mkdir -p "$REPO/migrations"
+  printf 'a\n' >"$REPO/migrations/a.sql"
+  git -C "$REPO" add migrations/a.sql
+  git -C "$REPO" commit -qm "add a migration"
+  git -C "$REPO" push -q origin main
+  git -C "$WT" rebase -q origin/main
+  mkdir -p "$WT/db"
+  git -C "$WT" mv migrations/a.sql db/a.sql
+  git -C "$WT" commit -qm "move the migration out of migrations/"
+  git -C "$WT" push -q -f origin feat/issue-6-x
+  write_config "$REPO" human_paths "migrations/*"
+  assert_human_path_blocks_merge "a rename out of a human path merged unattended"
+}
+
+test_auto_merge_refuses_a_non_ascii_human_path() {
+  merge_setup happy
+  mkdir -p "$WT/migrations"
+  printf 'x\n' >"$WT/migrations/café.sql"
+  git -C "$WT" add "migrations/café.sql"
+  git -C "$WT" commit -qm "add an accented migration"
+  write_config "$REPO" human_paths "migrations/*"
+  assert_human_path_blocks_merge "a C-quoted non-ASCII human path merged unattended"
+}
+
+test_human_paths_value_may_be_commented() {
+  merge_setup happy
+  write_config "$REPO" human_paths 'work.txt   # never unattended'
+  assert_human_path_blocks_merge "a trailing comment defeated the glob"
+}
+
+test_human_paths_in_a_crlf_config_still_match() {
+  merge_setup happy
+  printf -- '---\r\nhuman_paths: work.txt\r\n---\r\n' >"$REPO/.claude/issue-to-pr/config.md"
+  assert_human_path_blocks_merge "a CR on the last glob defeated it"
+}
+
+test_human_paths_match_from_a_subdirectory_of_the_checkout() {
+  merge_setup happy
+  write_config "$REPO" human_paths work.txt
+  mkdir -p "$WT/sub" && enter "$WT/sub"
+  assert_human_path_blocks_merge "the guard read human_paths relative to a subdirectory"
+}
+
+test_human_paths_with_quotes_is_refused() {
+  merge_setup happy
+  write_config "$REPO" human_paths '"work.txt"'
+  run_script finish.sh merge 6 --branch feat/issue-6-x --auto trivial --tier trivial
+  assert_rc 2
+  assert_key "$OUT" STOP_REASON auto-unprovable
+  assert_gh_not_called "pr merge" "a quoted human_paths value merged unattended"
+}
+
+test_human_paths_as_a_yaml_list_is_refused() {
+  local v
+  merge_setup happy
+  for v in '' '[work.txt]' '- work.txt'; do
+    printf -- '---\nhuman_paths: %s\n  - work.txt\n---\n' "$v" >"$REPO/.claude/issue-to-pr/config.md"
+    run_script finish.sh merge 6 --branch feat/issue-6-x --auto trivial --tier trivial
+    assert_rc 2
+    assert_key "$OUT" STOP_REASON auto-unprovable
+    assert_gh_not_called "pr merge" "human_paths '$v' as a YAML list merged unattended"
+  done
+}
+
+test_auto_merge_refuses_a_human_path_with_a_quote() {
+  merge_setup happy
+  # Windows refuses a quote in a filename and update-index rejects the name, so build the commit
+  # with plumbing - mktree takes the raw bytes - and let git, not the filesystem, hold the path
+  local blob subtree tree commit
+  blob=$(printf 'x\n' | git -C "$WT" hash-object -w --stdin)
+  subtree=$(printf '100644 blob %s\ta"b.sql\n' "$blob" | git -C "$WT" mktree)
+  tree=$({ git -C "$WT" ls-tree HEAD; printf '040000 tree %s\tmigrations\n' "$subtree"; } | git -C "$WT" mktree)
+  commit=$(git -C "$WT" commit-tree "$tree" -p HEAD -m "quoted path")
+  git -C "$WT" update-ref refs/heads/feat/issue-6-x "$commit"
+  git -C "$WT" push -q -f origin feat/issue-6-x
+  write_config "$REPO" human_paths "migrations/*"
+  assert_human_path_blocks_merge "a C-quoted human path with a double quote merged unattended"
+  assert_key "$OUT" HUMAN_PATH '"migrations/a\"b.sql"'
+}
+
+test_auto_merge_refuses_an_empty_diff() {
+  local repo wt
+  repo=$(init_repo_with_remote)
+  wt="$TEST_TMPDIR/repo-worktrees/issue-6"
+  git -C "$repo" worktree add "$wt" -b feat/issue-6-x main >/dev/null 2>&1
+  git -C "$wt" push -q -u origin feat/issue-6-x 2>/dev/null || true
+  enter "$wt"
+  use_fake_gh happy
+  write_receipt "$repo" feat/issue-6-x "$SHA_OK"
+  run_script finish.sh merge 6 --branch feat/issue-6-x --auto trivial --tier trivial
+  assert_rc 2
+  assert_key "$OUT" STOP_REASON auto-diff-empty
+  assert_gh_not_called "pr merge" "a branch with no diff against its base merged unattended"
+}
+
+test_auto_merge_refuses_when_the_diff_cannot_be_read() {
+  merge_setup happy
+  git -C "$WT" checkout -q --detach
+  git -C "$REPO" branch -q -D feat/issue-6-x
+  run_script finish.sh merge 6 --branch feat/issue-6-x --auto trivial --tier trivial
+  assert_rc 2
+  assert_key "$OUT" STOP_REASON auto-unprovable
+  assert_gh_not_called "pr merge" "an unreadable diff merged unattended"
+}
