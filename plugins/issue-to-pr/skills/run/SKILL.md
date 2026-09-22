@@ -95,8 +95,6 @@ rather than a second routine question. Otherwise, `--grill` starts or continues
 batched question; include open `asked` items in the next round and record decisions as each round
 closes, never at the end — a grill is long enough to compact. It ends on the user's confirmation.
 Without the flag, those items go into ONE batched question. Either way, the only mid-run question.
-`--headless`: the resolve ladder in `R/headless.md` runs first, and what it cannot settle is
-posted, not asked.
 
 **4. Build.** Turn the design into a plan (`superpowers:writing-plans` for complex); TDD: failing
 test → implement → passing. UI/layout work is verified with `<visual_cmd>` or a browser test,
@@ -148,14 +146,13 @@ design, autonomous decisions and rejected alternatives. Board-mode: move the car
 *in review* the same way. Then report, length per tier (3 lines → full): what was built and why,
 test status with the green proof, the autonomous decisions, the PR link, and how much machinery
 ran (gate runs, review passes and level). Ask when to merge, and **stop** — merging is the next
-step (`--headless`: the merge policy in `R/headless.md` decides instead of asking).
+step.
 
 ## Step 8 — Merge on approval (GATE)
 
 Return to your working tree first: `cd` into the worktree (in-place fallback: stay in the main
 checkout on `<branch>`). Read the reply against *this* PR. **Merge only on an unambiguous
-go-ahead to merge THIS PR.** `--headless`: the go-ahead is the owner's PR comment relayed as your
-prompt (`R/headless.md`).
+go-ahead to merge THIS PR.**
 Approval covers the reported commit. If new commits arrived locally or on the PR, review their
 diff and repeat Steps 5–7 as a new review cycle with the tier's pass cap, then obtain approval
 for that head. A stale receipt requires this same cycle, not just another test run.

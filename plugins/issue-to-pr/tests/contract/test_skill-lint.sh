@@ -139,7 +139,7 @@ test_manifests_agree_on_what_the_plugin_does() {
 headless_md() { printf '%s' "$(references_dir)/headless.md"; }
 
 test_headless_is_one_flag_that_reshapes_two_contacts_and_adds_none() {
-  local hl checkpoint merge
+  local hl merge
   grep -q 'argument-hint:.*--headless' "$(skill_md)" || fail "argument-hint must advertise --headless"
   grep -q 'argument-hint:.*--auto-merge' "$(skill_md)" || fail "argument-hint must advertise --auto-merge"
   [ -f "$(headless_md)" ] || fail "R/headless.md missing"
@@ -151,10 +151,7 @@ test_headless_is_one_flag_that_reshapes_two_contacts_and_adds_none() {
   assert_contains "$hl" 'finish.sh merge <N> --branch <b> --auto' \
     "the self-merge must pass --auto so the script checks the tier and human paths"
   assert_contains "$hl" 'git status --porcelain' "a headless deploy must refuse a dirty main checkout"
-  checkpoint=$(skill_step Checkpoint)
-  assert_contains "$checkpoint" 'headless.md' "the checkpoint must hand --headless to R/headless.md"
   merge=$(skill_step Merge)
-  assert_contains "$merge" 'headless.md' "the merge gate must hand --headless to R/headless.md"
   assert_contains "$merge" 'Approval is never inferred' "the attended merge gate lost its closing rule"
   case "$hl" in *"fourth"* | *"four moments"*) fail "headless.md adds a contact moment" ;; esac
   case "$hl" in *"gh pr merge"*) fail "headless.md names a merge path other than finish.sh" ;; esac

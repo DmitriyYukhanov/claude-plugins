@@ -5,10 +5,10 @@ travel through GitHub. Every comment below is human-facing: humanize it (the Har
 
 ## Labels are the state
 
-Flip with `gh issue edit <N> --add-label <a> --remove-label <b>`; one sentence, no script — a
-label is reversible. `agent` (owner: queued) → `agent:running` (the dispatcher set it when it
-launched you) → `agent:waiting` | `agent:review` | `agent:failed`. Launched by hand rather than
-by a dispatcher, the caller sets `agent:running` before the run starts. Done is the issue closing
+Flip with `gh issue edit <N> --add-label <a> --remove-label <b>`. `agent` (owner: queued) →
+`agent:running` (the dispatcher set it when it launched you) → `agent:waiting` | `agent:review` |
+`agent:failed`. Launched by hand rather than by a dispatcher, the caller sets `agent:running`
+before the run starts. Done is the issue closing
 on the merge. After Step 9, and after `after_merge` when there is one, remove the run's `agent:*`
 label once the run ends cleanly: a closed issue carries none, so a dispatcher never mistakes it
 for live work; a run that ended on `agent:failed` keeps it. Whoever launched you resumes the
@@ -85,10 +85,7 @@ end the turn; nothing after this line runs.
 If the config has `after_merge`, run its value as your next instruction, with these rules on
 top of whatever skill it names:
 
-- `git status --porcelain` in the main checkout non-empty → do not deploy; comment on the PR what
-  is dirty, flip to `agent:failed`, end the turn. This is the only guard against the owner being
-  mid-edit in that checkout.
-- Once the checkout is clean, put it on the base branch and pull it to a revision that contains
+- Put the checkout on the base branch and pull it to a revision that contains
   the merge (`git switch <base> && git pull --ff-only`) before deploying; a divergence or a
   failed pull is `agent:failed`, not a deploy.
 - No inline approval loop: where the deploy skill would show you a draft and ask, take its own

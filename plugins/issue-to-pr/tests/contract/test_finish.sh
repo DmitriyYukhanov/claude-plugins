@@ -350,6 +350,12 @@ test_auto_and_tier_are_a_pair() {
   run_script finish.sh merge 6 --branch feat/issue-6-x --auto huge --tier trivial
   assert_rc 4
   assert_key "$OUT" DEGRADED_REASON bad-tier
+  run_script finish.sh merge 6 --branch feat/issue-6-x --auto "" --tier ""
+  assert_rc 4
+  assert_key "$OUT" DEGRADED_REASON bad-tier
+  run_script finish.sh merge 6 --branch feat/issue-6-x --tier trivial --auto
+  assert_rc 4
+  assert_key "$OUT" DEGRADED_REASON bad-tier
   assert_gh_not_called "pr merge" "a malformed --auto call merged"
 }
 
@@ -388,16 +394,6 @@ test_auto_merge_refuses_a_non_ascii_human_path() {
   assert_human_path_blocks_merge "a C-quoted non-ASCII human path merged unattended"
 }
 
-test_auto_with_an_empty_value_degrades() {
-  merge_setup happy
-  run_script finish.sh merge 6 --branch feat/issue-6-x --auto "" --tier ""
-  assert_rc 4
-  assert_key "$OUT" DEGRADED_REASON auto-needs-tier
-  run_script finish.sh merge 6 --branch feat/issue-6-x --tier trivial --auto
-  assert_rc 4
-  assert_key "$OUT" DEGRADED_REASON auto-needs-tier
-  assert_gh_not_called "pr merge" "an --auto with no value merged with no guard"
-}
 
 test_human_paths_value_may_be_commented() {
   merge_setup happy
