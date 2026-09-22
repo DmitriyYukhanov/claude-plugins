@@ -401,6 +401,22 @@ test_human_paths_value_may_be_commented() {
   assert_human_path_blocks_merge "a trailing comment defeated the glob"
 }
 
+test_human_paths_in_a_crlf_config_still_match() {
+  merge_setup happy
+  printf -- '---
+human_paths: work.txt
+---
+' >"$REPO/.claude/issue-to-pr/config.md"
+  assert_human_path_blocks_merge "a CR on the last glob defeated it"
+}
+
+test_human_paths_match_from_a_subdirectory_of_the_checkout() {
+  merge_setup happy
+  write_config "$REPO" human_paths work.txt
+  mkdir -p "$WT/sub" && enter "$WT/sub"
+  assert_human_path_blocks_merge "the guard read human_paths relative to a subdirectory"
+}
+
 test_human_paths_with_quotes_is_refused() {
   merge_setup happy
   write_config "$REPO" human_paths '"work.txt"'

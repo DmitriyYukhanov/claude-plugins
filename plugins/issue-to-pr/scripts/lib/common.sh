@@ -110,6 +110,7 @@ config_line() { # root key -> the value of one top-level frontmatter line, or em
   [ -f "$f" ] || return 0
   value=$(sed -n "s/^$2:[[:space:]]*//p" "$f" 2>/dev/null) || return 1
   value=${value%%$'\n'*}
+  value=${value%$'\r'}
   printf '%s' "$value" | sed -E 's/[[:space:]]+#.*$//'
 }
 

@@ -6,9 +6,8 @@ travel through GitHub. Every comment below is human-facing: humanize it (the Har
 ## Labels are the state
 
 Flip with `gh issue edit <N> --add-label <a> --remove-label <b>`. `agent` (owner: queued) →
-`agent:running` (the dispatcher set it when it launched you) → `agent:waiting` | `agent:review` |
-`agent:failed`. Launched by hand rather than by a dispatcher, the caller sets `agent:running`
-before the run starts. Done is the issue closing
+`agent:running` → `agent:waiting` | `agent:review` | `agent:failed`. Step 0 adds `agent:running`
+when the issue lacks it, so a run launched by hand needs no label first. Done is the issue closing
 on the merge. After Step 9, and after `after_merge` when there is one, remove the run's `agent:*`
 label once the run ends cleanly: a closed issue carries none, so a dispatcher never mistakes it
 for live work; a run that ended on `agent:failed` keeps it. Whoever launched you resumes the
@@ -76,8 +75,9 @@ Step 8's change-request branch, unchanged.
 
 ## After Step 9
 
-On entering Step 9, `git status --porcelain` in the main checkout non-empty is `agent:failed`
-before any pull or smoke: comment what is dirty, flip, end the turn.
+On entering Step 9 with `smoke_cmd` or `after_merge` set, `git status --porcelain` in the main
+checkout non-empty is `agent:failed` before any pull: comment what is dirty, flip, end the turn.
+Cleanup alone needs no pull, so a dirty main checkout does not stop it.
 
 Step 9 red smoke, headless: the draft revert PR named in a comment on the PR, `agent:failed`,
 end the turn; nothing after this line runs.

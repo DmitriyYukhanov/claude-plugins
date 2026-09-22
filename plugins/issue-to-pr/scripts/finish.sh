@@ -75,12 +75,12 @@ cmd_merge() {
     esac
     pathspecs=()
     read -ra pathspecs <<<"$globs"   # read never globs, so the shell cannot expand them
-    changed=$(git diff --no-renames --name-only "$base_rev...$branch" 2>/dev/null) ||
+    changed=$(git -C "$root" diff --no-renames --name-only "$base_rev...$branch" 2>/dev/null) ||
       stop auto-unprovable "issue-to-pr: could not read the diff $base_rev...$branch, so the merge cannot be proved safe. Fetch the base and re-run."
     [ -n "$changed" ] ||
       stop auto-diff-empty "issue-to-pr: the diff $base_rev...$branch is empty, so the human-path check has nothing to prove; a PR with no diff against its base does not merge unattended. Comment on the PR that it waits for 'merge', label agent:review, and end the turn."
     if [ "${#pathspecs[@]}" -gt 0 ]; then
-      hit=$(git diff --no-renames --name-only "$base_rev...$branch" -- "${pathspecs[@]}" 2>/dev/null) ||
+      hit=$(git -C "$root" diff --no-renames --name-only "$base_rev...$branch" -- "${pathspecs[@]}" 2>/dev/null) ||
         stop auto-unprovable "issue-to-pr: git rejected human_paths as pathspecs ($globs); fix the config and re-run."
       [ -z "$hit" ] || {
         emit HUMAN_PATH "${hit%%$'\n'*}"
