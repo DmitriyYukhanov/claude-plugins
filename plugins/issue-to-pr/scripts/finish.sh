@@ -98,10 +98,6 @@ cmd_merge() {
     stop merge-failed "issue-to-pr: gh pr merge refused; report MERGE_ERROR verbatim. If it says this merge method is not allowed, re-run once with --method merge (then rebase). If checks are still pending, 'gh pr checks $branch --watch', then re-run. The same refusal a third time is a livelock: hand back."
   fi
   emit MERGED true
-  if [ -n "$auto" ]; then
-    emit AUTO_MERGED true
-    emit AUTO_TIER "$tier"
-  fi
   emit MERGE_METHOD "$method"
   emit MERGED_INTO "$base_ref"
   default_ref=$(gh repo view --json defaultBranchRef --jq .defaultBranchRef.name 2>/dev/null || printf '')

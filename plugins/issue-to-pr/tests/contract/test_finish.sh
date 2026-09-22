@@ -328,7 +328,6 @@ test_auto_merge_merges_a_clean_run_at_or_under_the_threshold() {
   run_script finish.sh merge 6 --branch feat/issue-6-x --auto standard --tier trivial
   assert_rc 0
   assert_key "$OUT" MERGED true
-  assert_key "$OUT" AUTO_MERGED true
   assert_gh_called "pr merge feat/issue-6-x --squash --match-head-commit $SHA_OK"
 }
 
@@ -336,7 +335,7 @@ test_auto_merge_without_human_paths_configured_still_merges() {
   merge_setup happy
   run_script finish.sh merge 6 --branch feat/issue-6-x --auto trivial --tier trivial
   assert_rc 0
-  assert_key "$OUT" AUTO_MERGED true
+  assert_key "$OUT" MERGED true
 }
 
 test_auto_and_tier_are_a_pair() {
@@ -365,7 +364,6 @@ test_merge_without_auto_is_unchanged() {
   run_script finish.sh merge 6 --branch feat/issue-6-x
   assert_rc 0
   assert_key "$OUT" MERGED true
-  assert_not_contains "$OUT" "AUTO_MERGED" "an attended merge must not report an auto verdict"
 }
 
 test_auto_merge_refuses_a_renamed_human_path() {
@@ -393,7 +391,6 @@ test_auto_merge_refuses_a_non_ascii_human_path() {
   write_config "$REPO" human_paths "migrations/*"
   assert_human_path_blocks_merge "a C-quoted non-ASCII human path merged unattended"
 }
-
 
 test_human_paths_value_may_be_commented() {
   merge_setup happy
@@ -440,15 +437,9 @@ test_auto_merge_refuses_a_human_path_with_a_quote() {
   # Windows refuses a quote in a filename and update-index rejects the name, so build the commit
   # with plumbing - mktree takes the raw bytes - and let git, not the filesystem, hold the path
   local blob subtree tree commit
-  blob=$(printf 'x
-' | git -C "$WT" hash-object -w --stdin)
-  subtree=$(printf '100644 blob %s	a"b.sql
-' "$blob" | git -C "$WT" mktree)
-  tree=$(
-    { git -C "$WT" ls-tree HEAD; printf '040000 tree %s	migrations
-' "$subtree"; } |
-      git -C "$WT" mktree
-  )
+  blob=$(printf 'x\n' | git -C "$WT" hash-object -w --stdin)
+  subtree=$(printf '100644 blob %s\ta"b.sql\n' "$blob" | git -C "$WT" mktree)
+  tree=$({ git -C "$WT" ls-tree HEAD; printf '040000 tree %s\tmigrations\n' "$subtree"; } | git -C "$WT" mktree)
   commit=$(git -C "$WT" commit-tree "$tree" -p HEAD -m "quoted path")
   git -C "$WT" update-ref refs/heads/feat/issue-6-x "$commit"
   git -C "$WT" push -q -f origin feat/issue-6-x

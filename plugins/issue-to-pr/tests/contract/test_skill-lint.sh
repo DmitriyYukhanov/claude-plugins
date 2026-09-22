@@ -136,18 +136,14 @@ test_manifests_agree_on_what_the_plugin_does() {
     marketplace.json: $market"
 }
 
-headless_md() { printf '%s' "$(references_dir)/headless.md"; }
-
 test_headless_is_one_flag_that_reshapes_two_contacts_and_adds_none() {
   local hl merge
   grep -q 'argument-hint:.*--headless' "$(skill_md)" || fail "argument-hint must advertise --headless"
   grep -q 'argument-hint:.*--auto-merge' "$(skill_md)" || fail "argument-hint must advertise --auto-merge"
-  [ -f "$(headless_md)" ] || fail "R/headless.md missing"
-  hl=$(cat "$(headless_md)")
+  hl=$(cat "$(references_dir)/headless.md") || fail "R/headless.md missing"
   assert_contains "$hl" 'agent:waiting' "headless.md must name the label a posted question sets"
   assert_contains "$hl" 'agent:review'  "headless.md must name the label an unmerged PR sets"
   assert_contains "$hl" 'OWNER'         "headless.md must say only the owner's comment continues a run"
-  assert_contains "$hl" 'finish.sh merge' "headless.md must route the self-merge through finish.sh"
   assert_contains "$hl" 'finish.sh merge <N> --branch <b> --auto' \
     "the self-merge must pass --auto so the script checks the tier and human paths"
   assert_contains "$hl" 'git status --porcelain' "a headless deploy must refuse a dirty main checkout"
