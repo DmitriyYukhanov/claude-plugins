@@ -70,9 +70,11 @@ cmd_merge() {
     # receipt plus --match-head-commit already bind the merge to head_sha.
     globs=$(config_line "$root" human_paths) ||
       stop auto-unprovable "issue-to-pr: .claude/issue-to-pr/config.md exists but could not be read, so human_paths is unknown; fix the file and re-run."
-    case "$globs" in *\"* | *\'*)
-      stop auto-unprovable "issue-to-pr: human_paths must be bare space-separated globs, no quotes (got: $globs); fix the config and re-run." ;;
+    case "$globs" in *[\"\'[]* | -*)
+      stop auto-unprovable "issue-to-pr: human_paths must be one line of bare space-separated globs, no quotes, no YAML list (got: $globs); fix the config and re-run." ;;
     esac
+    [ -n "$globs" ] || ! grep -q '^human_paths:' "$(state_dir "$root")/config.md" 2>/dev/null ||
+      stop auto-unprovable "issue-to-pr: human_paths is empty on its own line; put the globs on that line or delete the key, then re-run."
     pathspecs=()
     read -ra pathspecs <<<"$globs"   # read never globs, so the shell cannot expand them
     changed=$(git -C "$root" diff --no-renames --name-only "$base_rev...$branch" 2>/dev/null) ||

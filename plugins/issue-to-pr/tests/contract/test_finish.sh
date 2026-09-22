@@ -403,10 +403,7 @@ test_human_paths_value_may_be_commented() {
 
 test_human_paths_in_a_crlf_config_still_match() {
   merge_setup happy
-  printf -- '---
-human_paths: work.txt
----
-' >"$REPO/.claude/issue-to-pr/config.md"
+  printf -- '---\r\nhuman_paths: work.txt\r\n---\r\n' >"$REPO/.claude/issue-to-pr/config.md"
   assert_human_path_blocks_merge "a CR on the last glob defeated it"
 }
 
@@ -424,6 +421,18 @@ test_human_paths_with_quotes_is_refused() {
   assert_rc 2
   assert_key "$OUT" STOP_REASON auto-unprovable
   assert_gh_not_called "pr merge" "a quoted human_paths value merged unattended"
+}
+
+test_human_paths_as_a_yaml_list_is_refused() {
+  local v
+  merge_setup happy
+  for v in '' '[work.txt]' '- work.txt'; do
+    printf -- '---\nhuman_paths: %s\n  - work.txt\n---\n' "$v" >"$REPO/.claude/issue-to-pr/config.md"
+    run_script finish.sh merge 6 --branch feat/issue-6-x --auto trivial --tier trivial
+    assert_rc 2
+    assert_key "$OUT" STOP_REASON auto-unprovable
+    assert_gh_not_called "pr merge" "human_paths '$v' as a YAML list merged unattended"
+  done
 }
 
 test_auto_merge_refuses_a_human_path_with_a_quote() {
