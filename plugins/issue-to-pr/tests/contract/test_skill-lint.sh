@@ -210,6 +210,8 @@ test_headless_state_lives_in_marked_comments_on_the_issue() {
   assert_not_contains "$hl" 'as a PR comment' "state comments live on the issue, never on the PR"
   assert_not_contains "$hl" 'comment on the PR' "the merge-policy stop wording must point at the issue, not the PR"
   assert_contains "$hl" 'not a resumed run' "the self-merge policy must hold a resumed run back"
+  assert_contains "$hl" 'every owner reply above the cursors' \
+    "several owner replies across issue and PR must all be read before a resumed review merges"
   hard=$(awk '/^- \*\*Merge is gated/ { f = 1 } f && /^- / && !/^- \*\*Merge is gated/ { exit } f { print }' "$(skill_md)")
   assert_contains "$hard" 'owner reply' "the merge Hard rule must name the owner reply as the headless go-ahead"
   assert_contains "$hard" 'never self-merges' "the merge Hard rule must hold a resumed run back from self-merging"
