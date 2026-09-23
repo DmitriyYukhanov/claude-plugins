@@ -31,23 +31,17 @@ Both skills share this preflight check. Read this file and execute the steps bef
 
 2. **On success** — proceed with the workflow.
 
-## Recommended Codex Config
+## Model Defaults
 
-Informational, not blocking:
+Unless the user names a model or effort for this run, both sides run the newest flagship at `medium` effort. No version is pinned here, so a new release is picked up without editing the skills.
 
-```toml
-# ~/.codex/config.toml
-model = "gpt-5.6-sol"
-model_reasoning_effort = "xhigh"
-[features]
-multi_agent = true
-```
+- **Claude:** the latest Opus at `medium` effort, set by the skill frontmatter (`model: opus`, `effort: medium`).
+- **Codex:** the latest Astra model at `medium` effort. Resolve the slug once per run, before the first dispatch: run `codex debug models` and take the newest slug containing `astra` (highest version number). Call it `$ASTRA` below.
+  - No Astra slug listed → run `npm install -g @openai/codex@latest` and look again. Still none → omit the model flag and let Codex use its own default; tell the user which model ran.
+  - Every `/codex:rescue` dispatch carries `--model $ASTRA --effort medium`; every `codex exec` fallback carries `--model $ASTRA -c model_reasoning_effort=medium`.
+  - `/codex:review` takes no model flags and runs on the `model` in `~/.codex/config.toml`. When the model matters for that review, send it through `/codex:rescue` with the flags instead.
 
-`gpt-5.6-sol` is OpenAI's current flagship Codex model — the top-priority tier of the GPT-5.6 family (Sol/Terra/Luna), shipped in Codex CLI 0.143.0 (released 2026-07-08) and documented as the strongest model for complex agentic coding. It requires **Codex CLI ≥ 0.143.0** — if `codex exec -m gpt-5.6-sol` errors with an unknown/unavailable model, run `npm install -g @openai/codex@latest` first, then retry.
-
-Two things OpenAI's docs do not yet settle, so treat them as open rather than assumed:
-- **Auth availability** — unlike `gpt-5.5`'s documented ChatGPT-only rollout window, it is not confirmed whether `gpt-5.6-sol` requires ChatGPT sign-in or also works with API-key auth. If `-m gpt-5.6-sol` errors as unavailable for any reason, fall back to `model = "gpt-5.5"`; if that also fails under API-key auth, fall back further to `model = "gpt-5.4"`.
-- **Reasoning effort** — the model catalog's own default for `gpt-5.6-sol` is `low` (it's tuned to score higher on fewer tokens than gpt-5.5), while this config deliberately overrides to `xhigh` for review depth. `xhigh` is model-dependent per Codex docs — if the CLI rejects it for `gpt-5.6-sol`, drop to `high`.
+A user-named model or effort replaces the default for that side only, for the whole run.
 
 ## Runtime Failure Policy
 
@@ -195,7 +189,7 @@ PROMPT_EOF
 
 # Capture stdout AND stderr — stderr carries sandbox errors Monitor needs to see.
 # Append the exit code to the SAME log file Monitor tails, so the completion marker is observable.
-codex exec --model gpt-5.6-sol --full-auto < "$TMP/codex-prompt.txt" > "$TMP/codex-output.txt" 2>&1
+codex exec --model $ASTRA -c model_reasoning_effort=medium --full-auto < "$TMP/codex-prompt.txt" > "$TMP/codex-output.txt" 2>&1
 echo "EXIT_CODE=$?" >> "$TMP/codex-output.txt"
 ```
 
@@ -230,11 +224,11 @@ Get-Content "$env:TEMP\codex-output.txt" -Wait | Select-String -Pattern '## Stat
 
 ```bash
 # Bash / Git Bash / WSL with GNU coreutils
-timeout 600 codex exec --model gpt-5.6-sol --full-auto < "$TMP/codex-prompt.txt" > "$TMP/codex-output.txt" 2>&1
+timeout 600 codex exec --model $ASTRA -c model_reasoning_effort=medium --full-auto < "$TMP/codex-prompt.txt" > "$TMP/codex-output.txt" 2>&1
 echo "EXIT_CODE=$?" >> "$TMP/codex-output.txt"
 
 # Bash / Git Bash / WSL without timeout — rely on Monitor
-codex exec --model gpt-5.6-sol --full-auto < "$TMP/codex-prompt.txt" > "$TMP/codex-output.txt" 2>&1
+codex exec --model $ASTRA -c model_reasoning_effort=medium --full-auto < "$TMP/codex-prompt.txt" > "$TMP/codex-output.txt" 2>&1
 echo "EXIT_CODE=$?" >> "$TMP/codex-output.txt"
 ```
 
@@ -242,7 +236,7 @@ echo "EXIT_CODE=$?" >> "$TMP/codex-output.txt"
 # Native Windows PowerShell — no timeout, rely on Monitor
 $prompt = Join-Path $env:TEMP 'codex-prompt.txt'
 $log    = Join-Path $env:TEMP 'codex-output.txt'
-Get-Content $prompt | codex exec --model gpt-5.6-sol --full-auto *> $log
+Get-Content $prompt | codex exec --model $ASTRA -c model_reasoning_effort=medium --full-auto *> $log
 "EXIT_CODE=$LASTEXITCODE" | Add-Content $log
 ```
 

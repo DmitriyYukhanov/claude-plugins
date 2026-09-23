@@ -1,6 +1,7 @@
 ---
 name: collaborative-loop
 model: opus
+effort: medium
 description: Sequential drive/validate/act collaboration between Claude and Codex. Claude analyzes, Codex validates each finding, both models must agree before action. Use when you want iterative improvement with bilateral consensus.
 ---
 
@@ -11,6 +12,8 @@ description: Sequential drive/validate/act collaboration between Claude and Code
 Sequential pair-programming loop between Claude and Codex CLI. Claude PRODUCES an analysis with numbered findings, Codex VALIDATES each finding individually (CONFIRM/REJECT), Claude RE-EVALUATES the validation decisions, and only findings where both models agree proceed to implementation. After fixes, Codex reviews the changes and the loop repeats until clean.
 
 **Core principle:** Claude never acts on its own unvalidated output. Every finding passes through bilateral consensus before implementation.
+
+**Models:** latest Opus and latest Astra, both at `medium` effort, unless the user names others. Every Codex dispatch carries the resolved model and effort flags; see "Model Defaults" in `${CLAUDE_PLUGIN_ROOT}/skills/shared/prerequisites.md`.
 
 ## Trigger Phrases
 

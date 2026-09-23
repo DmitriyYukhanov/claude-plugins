@@ -43,7 +43,7 @@ Trigger phrases: "cross-review", "dual review", "get a second opinion".
 ## Defaults and requirements
 
 - Both workflows review the branch diff against the base branch when no target files are given.
-- The default Codex model is `gpt-5.6-sol` (requires Codex CLI 0.143.0 or newer); if unavailable it falls back to `gpt-5.5`, then `gpt-5.4`.
+- Claude runs the latest Opus and Codex runs the latest Astra model, both at medium effort. Name a model or effort in your request to change either side.
 - Both models are always required: if Codex is down, the workflows attempt a direct `codex exec` fallback and stop rather than degrade to a Claude-only review.
 
 ## License

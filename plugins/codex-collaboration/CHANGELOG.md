@@ -5,6 +5,11 @@ All notable changes to the **codex-collaboration** plugin will be documented in 
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.12.0] - 2026-09-23
+
+### Changed
+- Run the latest Opus and the latest Codex Astra model at medium effort by default instead of a pinned Codex model at extra-high effort
+
 ## [1.11.0] - 2026-08-28
 
 ### Added

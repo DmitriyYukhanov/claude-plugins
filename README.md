@@ -93,7 +93,7 @@ Cross-model collaboration between Claude and Codex with two workflows:
 - **collaborative-loop** — Sequential drive/validate/act cycles. Claude analyzes, Codex validates each finding, both models must agree before any action is taken. Iterates until approved or max rounds.
 - **cross-review** — Parallel dual review. Both Claude and Codex review independently. Findings confirmed by reviewer agreement, cross-validation, or evidence research are auto-applied each round; only genuinely inconclusive disagreements surface for user decision.
 
-The default Codex model is `gpt-5.6-sol` (requires Codex CLI 0.143.0 or newer); if unavailable it falls back to `gpt-5.5`, then `gpt-5.4`.
+Both workflows run the latest Opus and the latest Codex Astra model at medium effort, unless you ask for a different model or effort. The skills find the Astra model with `codex debug models` on each run, so a new release needs no plugin update.
 
 **Requires** the [Codex plugin for Claude Code](https://github.com/openai/codex-plugin-cc). Install it first:
 1. `/plugin marketplace add openai/codex-plugin-cc`
