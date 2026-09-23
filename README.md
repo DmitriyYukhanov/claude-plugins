@@ -141,7 +141,7 @@ using one shared workflow and the same scripts:
 - The PR auto-links the issue (`Closes #N`), which GitHub closes on a merge into the default branch; board cards advance to *in-progress* at branch cut and *in-review* at PR open, with `Done` left to GitHub's merge-time automation.
 - Graceful by default — missing the `project` token scope degrades to link-only, and a failed status write never blocks the PR.
 - Optional `.claude/issue-to-pr/config.md` for board URL, base branch, and test commands (auto-detected when unset); companion skills used if installed, with inline fallbacks otherwise (the list is in the plugin's [companions.md](./plugins/issue-to-pr/skills/run/references/companions.md)).
-- Headless: with `--headless` the run's question and its merge approval are GitHub comments; trivial work self-merges (`--auto-merge`), and a repo can name `human_paths` that never do.
+- Headless: with `--headless` the run's question and its merge approval are comments on the issue, and your reply is picked up by a fresh run that reads the state back from the issue; trivial work self-merges (`--auto-merge`), and a repo can name `human_paths` that never do. [agent-dispatch](#agent-dispatch) launches these runs from a label.
 
 [View documentation](./plugins/issue-to-pr/README.md)
 

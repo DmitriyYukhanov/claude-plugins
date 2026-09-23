@@ -40,11 +40,13 @@ The pipeline runs triage, research, design, implementation, review, PR, approval
 and cleanup. Hard gates block forward progress; everything between them scales to the task.
 
 **Headless.** `--headless` is for a run nobody is watching: its one question and its "ready to
-merge" become GitHub comments, labels (`agent:running`, `agent:waiting`, `agent:review`,
-`agent:failed`) carry the state, and the owner's reply comment continues the run. A PR whose tier
-is at or under `--auto-merge` (default `trivial`; `none` outside headless) merges on its own when
-its gates, reviews and ratchet were all clean and the diff touches no `human_paths`. The dispatcher
-that launches such runs from a label is a separate release.
+merge" become comments on the issue, labels (`agent:running`, `agent:waiting`, `agent:review`,
+`agent:failed`) carry the state, and a marker line in each comment records where the run stopped.
+Your reply on the issue or the PR is picked up by a fresh run, which reads that state back and
+carries on. A PR whose tier is at or under `--auto-merge` (default `trivial`; `none` outside
+headless) merges on its own when its gates, reviews and ratchet were all clean and the diff
+touches no `human_paths`; a run that had to wait for you never does. The `agent-dispatch` plugin
+launches these runs from a label.
 
 - **Isolated per task.** Each run cuts its branch inside a dedicated
   `../<repo>-worktrees/issue-<N>` git worktree, so several local agents can drive different
