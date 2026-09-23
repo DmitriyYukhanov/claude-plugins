@@ -202,6 +202,7 @@ test_headless_state_lives_in_marked_comments_on_the_issue() {
   assert_contains "$hl" 'never self-merges' "a resumed run must merge only on the owner's word"
   assert_contains "$hl" 're-read both threads' "the run must look for a late reply before it parks"
   assert_not_contains "$hl" 'next prompt' "the reply no longer arrives as a prompt: every run starts fresh from GitHub"
+  # shellcheck disable=SC2016 # the backticks are literal Markdown, not a command substitution
   assert_not_contains "$hl" 'flip back to `agent:running`' "a resumed run no longer flips back; its launcher already did"
   assert_not_contains "$hl" 'on the PR once one exists' "state comments live on the issue, never on the PR"
   assert_not_contains "$hl" 'as a PR comment' "state comments live on the issue, never on the PR"
