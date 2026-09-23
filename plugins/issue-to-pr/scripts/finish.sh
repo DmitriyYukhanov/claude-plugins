@@ -84,7 +84,7 @@ cmd_merge() {
         stop auto-unprovable "issue-to-pr: git rejected human_paths as pathspecs ($globs); fix the config and re-run."
       [ -z "$hit" ] || {
         emit HUMAN_PATH "${hit%%$'\n'*}"
-        stop auto-human-path "issue-to-pr: ${hit%%$'\n'*} matches human_paths; this PR waits for a human 'merge'. Comment, label agent:review, end the turn."
+        stop auto-human-path "issue-to-pr: ${hit%%$'\n'*} matches human_paths; this PR waits for a human 'merge'. Post a state=review comment on the issue that it waits for 'merge', label agent:review, and end the turn."
       }
     fi
   fi

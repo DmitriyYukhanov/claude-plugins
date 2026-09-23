@@ -122,6 +122,15 @@ test_hook_holds_main_to_a_version_bump() {
   refuse_commit unbumped "Plugin version bump required"
 }
 
+test_hook_rejects_a_version_mismatch_on_a_feature_branch() {
+  fixture_repo "Does the original thing."
+  git switch -q -c feat/work
+  plugin_json 1.1.0 "Does the original thing." > plugins/foo/.claude-plugin/plugin.json
+  marketplace_json "Does the original thing." 1.2.0 > .claude-plugin/marketplace.json
+  git add -A
+  refuse_commit mismatch "plugin.json=1.1.0, marketplace.json=1.2.0"
+}
+
 test_hook_lets_a_feature_branch_commit_without_a_bump() {
   local out
   fixture_repo "Does the original thing."

@@ -261,6 +261,7 @@ assert_human_path_blocks_merge() { # msg
   run_script finish.sh merge 6 --branch feat/issue-6-x --auto trivial --tier trivial
   assert_rc 2
   assert_key "$OUT" STOP_REASON auto-human-path
+  assert_contains "$ERR" "on the issue" "the auto-human-path policy stop must point at the issue, not the PR"
   assert_gh_not_called "pr merge" "$1"
 }
 
@@ -269,6 +270,7 @@ test_auto_merge_refuses_a_tier_above_the_threshold() {
   run_script finish.sh merge 6 --branch feat/issue-6-x --auto trivial --tier standard
   assert_rc 2
   assert_key "$OUT" STOP_REASON auto-tier
+  assert_contains "$ERR" "on the issue" "the auto-tier policy stop must point at the issue, not the PR"
   assert_gh_not_called "pr merge" "a standard run merged under a trivial threshold"
 }
 
@@ -460,6 +462,7 @@ test_auto_merge_refuses_an_empty_diff() {
   run_script finish.sh merge 6 --branch feat/issue-6-x --auto trivial --tier trivial
   assert_rc 2
   assert_key "$OUT" STOP_REASON auto-diff-empty
+  assert_contains "$ERR" "on the issue" "the auto-diff-empty policy stop must point at the issue, not the PR"
   assert_gh_not_called "pr merge" "a branch with no diff against its base merged unattended"
 }
 

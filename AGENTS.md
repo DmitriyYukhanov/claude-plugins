@@ -10,7 +10,7 @@ Collection of Claude Code plugins: skills, agents, hooks, and scripts. Issues an
 
 ## Plugin versioning
 
-Any change under `plugins/<name>/` bumps `"version"` in `plugins/<name>/.claude-plugin/plugin.json` and the matching entry in `.claude-plugin/marketplace.json`. The pre-commit hook enforces the bump on commits to `main`; on a development branch, commit freely and bump before the PR. It rejects the two disagreeing on any branch.
+Any change under `plugins/<name>/` bumps `"version"` in `plugins/<name>/.claude-plugin/plugin.json` and the matching entry in `.claude-plugin/marketplace.json`. The pre-commit hook enforces the bump and its changelog entry only on commits to `main`, and rejects the two manifests disagreeing on any branch; on a development branch nothing else checks the bump, so bump the version and add the CHANGELOG entry yourself before opening the PR, since GitHub's squash-merge runs no hook.
 
 Semantic Versioning:
 

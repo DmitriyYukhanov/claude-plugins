@@ -191,6 +191,8 @@ test_headless_state_lives_in_marked_comments_on_the_issue() {
   assert_contains "$hl" '<!-- issue-to-pr state=waiting step=3 tier=standard pr=12 head=<sha> issue-read=<id> pr-read=<id> -->' \
     "the state marker's exact grammar is what agent-dispatch parses"
   assert_contains "$hl" 'gh api user --jq .login' "the owner must be defined by the login gh returns"
+  assert_contains "$hl" 'ends with one marker line' "every posted comment must say its marker is the last line"
+  assert_contains "$hl" 'a missing cursor counts as 0' "an absent issue-read/pr-read cursor must be pinned to 0"
   assert_contains "$hl" 'without a marker' "an owner reply is an unmarked comment"
   assert_contains "$hl" 'Edits never count' "an edited comment must never count as a reply"
   assert_contains "$hl" 'authorizes nothing' "a state comment by anyone but the owner must be ignored"

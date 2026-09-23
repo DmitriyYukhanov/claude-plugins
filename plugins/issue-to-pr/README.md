@@ -42,8 +42,8 @@ and cleanup. Hard gates block forward progress; everything between them scales t
 **Headless.** `--headless` is for a run nobody is watching: its one question and its "ready to
 merge" become comments on the issue, labels (`agent:running`, `agent:waiting`, `agent:review`,
 `agent:failed`) carry the state, and a marker line in each comment records where the run stopped.
-Your reply on the issue or the PR is picked up by a fresh run, which reads that state back and
-carries on. A PR whose tier is at or under `--auto-merge` (default `trivial`; `none` outside
+Your reply on the issue or the PR is picked up by the next `--headless` run you (or a dispatcher)
+start; that run reads the state back and carries on. A PR whose tier is at or under `--auto-merge` (default `trivial`; `none` outside
 headless) merges on its own when its gates, reviews and ratchet were all clean and the diff
 touches no `human_paths`; a run that had to wait for you never does.
 
