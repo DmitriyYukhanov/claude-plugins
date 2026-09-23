@@ -38,7 +38,7 @@ fixture_repo() { # foo_description
   local desc=${1:?description}
   [ -f "$(hook_src)" ] || fail "the hook is missing at $(hook_src)"
 
-  git init -q .
+  git init -q -b main .
   git config user.email t@example.com
   git config user.name Test
   git config core.hooksPath .githooks
@@ -113,6 +113,24 @@ test_hook_accepts_a_bump_whose_manifests_agree() {
   out=$(git commit -m agreed 2>&1) || fail "the hook blocked a correct commit:
 $out"
   assert_eq agreed "$(git log -1 --format=%s)" "commit reported success but nothing landed"
+}
+
+test_hook_holds_main_to_a_version_bump() {
+  fixture_repo "Does the original thing."
+  printf 'notes\n' > plugins/foo/notes.md
+  git add plugins/foo/notes.md
+  refuse_commit unbumped "Plugin version bump required"
+}
+
+test_hook_lets_a_feature_branch_commit_without_a_bump() {
+  local out
+  fixture_repo "Does the original thing."
+  git switch -q -c feat/work
+  printf 'notes\n' > plugins/foo/notes.md
+  git add plugins/foo/notes.md
+  out=$(git commit -m wip 2>&1) || fail "the hook held a feature-branch commit to a version bump:
+$out"
+  assert_eq wip "$(git log -1 --format=%s)" "commit reported success but nothing landed"
 }
 
 test_hook_leaves_an_unregistered_new_plugin_to_check_4() {

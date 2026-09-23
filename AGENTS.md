@@ -10,7 +10,7 @@ Collection of Claude Code plugins: skills, agents, hooks, and scripts. Issues an
 
 ## Plugin versioning
 
-Any change under `plugins/<name>/` bumps `"version"` in `plugins/<name>/.claude-plugin/plugin.json` and the matching entry in `.claude-plugin/marketplace.json`. The pre-commit hook rejects a commit where either is missing or the two disagree.
+Any change under `plugins/<name>/` bumps `"version"` in `plugins/<name>/.claude-plugin/plugin.json` and the matching entry in `.claude-plugin/marketplace.json`. The pre-commit hook enforces the bump on commits to `main`; on a development branch, commit freely and bump before the PR. It rejects the two disagreeing on any branch.
 
 Semantic Versioning:
 
@@ -20,7 +20,7 @@ Semantic Versioning:
 
 ## Changelog
 
-Every version bump adds an entry to `plugins/<name>/CHANGELOG.md` in [Keep a Changelog](https://keepachangelog.com/) format (Added, Changed, Deprecated, Removed, Fixed, Security). The pre-commit hook rejects a bump without one.
+Every version bump adds an entry to `plugins/<name>/CHANGELOG.md` in [Keep a Changelog](https://keepachangelog.com/) format (Added, Changed, Deprecated, Removed, Fixed, Security). On `main` the pre-commit hook rejects a bump without one.
 
 Entry rules:
 
