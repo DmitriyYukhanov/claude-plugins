@@ -212,6 +212,8 @@ test_headless_state_lives_in_marked_comments_on_the_issue() {
   assert_contains "$hl" 'not a resumed run' "the self-merge policy must hold a resumed run back"
   assert_contains "$hl" 'every owner reply above the cursors' \
     "several owner replies across issue and PR must all be read before a resumed review merges"
+  assert_contains "$hl" "above the current state comment's id" \
+    "a go-ahead must postdate the state comment for the head it approves, or a stale merge word gets applied to a newer head"
   hard=$(awk '/^- \*\*Merge is gated/ { f = 1 } f && /^- / && !/^- \*\*Merge is gated/ { exit } f { print }' "$(skill_md)")
   assert_contains "$hard" 'owner reply' "the merge Hard rule must name the owner reply as the headless go-ahead"
   assert_contains "$hard" 'never self-merges' "the merge Hard rule must hold a resumed run back from self-merging"

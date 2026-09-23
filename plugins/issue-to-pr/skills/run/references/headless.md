@@ -78,9 +78,10 @@ and finds the current state.
   the ledger and design from the state comment's prose; an owner reply resolves only the items it
   answers, and items still open park again through Step 3's comment-and-wait.
 - `review` resumes straight at Step 8, skipping Step 7. When the PR's head still matches the
-  recorded `head`, every owner reply is read against that PR as Step 8's reply. When the head has
-  moved instead, that is Step 8's new-cycle branch: Steps 5–7 run again on the new commits, the
-  run re-reports, and it parks again before anything merges.
+  recorded `head`, every owner reply is read against that PR as Step 8's reply, a go-ahead
+  counted only when it postdates that state comment. When the head has moved instead, that is
+  Step 8's new-cycle branch: Steps 5–7 run again on the new commits, the run re-reports, and it
+  parks again before anything merges.
 - `failed`, or no state → a fresh run.
 - Local work the step needs (the worktree, its uncommitted changes, the receipt) is gone →
   `agent:failed`; the state comment names what is missing.
@@ -145,7 +146,11 @@ every owner reply above the cursors on both threads, in id order: merge only whe
 asks for a change or asks a question; a change request anywhere is Step 8's change-request branch;
 a question or anything you cannot reconcile is answered in a new `state=review` comment, then end
 the turn. A go-ahead (`merge`, `мерж`, or any Step 8 go-ahead) → `S/finish.sh merge <N> --branch <b>`,
-plain, no `--auto`. Change requests → Step 8's change-request branch, unchanged, then park at `review`
+plain, no `--auto`. A go-ahead counts only when its id sits above the current state comment's id,
+proof the owner wrote it after this head's report went up. One posted earlier belongs to the
+report before it: instead of merging, post a new `state=review` comment (same fields, fresh
+cursors) noting the PR moved since that go-ahead and asking for `merge` again on this report, then
+end the turn. Change requests → Step 8's change-request branch, unchanged, then park at `review`
 again. Anything else, a question or a vague ack → answer it in a new `state=review` comment with
 the same fields as the current state (`step=7 tier=<tier> pr=<pr> head=<sha>`) and end the turn.
 
