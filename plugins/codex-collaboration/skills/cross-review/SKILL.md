@@ -1,6 +1,7 @@
 ---
 name: cross-review
 model: opus
+effort: medium
 description: Parallel dual review between Claude and Codex. Both models review independently. Findings confirmed by reviewer agreement, cross-validation, or evidence research are auto-applied each round; only genuinely inconclusive disagreements surface for user decision. Use for reviewing existing work with independent perspectives.
 ---
 
@@ -11,6 +12,8 @@ description: Parallel dual review between Claude and Codex. Both models review i
 Parallel review workflow between Claude and Codex CLI. Both models review the same artifact **simultaneously and independently**, then findings go through a three-stage resolution pipeline: initial triage → cross-validation (each model verifies the other's findings) → evidence-based research (documentation/code inspection for remaining disputes). Only genuinely inconclusive disagreements reach the user. Repeats until clean or max rounds reached. Auto-apply is the default; the user is consulted only for needs-decision items where evidence couldn't break a tie.
 
 **Core principle:** Two independent perspectives are stronger than one. Neither model sees the other's review until triage. Disagreements are resolved by **evidence first** (cross-validation, then documentation/code research) — the user is only asked to decide when evidence is genuinely inconclusive. Confirmed findings are applied automatically; the user is consulted only for genuinely inconclusive disagreements.
+
+**Models:** latest Opus and latest Astra, both at `medium` effort, unless the user names others. Every Codex dispatch carries the resolved model and effort flags; see "Model Defaults" in `${CLAUDE_PLUGIN_ROOT}/skills/shared/prerequisites.md`.
 
 ## Trigger Phrases
 
