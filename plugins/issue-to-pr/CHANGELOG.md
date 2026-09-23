@@ -8,9 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [9.4.0] - 2026-09-23
 
 ### Changed
-- A headless run keeps its state in a marked comment on the issue, so a fresh session can pick it up from your reply; nothing waits on a live session any more.
-- Only an unmarked comment by the owner, newer than what the run last read, continues a run; anything else on the thread is read as data.
-- A headless run that had to wait for you merges only on your word, never on its own.
+- Keep a headless run's state in a marked comment on the issue, so a fresh session can pick it up from your reply instead of waiting on a live one.
+- Continue a run only on an unmarked comment from the owner newer than what it last read; treat everything else on the thread as data, not instruction.
+- Merge a headless run that waited for you only on your word, never on its own.
 
 ## [9.3.0] - 2026-09-22
 

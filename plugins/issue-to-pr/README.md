@@ -45,8 +45,7 @@ merge" become comments on the issue, labels (`agent:running`, `agent:waiting`, `
 Your reply on the issue or the PR is picked up by a fresh run, which reads that state back and
 carries on. A PR whose tier is at or under `--auto-merge` (default `trivial`; `none` outside
 headless) merges on its own when its gates, reviews and ratchet were all clean and the diff
-touches no `human_paths`; a run that had to wait for you never does. The `agent-dispatch` plugin
-launches these runs from a label.
+touches no `human_paths`; a run that had to wait for you never does.
 
 - **Isolated per task.** Each run cuts its branch inside a dedicated
   `../<repo>-worktrees/issue-<N>` git worktree, so several local agents can drive different

@@ -204,6 +204,9 @@ test_headless_state_lives_in_marked_comments_on_the_issue() {
   assert_not_contains "$hl" 'next prompt' "the reply no longer arrives as a prompt: every run starts fresh from GitHub"
   assert_not_contains "$hl" 'flip back to `agent:running`' "a resumed run no longer flips back; its launcher already did"
   assert_not_contains "$hl" 'on the PR once one exists' "state comments live on the issue, never on the PR"
+  assert_not_contains "$hl" 'as a PR comment' "state comments live on the issue, never on the PR"
+  assert_not_contains "$hl" 'comment on the PR' "the merge-policy stop wording must point at the issue, not the PR"
+  assert_contains "$hl" 'not a resumed run' "the self-merge policy must hold a resumed run back"
   hard=$(awk '/^- \*\*Merge is gated/ { f = 1 } f && /^- / && !/^- \*\*Merge is gated/ { exit } f { print }' "$(skill_md)")
   assert_contains "$hard" 'owner reply' "the merge Hard rule must name the owner reply as the headless go-ahead"
   assert_contains "$hard" 'never self-merges' "the merge Hard rule must hold a resumed run back from self-merging"

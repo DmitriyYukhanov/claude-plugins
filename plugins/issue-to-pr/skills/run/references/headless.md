@@ -22,7 +22,8 @@ space-separated:
 - `step`, `tier`, `pr`, `head` (the PR head SHA the report covered), each as far as it exists;
   leave out a key that has no value yet.
 - `issue-read`, `pr-read`: the highest comment id, any author, on that thread at your last
-  re-read (below); left out only when the thread had no comments. Read ids with
+  re-read (below); left out only when the thread had no comments, and a missing cursor counts as
+  0, so every owner comment on that thread counts. Read ids with
   `gh api repos/{owner}/{repo}/issues/<N>/comments --paginate` (a PR's conversation is the same
   call on the PR number): numeric ids, ascending, so everything at or below the cursor was seen,
   and every owner comment you saw you handled.
@@ -72,11 +73,12 @@ Every headless run starts from GitHub. In Step 0, after the config, read the iss
 find the current state.
 
 - `waiting` or `review` → resume it. Verify the worktree and branch Step 1 would use (registered,
-  on this issue's branch, Step 1's ownership check), then jump to the recorded `step` with the
-  ledger and design from the state comment's prose. An owner reply resolves only the items it
-  answers; items still open park again through Step 3's comment-and-wait.
-- From `review`, the owner reply is Step 8's reply, read against the PR at `head`: a different PR
-  head is Step 8's new-cycle branch (Steps 5–7, re-report, park again).
+  on this issue's branch, Step 1's ownership check). `waiting` jumps to the recorded `step` with
+  the ledger and design from the state comment's prose; an owner reply resolves only the items it
+  answers, and items still open park again through Step 3's comment-and-wait.
+- `review` never re-runs Step 7: it jumps straight to Step 8. The owner reply is Step 8's reply for
+  the PR at `head`, read against that PR, not against the recorded `step`. A different PR head is
+  Step 8's new-cycle branch (Steps 5–7, re-report, park again).
 - `failed`, or no state → a fresh run.
 - Local work the step needs (the worktree, its uncommitted changes, the receipt) is gone →
   `agent:failed`; the state comment names what is missing.
@@ -130,16 +132,17 @@ After the report, decide whether this PR self-merges. All of:
 Merged → Step 9, then `after_merge`. A failed condition above means: a `state=review step=7`
 comment with `pr` and `head` saying why it waits ("waiting for `merge`: <the failed condition>"),
 flip to `agent:review`, end the turn. A stop (exit 2) carries its next move on stderr: do what it
-says — the policy stops say "comment, label `agent:review`, end the turn", and that comment is
-this state comment; a fetch-and-re-run says that. A stop whose instruction names no move you can
+says — the policy stops say "post a state=review comment on the issue that it waits for
+`merge`, label `agent:review`, and end the turn", and that comment is this state comment; a
+fetch-and-re-run says that. A stop whose instruction names no move you can
 make alone (`push-rejected`: the branch moved under you), one that does not clear on its single
 retry, or an exit 4 after one fix-and-re-run, is `agent:failed`.
 
 Resumed from `review`, the owner reply is Step 8's reply for THIS PR, from its OWNER only. A
 go-ahead (`merge`, `мерж`, or any Step 8 go-ahead) → `S/finish.sh merge <N> --branch <b>`, plain,
 no `--auto`. Change requests → Step 8's change-request branch, unchanged, then park at `review`
-again. Anything else, a question or a vague ack → answer it in a new `state=review` comment and
-end the turn.
+again. Anything else, a question or a vague ack → answer it in a new `state=review` comment with
+the same fields (`step=7 pr=<N> head=<sha>`) and end the turn.
 
 ## After Step 9
 
