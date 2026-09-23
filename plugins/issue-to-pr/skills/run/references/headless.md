@@ -77,9 +77,10 @@ and finds the current state.
   on this issue's branch, Step 1's ownership check). `waiting` jumps to the recorded `step` with
   the ledger and design from the state comment's prose; an owner reply resolves only the items it
   answers, and items still open park again through Step 3's comment-and-wait.
-- `review` never re-runs Step 7: it jumps straight to Step 8. The owner reply is Step 8's reply for
-  the PR at `head`, read against that PR, not against the recorded `step`. A different PR head is
-  Step 8's new-cycle branch (Steps 5–7, re-report, park again).
+- `review` resumes straight at Step 8, skipping Step 7. When the PR's head still matches the
+  recorded `head`, the owner reply is read against that PR as Step 8's reply. When the head has
+  moved instead, that is Step 8's new-cycle branch: Steps 5–7 run again on the new commits, the
+  run re-reports, and it parks again before anything merges.
 - `failed`, or no state → a fresh run.
 - Local work the step needs (the worktree, its uncommitted changes, the receipt) is gone →
   `agent:failed`; the state comment names what is missing.
