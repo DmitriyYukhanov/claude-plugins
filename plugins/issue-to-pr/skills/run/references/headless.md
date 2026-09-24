@@ -89,8 +89,9 @@ and finds the current state.
   current state's label (`gh issue edit <N> --add-label agent:<state> --remove-label agent:running`)
   and end the turn. That state comment already says everything, so this flip needs no new one.
 
-A resumed run **never self-merges**: it merges only on an owner reply. It reached `waiting` by
-asking, and `review` waits for the word anyway.
+A resumed run, or a fresh run that follows `failed`, **never self-merges**: both merge only on an
+owner reply. It reached `waiting` by asking, `review` waits for the word anyway, and a fresh run
+after `failed` never asked, but the issue already carries a state comment, so it waits too.
 
 Before posting any state comment, re-read both threads once: an owner reply above the cursors you
 last read is handled now instead of parking. The cursors you write are the highest ids at this
@@ -123,8 +124,8 @@ question.
 After the report, decide whether this PR self-merges. All of:
 
 - tier rank ≤ `--auto-merge` (`trivial` < `standard` < `complex`; `none` never);
-- nothing in this run reached the owner, and it is not a resumed run (a run that asked the owner
-  waits for the word);
+- nothing in this run reached the owner, and the issue carries no earlier state comment (a resumed
+  run, or a fresh run after `failed`, waits for the word);
 - the review escalation in `R/judgment.md` never fired (the ratchet);
 - the ledger holds no "Work no reviewer saw" entry (`R/judgment.md`): a simplification cut or a
   verify fix after the last review pass is exactly what this bullet holds back;
