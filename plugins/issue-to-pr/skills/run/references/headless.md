@@ -35,7 +35,9 @@ space-separated:
   alternatives.
 
 The **current state** is the newest state comment on the issue authored by the owner. A state
-comment by anyone else, or one whose marker does not parse, is ignored and authorizes nothing.
+comment by anyone else is ignored and authorizes nothing. An owner comment whose marker is neither
+the plain one nor a state marker that parses leaves the state unknown: `finish.sh` stops on it
+(`headless-unprovable`) until that comment is fixed or deleted.
 
 An **owner reply** is a comment by the owner, without a marker, on the issue with id above the
 current state's `issue-read`, or on the conversation of the PR named by the current state's `pr`
@@ -89,11 +91,11 @@ and finds the current state. The first matching row decides:
 
 | Current state | What you find | What you do |
 |---|---|---|
-| any | its `pr` is merged (`gh pr view <pr> --json state` says `MERGED`) | no rebuild, the merge already happened. Current state already `failed step=9`: restore `agent:failed`, post nothing. Otherwise: a `state=failed step=9 pr=<pr>` comment naming what Step 9 left undone, flip to `agent:failed`. End the turn |
-| any | the issue is closed and no `pr` is merged | remove `agent:running` (`gh issue edit <N> --remove-label agent:running`), post nothing, end the turn |
+| any | a PR for this issue that `gh pr view <pr> --json state` calls `MERGED`: the state's `pr`, else one in `gh issue view <N> --json closedByPullRequestsReferences`, else `gh pr list --head <branch> --state merged` for the branch of the registered `issue-<N>` worktree | no rebuild, the merge already happened. Current state already `failed step=9`: restore `agent:failed`, post nothing. Step 9 already done (the worktree and the branch are gone and, with `after_merge` set, its deploy landed): remove `agent:running`, post nothing. Otherwise: a `state=failed step=9 pr=<pr>` comment naming what Step 9 left undone, flip to `agent:failed`. End the turn |
+| any | the issue is closed and no PR for it merged | remove `agent:running` (`gh issue edit <N> --remove-label agent:running`), post nothing, end the turn |
 | none | — | fresh run from Step 1 |
 | `failed` | — | fresh run from Step 1 (Step 1 reuses the registered worktree, Step 7 the open PR); it never self-merges |
-| `waiting` or `review` | local work the step needs is gone: the worktree Step 1 would use (registered, on this issue's branch, past Step 1's ownership check), its uncommitted changes, the receipt | a `state=failed` comment naming what is missing, flip to `agent:failed`, end the turn |
+| `waiting` or `review` | no worktree Step 1 would reuse: registered, on this issue's branch, past Step 1's ownership check | a `state=failed` comment naming what is missing, flip to `agent:failed`, end the turn |
 | `waiting` or `review` | no owner reply above the cursors | restore the state's label (`gh issue edit <N> --add-label agent:<state> --remove-label agent:running`), post nothing, end the turn |
 | `waiting` | owner replies | jump to the recorded `step` with the ledger and design from the prose; a reply resolves the items it answers; open items park again through Step 3's comment-and-wait |
 | `review` | the PR head differs from `head` | Steps 5–7 on the new commits, with any change request among the replies; re-report, answering any question among the replies; park at `review` |

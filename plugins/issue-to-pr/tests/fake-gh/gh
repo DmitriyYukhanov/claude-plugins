@@ -11,7 +11,7 @@ scenario=${FAKE_GH_SCENARIO:-happy}
 SHA="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 
 serve() { # fixture [default]: FAKE_GH_FIX/<fixture>, else the default; fail-<fixture> exits 1
-  [ -n "${FAKE_GH_FIX:-}" ] || exit 0
+  [ -n "${FAKE_GH_FIX:-}" ] || { printf '%s' "${2-}"; exit 0; }
   [ ! -e "$FAKE_GH_FIX/fail-$1" ] || exit 1
   if [ -f "$FAKE_GH_FIX/$1" ]; then cat "$FAKE_GH_FIX/$1"; else printf '%s' "${2-}"; fi
 }

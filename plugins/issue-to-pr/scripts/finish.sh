@@ -131,11 +131,11 @@ headless_guard() { # pr-number: returns on an attended merge or the owner's word
   local labels owner rows prows line sid=0 st="" spr="" shead="" wid=0 word=""
   labels=$(gh issue view "$issue" --json labels --jq '.labels[].name | ascii_downcase' 2>/dev/null) ||
     stop headless-unprovable "issue-to-pr: could not read the labels of issue #$issue, so whether this merge is headless is unknown. Check gh is authenticated, then re-run."
-  # ponytail: headless = any of agent:running|waiting|review (Step 0 and the dispatcher set one before any work);
-  # an issue that lost all three merges attended-style
+  # ponytail: headless = --auto, or any of agent:running|waiting|review (Step 0 and the dispatcher set one
+  # before any work); a plain merge on an issue that lost all three merges attended-style
   # ponytail: same token: the agent posts as the owner's gh login, so this proves an unmarked comment by that login, not a human's hand;
   # a prompt-injected agent could post 'merge' itself or drop the agent:* labels. Upgrade path: a separate token for the agent.
-  case $'\n'"${labels//$'\r'/}"$'\n' in
+  [ -n "$auto" ] || case $'\n'"${labels//$'\r'/}"$'\n' in
     *$'\n'agent:running$'\n'* | *$'\n'agent:waiting$'\n'* | *$'\n'agent:review$'\n'*) ;;
     *) return 0 ;;
   esac
@@ -148,7 +148,11 @@ headless_guard() { # pr-number: returns on an attended merge or the owner's word
   while IFS= read -r line; do
     row "$line" || continue
     [ "$R_LOGIN" = "$owner" ] || continue
-    parse_marker "$R_MARKER" || continue
+    if ! parse_marker "$R_MARKER"; then
+      [ -z "$R_MARKER" ] || [ "$R_MARKER" = '<!-- issue-to-pr -->' ] ||
+        stop headless-unprovable "issue-to-pr: the owner's comment $R_ID on issue #$issue ends in a marker that does not parse ($R_MARKER), so the run's state is unknown. Fix or delete that comment, then re-run."
+      continue
+    fi
     sid=$R_ID st=$M_STATE spr=$M_PR shead=$M_HEAD
   done <<<"$rows"
 

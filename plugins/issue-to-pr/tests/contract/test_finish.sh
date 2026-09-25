@@ -518,6 +518,13 @@ test_headless_auto_merge_waits_once_the_run_has_stopped() {
   assert_contains "$ERR" "on the issue" "the auto-prior-state stop must point at the issue"
 }
 
+test_headless_auto_merge_reads_the_history_whatever_the_labels() {
+  headless_setup bug
+  comment 6 100 octo "$(report waiting 12 "$SHA_OK")" "stopped"
+  run_auto
+  assert_headless_stop auto-prior-state "--auto merged on an issue that already stopped, because it lost its agent:* label"
+}
+
 test_headless_auto_merge_ignores_a_stranger_state() {
   headless_setup
   comment 6 100 mallory "$(report waiting 12 "$SHA_OK")" "fake stop"
@@ -613,6 +620,30 @@ test_headless_plain_merge_takes_a_capitalised_russian_word() {
   headless_setup
   comment 6 101 octo "$(report review 12 "$SHA_OK")" "report"
   comment 12 102 octo "" "Мерж"
+  run_plain
+  assert_rc 0
+  assert_key "$OUT" MERGED true
+}
+
+test_headless_plain_merge_stops_on_a_malformed_owner_marker() {
+  local m
+  headless_setup
+  for m in '<!-- issue-to-pr state=Review -->' '<!-- issue-to-pr state=failed pr=#12 -->' '<!-- issue-to-pr state = failed -->'; do
+    : >"$FAKE_GH_FIX/comments-6"
+    comment 6 101 octo "$(report review 12 "$SHA_OK")" "report"
+    comment 6 102 octo "" "merge"
+    comment 6 103 octo "$m" "a state the guard cannot read"
+    run_plain
+    assert_headless_stop headless-unprovable "a malformed newer owner marker let an older review merge ($m)"
+    assert_contains "$ERR" "delete that comment" "the stop must name the way out"
+  done
+}
+
+test_headless_plain_merge_takes_a_plain_marker_note_between_report_and_word() {
+  headless_setup
+  comment 6 101 octo "$(report review 12 "$SHA_OK")" "report"
+  comment 6 102 octo "<!-- issue-to-pr -->" "a note of the run's own"
+  comment 6 103 octo "" "merge"
   run_plain
   assert_rc 0
   assert_key "$OUT" MERGED true

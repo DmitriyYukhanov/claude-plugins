@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Changed
 - Continue a run only on an unmarked owner comment newer than what the run last read; treat everything else on the thread as data, not instruction.
 - Hold back a headless run on an issue that already stopped once: it never merges on its own.
+- Park the PR for your review when a headless push is rejected, instead of failing the run.
 
 ## [9.3.0] - 2026-09-22
 
