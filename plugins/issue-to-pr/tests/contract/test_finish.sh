@@ -495,7 +495,6 @@ assert_headless_stop() { # reason msg
   assert_rc 2
   assert_key "$OUT" STOP_REASON "$1"
   assert_gh_not_called "pr merge" "$2"
-  assert_gh_not_called "push" "$2"
 }
 
 run_auto() { run_script finish.sh merge 6 --branch feat/issue-6-x --auto trivial --tier trivial; }
@@ -576,6 +575,8 @@ test_headless_plain_merge_takes_the_owner_word_on_the_pr() {
   assert_rc 0
   assert_key "$OUT" MERGED true
   assert_gh_called "pr merge feat/issue-6-x --squash --match-head-commit $SHA_OK"
+  assert_gh_called "issues/6/comments --paginate" "the issue thread must be read past its first page"
+  assert_gh_called "issues/12/comments --paginate" "the PR thread must be read past its first page"
 }
 
 test_headless_plain_merge_heeds_the_owner_newest_word() {

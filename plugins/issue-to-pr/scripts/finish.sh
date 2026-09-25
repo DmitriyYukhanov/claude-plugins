@@ -129,9 +129,11 @@ row() { # comment TSV line -> R_ID R_LOGIN R_MARKER R_BODY; rc 1 on a row with n
 
 headless_guard() { # pr-number: returns on an attended merge or the owner's word for head_sha
   local labels owner rows prows line sid=0 st="" spr="" shead="" wid=0 word=""
-  labels=$(gh issue view "$issue" --json labels --jq '.labels[].name' 2>/dev/null) ||
+  labels=$(gh issue view "$issue" --json labels --jq '.labels[].name | ascii_downcase' 2>/dev/null) ||
     stop headless-unprovable "issue-to-pr: could not read the labels of issue #$issue, so whether this merge is headless is unknown. Check gh is authenticated, then re-run."
   # ponytail: headless = agent:running (Step 0 and the dispatcher set it before any work); a label lost mid-run merges attended-style
+  # ponytail: same token: the agent posts as the owner's gh login, so this proves an unmarked comment by that login, not a human's hand;
+  # a prompt-injected agent could post 'merge' itself or drop agent:running. Upgrade path: a separate token for the agent.
   case $'\n'"${labels//$'\r'/}"$'\n' in *$'\n'agent:running$'\n'*) ;; *) return 0 ;; esac
   owner=$(gh api user --jq .login 2>/dev/null) || owner=""
   owner=${owner%$'\r'}
