@@ -44,6 +44,51 @@ EOF
     "tick.sh must turn the record's doubled backslashes into a path bash can run"
 }
 
+test_tick_refuses_an_ambiguous_claude_install() {
+  local proj="$TEST_TMPDIR/repo/.claude/plugins/agent-dispatch/1.0.0" \
+    user="$TEST_TMPDIR/home/.claude/plugins/agent-dispatch/1.0.0" \
+    other="$TEST_TMPDIR/home/.claude/plugins/other/2.0.0"
+  export HOME="$TEST_TMPDIR/home"
+  mkdir -p "$HOME/.claude/plugins"
+  # Both candidates get a real dispatch.sh: a picker that silently takes one (the bug) would run
+  # it and log DISPATCH_RAN, so this only passes if the fix actually refuses instead.
+  stub_dispatch "$proj"
+  stub_dispatch "$user"
+  stub_dispatch "$other"
+  cat >"$HOME/.claude/plugins/installed_plugins.json" <<EOF
+{
+  "version": 2,
+  "plugins": {
+    "agent-dispatch@market": [
+      {
+        "scope": "project",
+        "installPath": "$proj",
+        "version": "1.0.0"
+      },
+      {
+        "scope": "user",
+        "installPath": "$user",
+        "version": "1.0.0"
+      }
+    ],
+    "other@market": [
+      {
+        "scope": "user",
+        "installPath": "$other",
+        "version": "2.0.0"
+      }
+    ]
+  }
+}
+EOF
+  OUT='' ERR=''
+  "$BASH" "$AD_SCRIPTS/tick.sh" claude
+  RC=$?
+  assert_rc 1 "two scopes registered for the same plugin: which install is active is unknowable, so the tick refuses"
+  assert_not_contains "$(tick_log)" "DISPATCH_RAN" "must not silently run either scope's install"
+  assert_contains "$(tick_log | tail -1)" "several"
+}
+
 test_tick_runs_the_one_codex_version_and_refuses_two() {
   export HOME="$TEST_TMPDIR/home"
   local c="$HOME/.codex/plugins/cache/market/agent-dispatch"

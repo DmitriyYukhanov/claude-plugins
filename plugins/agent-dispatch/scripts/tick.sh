@@ -13,8 +13,14 @@ d=
 case "$host" in
   claude)
     # installed_plugins.json is pretty-printed JSON; Windows paths arrive with doubled backslashes.
-    d=$(sed -n '/"agent-dispatch@/,/"installPath"/s/.*"installPath"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
-      "$HOME/.claude/plugins/installed_plugins.json" 2>/dev/null | head -1 | sed 's|\\\\|/|g')
+    # The range runs from the agent-dispatch key to the next plugin key at the same indent (or
+    # EOF), so every installPath in that key's own array is counted, never one from a different
+    # plugin's entry below it.
+    paths=$(sed -n '/"agent-dispatch@[^"]*":/,/^    "/{/"installPath"/s/.*"installPath"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p;}' \
+      "$HOME/.claude/plugins/installed_plugins.json" 2>/dev/null)
+    if [ "$(printf '%s\n' "$paths" | grep -c .)" -eq 1 ]; then
+      d=$(printf '%s' "$paths" | sed 's|\\\\|/|g')
+    fi
     ;;
   codex)
     if grep -q '^\[plugins\."agent-dispatch@' "$HOME/.codex/config.toml" 2>/dev/null; then
