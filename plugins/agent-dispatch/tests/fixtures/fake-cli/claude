@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# A stand-in for claude and codex: logs its argv, then acts out FAKE_CLI_MODE on the issue it was
+# given (exit:<rc>, flip:<label> as a run that parked, is-error as Claude at its usage limit,
+# hang as a run that never ends, with a child standing in for a gate).
+set -uo pipefail
+printf '%s %s\n' "${FAKE_CLI_NAME:-claude}" "$*" >>"$FAKE_CLI_LOG"
+n=$(printf '%s' "$*" | sed -n 's/.*issue-to-pr:run \([0-9][0-9]*\).*/\1/p')
+case "${FAKE_CLI_MODE:-exit:0}" in
+  exit:*) exit "${FAKE_CLI_MODE#exit:}" ;;
+  flip:*)
+    { grep -v -x 'agent:running' "$FAKE_GH_FIX/labels-$n"; printf '%s\n' "${FAKE_CLI_MODE#flip:}"; } >"$FAKE_GH_FIX/.flip"
+    mv "$FAKE_GH_FIX/.flip" "$FAKE_GH_FIX/labels-$n"
+    ;;
+  is-error) printf '%s\n' '{"is_error":true,"num_turns":1,"result":"API Error: Rate limit reached","type":"result"}' ;;
+  hang)
+    "$REAL_SLEEP" 600 &
+    printf '%s %s\n' "$$" "$!" >"$FAKE_GH_FIX/hang.pids"
+    wait
+    ;;
+esac
+exit 0

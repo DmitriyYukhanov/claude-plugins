@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Test clock: `date +%s` reads FAKE_CLOCK; any other call prints a fixed UTC stamp.
+case "${1:-}" in
+  +%s) cat "$FAKE_CLOCK" ;;
+  *) printf '20260101T000000Z\n' ;;
+esac

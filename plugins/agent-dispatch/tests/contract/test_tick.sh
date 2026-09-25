@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+# Contract tests for tick.sh: the scheduler shim that finds the active install every tick.
+# shellcheck disable=SC2016,SC2034
+# SC2016: the printf in stub_dispatch writes $0 literally into dispatch.sh, to expand when that
+# script runs later, not now. SC2034: OUT/ERR/RC are read by assert_rc() in the sourced assert.sh,
+# a file shellcheck does not follow from here.
+
+stub_dispatch() { # dir -> a dispatch.sh there that reports where it ran from
+  mkdir -p "$1/scripts"
+  printf '#!/usr/bin/env bash\necho "DISPATCH_RAN $0"\n' >"$1/scripts/dispatch.sh"
+}
+
+tick_log() { cat "$HOME/.agent-dispatch/logs/tick.log" 2>/dev/null; }
+
+test_tick_runs_the_claude_install_a_windows_shaped_record_names() {
+  local inst="$TEST_TMPDIR/cache/agent-dispatch/1.0.0" esc
+  export HOME="$TEST_TMPDIR/home"
+  mkdir -p "$HOME/.claude/plugins"
+  stub_dispatch "$inst"
+  esc=$(printf '%s' "$inst" | sed 's|/|\\\\|g')
+  cat >"$HOME/.claude/plugins/installed_plugins.json" <<EOF
+{
+  "version": 2,
+  "plugins": {
+    "other@market": [
+      {
+        "scope": "user",
+        "installPath": "C:\\\\elsewhere\\\\other\\\\2.0.0",
+        "version": "2.0.0"
+      }
+    ],
+    "agent-dispatch@market": [
+      {
+        "scope": "user",
+        "installPath": "$esc",
+        "version": "1.0.0"
+      }
+    ]
+  }
+}
+EOF
+  "$BASH" "$AD_SCRIPTS/tick.sh" claude
+  assert_contains "$(tick_log)" "DISPATCH_RAN $inst/scripts/dispatch.sh" \
+    "tick.sh must turn the record's doubled backslashes into a path bash can run"
+}
+
+test_tick_runs_the_one_codex_version_and_refuses_two() {
+  export HOME="$TEST_TMPDIR/home"
+  local c="$HOME/.codex/plugins/cache/market/agent-dispatch"
+  stub_dispatch "$c/1.0.0"
+  printf '[plugins."agent-dispatch@market"]\nenabled = true\n' >"$HOME/.codex/config.toml"
+  "$BASH" "$AD_SCRIPTS/tick.sh" codex
+  assert_contains "$(tick_log)" "DISPATCH_RAN $c/1.0.0/scripts/dispatch.sh"
+  stub_dispatch "$c/1.1.0"
+  OUT='' ERR=''
+  "$BASH" "$AD_SCRIPTS/tick.sh" codex
+  RC=$?
+  assert_rc 1 "two cached versions: which one is active is unknowable, so the tick refuses"
+  assert_contains "$(tick_log | tail -1)" "several"
+}
+
+test_tick_refuses_an_uninstalled_host() {
+  export HOME="$TEST_TMPDIR/home"
+  mkdir -p "$HOME"
+  OUT='' ERR=''
+  "$BASH" "$AD_SCRIPTS/tick.sh" codex
+  RC=$?
+  assert_rc 1
+  "$BASH" "$AD_SCRIPTS/tick.sh" gpt
+  RC=$?
+  assert_rc 4 "an unknown host is a wrong call"
+}
