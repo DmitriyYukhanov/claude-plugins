@@ -24,9 +24,9 @@ fi
 # Version bumps and changelog entries are release bookkeeping, owed by what lands on main. A
 # development branch commits freely and carries its bump before the PR; only a commit made on
 # main or master is held to Checks 1 and 3 here.
+release_branch=
 case "$(git symbolic-ref --short -q HEAD || true)" in
   main | master) release_branch=yes ;;
-  *) release_branch= ;;
 esac
 
 # Collect unique plugin names that have changed files (excluding plugin.json itself)

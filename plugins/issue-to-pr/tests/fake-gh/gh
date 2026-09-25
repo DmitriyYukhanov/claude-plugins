@@ -11,6 +11,7 @@ scenario=${FAKE_GH_SCENARIO:-happy}
 SHA="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 
 serve() { # fixture [default]: FAKE_GH_FIX/<fixture>, else the default; fail-<fixture> exits 1
+  [ -n "${FAKE_GH_FIX:-}" ] || exit 0
   [ ! -e "$FAKE_GH_FIX/fail-$1" ] || exit 1
   if [ -f "$FAKE_GH_FIX/$1" ]; then cat "$FAKE_GH_FIX/$1"; else printf '%s' "${2-}"; fi
 }
@@ -57,15 +58,12 @@ case "${1:-} ${2:-}" in
     esac
     ;;
   "api user")
-    [ -n "${FAKE_GH_FIX:-}" ] || exit 0
     serve user $'octo\n'
     ;;
   "issue view") # headless: the issue's label names
-    [ -n "${FAKE_GH_FIX:-}" ] || exit 0
     serve "labels-${3:-}"
     ;;
   "api repos/"*/comments) # headless: a thread's comments as TSV id, login, marker, body
-    [ -n "${FAKE_GH_FIX:-}" ] || exit 0
     n=${2%/comments}
     serve "comments-${n##*/}"
     ;;
