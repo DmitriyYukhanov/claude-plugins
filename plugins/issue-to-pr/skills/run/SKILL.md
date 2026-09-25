@@ -32,7 +32,8 @@ gate's own code in `GATE_<NAME>_EXIT`.
   opens. Force-push only with `--force-with-lease`. Under `--headless` the go-ahead is an owner reply
   on GitHub (`R/headless.md`), or, for a fresh run, the `--auto-merge` policy, whose self-merge
   happens on the report's turn and only through `S/finish.sh merge --auto`. A headless run on an
-  issue that already carries a state comment never self-merges.
+  issue that already carries a state comment never self-merges. `S/finish.sh` checks both: the
+  owner's `merge` for the reported head, and no earlier state under `--auto`.
 - **Ask contract:** three moments, `--grill` reshapes the first (`R/judgment.md`) — (1) Step 3:
   ONE batched question if the ledger has open items, or the grill in its place, (2) the
   merge gate, (3) a hard stop. Decide everything else yourself and log it, and never ask what a

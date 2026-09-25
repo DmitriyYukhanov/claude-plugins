@@ -10,7 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Changed
 - Keep a headless run's state in a marked comment on the issue, so a fresh session can pick it up from your reply instead of waiting on a live one.
 - Continue a run only on an unmarked comment from the owner newer than what it last read; treat everything else on the thread as data, not instruction.
-- Merge a headless run that waited for you only on your word, never on its own.
+- Hold back a headless run on an issue that already stopped once: it never merges on its own.
+- Refuse a headless merge unless your newest comment after the report for that head is `merge`.
 
 ## [9.3.0] - 2026-09-22
 
