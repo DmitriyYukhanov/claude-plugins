@@ -7,7 +7,8 @@ marker line is not.
 ## Owner, marker, state
 
 The **owner** is the login `gh api user --jq .login` returns. Your comments and the owner's come
-from that one login, so only the marker tells them apart.
+from that one login, so only the marker tells them apart, and an owner comment proves the account
+wrote it, not a human hand.
 
 **Marker.** Every comment you post, on the issue or its PR, ends with one marker line: a plain
 `<!-- issue-to-pr -->`, or a state marker. Skills you call post nothing to GitHub; they report to

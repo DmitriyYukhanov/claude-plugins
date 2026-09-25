@@ -203,7 +203,10 @@ test_headless_state_lives_in_marked_comments_on_the_issue() {
   assert_contains "$hl" 'no earlier owner state comment' \
     "the self-merge policy must hold back a run on an issue with any earlier state, not just a resumed one"
   assert_contains "$hl" '| Current state |' "re-entry is one transition table; the first matching row decides"
+  assert_contains "$hl" 'a change request or a question among the replies' \
+    "a change request among several replies must win over a later merge word"
   assert_contains "$hl" 'no rebuild' "a failed state after the merge must not rebuild the merged work"
+  assert_contains "$hl" 'step=9 pr=<pr>' "a post-merge failure must name the merged PR so a later run finds it"
   hard=$(awk '/^- \*\*Merge is gated/ { f = 1 } f && /^- / && !/^- \*\*Merge is gated/ { exit } f { print }' "$(skill_md)")
   assert_contains "$hard" 'owner reply' "the merge Hard rule must name the owner reply as the headless go-ahead"
   assert_contains "$hard" 'never self-merges' "the merge Hard rule must hold a resumed run back from self-merging"
