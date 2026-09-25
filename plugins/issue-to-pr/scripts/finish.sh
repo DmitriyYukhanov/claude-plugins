@@ -4,6 +4,8 @@ set -uo pipefail
 SCRIPT_DIR=${BASH_SOURCE[0]%/*}
 # shellcheck source=lib/common.sh
 source "$SCRIPT_DIR/lib/common.sh"
+# shellcheck source=lib/marker.sh
+source "$SCRIPT_DIR/lib/marker.sh"
 
 # finish.sh merge   <N> --branch <b> [--method squash|merge|rebase] [--auto <threshold> --tier <tier>]
 # finish.sh cleanup <N> --branch <b> [--keep-branch]
@@ -11,6 +13,7 @@ source "$SCRIPT_DIR/lib/common.sh"
 subcmd=${1:-}
 shift || true
 issue="" branch="" method=squash keep_branch=0 auto="" tier="" auto_given=0 tier_given=0
+readonly WAIT_FOR_MERGE="Post a state=review comment on the issue that it waits for 'merge', label agent:review, and end the turn."
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --branch) branch=${2:-}; shift 2 2>/dev/null || shift "$#" ;;
@@ -36,14 +39,15 @@ root=$(repo_root)
 [ -n "$root" ] || degrade not-a-git-repo "finish: not inside a git repository"
 
 cmd_merge() {
-  local pr head_sha decision base_ref receipt push_out merge_out default_ref base_rev globs pathspecs changed hit
+  local pr head_sha decision base_ref pr_number receipt push_out merge_out default_ref base_rev globs pathspecs changed hit
   # reviewDecision alone is null on a base branch that does not require review, however many
   # reviews a PR has, so the reviews themselves decide and the field only confirms them
-  pr=$(gh pr view "$branch" --json headRefOid,reviewDecision,latestReviews,baseRefName \
-    --jq '"\(.headRefOid)\t\(if .reviewDecision == "CHANGES_REQUESTED" or any(.latestReviews[]?; .state == "CHANGES_REQUESTED") then "CHANGES_REQUESTED" else .reviewDecision // "" end)\t\(.baseRefName)"' 2>/dev/null) || pr=""
+  pr=$(gh pr view "$branch" --json headRefOid,reviewDecision,latestReviews,baseRefName,number \
+    --jq '"\(.headRefOid)\t\(if .reviewDecision == "CHANGES_REQUESTED" or any(.latestReviews[]?; .state == "CHANGES_REQUESTED") then "CHANGES_REQUESTED" else .reviewDecision // "" end)\t\(.baseRefName)\t\(.number)"' 2>/dev/null) || pr=""
   head_sha=$(printf '%s' "$pr" | cut -f1)
   decision=$(printf '%s' "$pr" | cut -f2)
   base_ref=$(printf '%s' "$pr" | cut -f3)
+  pr_number=$(printf '%s' "$pr" | cut -f4)
   case "$head_sha" in '' | null)
     stop pr-unreadable "issue-to-pr: could not read the PR for $branch. Check it exists and gh is authenticated, then hand back." ;;
   esac
@@ -58,10 +62,11 @@ cmd_merge() {
   esac
   [ "$decision" != CHANGES_REQUESTED ] ||
     stop review-blocked "issue-to-pr: $branch has a review requesting changes. Address it, push, re-run the gates, and re-approve."
+  headless_guard "$pr_number"
 
   if [ -n "$auto" ]; then
     [ "$(tier_rank "$tier")" -le "$(tier_rank "$auto")" ] ||
-      stop auto-tier "issue-to-pr: a $tier run does not merge unattended under an --auto-merge $auto threshold. Comment on the PR that it waits for 'merge', label agent:review, and end the turn."
+      stop auto-tier "issue-to-pr: a $tier run does not merge unattended under an --auto-merge $auto threshold. $WAIT_FOR_MERGE"
     if git rev-parse --verify -q "origin/$base_ref^{commit}" >/dev/null; then base_rev="origin/$base_ref"
     elif git rev-parse --verify -q "$base_ref^{commit}" >/dev/null; then base_rev=$base_ref
     else stop auto-unprovable "issue-to-pr: neither origin/$base_ref nor $base_ref resolves here, so the human-path check cannot read the diff. Fetch the base and re-run."
@@ -78,13 +83,13 @@ cmd_merge() {
     changed=$(git -C "$root" diff --no-renames --name-only "$base_rev...$branch" 2>/dev/null) ||
       stop auto-unprovable "issue-to-pr: could not read the diff $base_rev...$branch, so the merge cannot be proved safe. Fetch the base and re-run."
     [ -n "$changed" ] ||
-      stop auto-diff-empty "issue-to-pr: the diff $base_rev...$branch is empty, so the human-path check has nothing to prove; a PR with no diff against its base does not merge unattended. Comment on the PR that it waits for 'merge', label agent:review, and end the turn."
+      stop auto-diff-empty "issue-to-pr: the diff $base_rev...$branch is empty, so the human-path check has nothing to prove; a PR with no diff against its base does not merge unattended. $WAIT_FOR_MERGE"
     if [ "${#pathspecs[@]}" -gt 0 ]; then
       hit=$(git -C "$root" diff --no-renames --name-only "$base_rev...$branch" -- "${pathspecs[@]}" 2>/dev/null) ||
         stop auto-unprovable "issue-to-pr: git rejected human_paths as pathspecs ($globs); fix the config and re-run."
       [ -z "$hit" ] || {
         emit HUMAN_PATH "${hit%%$'\n'*}"
-        stop auto-human-path "issue-to-pr: ${hit%%$'\n'*} matches human_paths; this PR waits for a human 'merge'. Comment, label agent:review, end the turn."
+        stop auto-human-path "issue-to-pr: ${hit%%$'\n'*} matches human_paths; this PR waits for a human 'merge'. $WAIT_FOR_MERGE"
       }
     fi
   fi
@@ -110,6 +115,66 @@ cmd_merge() {
     emit BASE_IS_DEFAULT true
   fi
   done_ok
+}
+
+row() { # comment TSV line -> R_ID R_LOGIN R_MARKER R_BODY; rc 1 on a row with no numeric id
+  local l=${1%$'\r'}
+  R_ID=${l%%$'\t'*}
+  l=${l#*$'\t'}
+  R_LOGIN=${l%%$'\t'*}
+  l=${l#*$'\t'}
+  R_MARKER=${l%%$'\t'*}
+  R_BODY=${l#*$'\t'}
+  case "$R_ID" in '' | *[!0-9]*) return 1 ;; esac
+}
+
+headless_guard() { # pr-number: returns on an attended merge or the owner's word for head_sha
+  local labels owner rows prows line sid=0 st="" spr="" shead="" wid=0 word=""
+  labels=$(gh issue view "$issue" --json labels --jq '.labels[].name | ascii_downcase' 2>/dev/null) ||
+    stop headless-unprovable "issue-to-pr: could not read the labels of issue #$issue, so whether this merge is headless is unknown. Check gh is authenticated, then re-run."
+  # ponytail: headless = --auto, or any of agent:running|waiting|review (Step 0 and the dispatcher set one
+  # before any work); a plain merge on an issue that lost all three merges attended-style
+  # ponytail: same token: the agent posts as the owner's gh login, so this proves an unmarked comment by that login, not a human's hand;
+  # a prompt-injected agent could post 'merge' itself or drop the agent:* labels. Upgrade path: a separate token for the agent.
+  [ -n "$auto" ] || case $'\n'"${labels//$'\r'/}"$'\n' in
+    *$'\n'agent:running$'\n'* | *$'\n'agent:waiting$'\n'* | *$'\n'agent:review$'\n'*) ;;
+    *) return 0 ;;
+  esac
+  owner=$(gh api user --jq .login 2>/dev/null) || owner=""
+  owner=${owner%$'\r'}
+  [ -n "$owner" ] ||
+    stop headless-unprovable "issue-to-pr: could not read the owner's login (gh api user), so no comment can authorize a headless merge of issue #$issue. Check gh is authenticated, then re-run."
+  rows=$(gh api "repos/{owner}/{repo}/issues/$issue/comments" --paginate --jq "$MARKER_JQ" 2>/dev/null) ||
+    stop headless-unprovable "issue-to-pr: could not read the comments on issue #$issue, so the run's state is unknown. Check gh is authenticated, then re-run."
+  while IFS= read -r line; do
+    row "$line" || continue
+    [ "$R_LOGIN" = "$owner" ] || continue
+    if ! parse_marker "$R_MARKER"; then
+      [ -z "$R_MARKER" ] || [ "$R_MARKER" = '<!-- issue-to-pr -->' ] ||
+        stop headless-unprovable "issue-to-pr: the owner's comment $R_ID on issue #$issue ends in a marker that does not parse ($R_MARKER), so the run's state is unknown. Fix or delete that comment, then re-run."
+      continue
+    fi
+    sid=$R_ID st=$M_STATE spr=$M_PR shead=$M_HEAD
+  done <<<"$rows"
+
+  if [ -n "$auto" ]; then
+    [ -z "$st" ] ||
+      stop auto-prior-state "issue-to-pr: issue #$issue already stopped once, so this PR waits for the owner's 'merge'. $WAIT_FOR_MERGE"
+    return 0
+  fi
+  if [ "$st" != review ] || [ -z "$1" ] || [ "$spr" != "$1" ] || [ "$shead" != "$head_sha" ]; then
+    stop headless-unapproved "issue-to-pr: a headless merge needs a state=review report for PR #$1 at ${head_sha:0:12}, and the current state of issue #$issue is not that (state=${st:-none} pr=${spr:-none} head=${shead:0:12}). Post that report (pr=$1 head=$head_sha) on the issue, label agent:review, and end the turn. If this is an attended run, remove the agent:* labels from issue #$issue and re-run."
+  fi
+  prows=$(gh api "repos/{owner}/{repo}/issues/$1/comments" --paginate --jq "$MARKER_JQ" 2>/dev/null) ||
+    stop headless-unprovable "issue-to-pr: could not read the conversation of PR #$1, so the owner's word on it is unknown. Check gh is authenticated, then re-run."
+  while IFS= read -r line; do
+    row "$line" || continue
+    if [ "$R_LOGIN" = "$owner" ] && [ -z "$R_MARKER" ] && [ "$R_ID" -gt "$sid" ] && [ "$R_ID" -gt "$wid" ]; then
+      wid=$R_ID word=$R_BODY
+    fi
+  done <<<"$rows"$'\n'"$prows"
+  case "$word" in merge | мерж | Мерж | МЕРЖ) return 0 ;; esac # jq's ascii_downcase leaves Cyrillic as typed
+  stop headless-unapproved "issue-to-pr: the owner's newest word after the report for ${head_sha:0:12} is not 'merge' (${word:-nothing yet}). Answer it in a new state=review comment (pr=$1 head=$head_sha) on the issue, label agent:review, and end the turn. If this is an attended run, remove the agent:* labels from issue #$issue and re-run."
 }
 
 registered_wt() { # the registered worktree ending in /issue-<N>, or empty

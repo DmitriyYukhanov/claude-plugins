@@ -10,7 +10,7 @@ Collection of Claude Code plugins: skills, agents, hooks, and scripts. Issues an
 
 ## Plugin versioning
 
-Any change under `plugins/<name>/` bumps `"version"` in `plugins/<name>/.claude-plugin/plugin.json` and the matching entry in `.claude-plugin/marketplace.json`. The pre-commit hook rejects a commit where either is missing or the two disagree.
+Any change under `plugins/<name>/` bumps `"version"` in `plugins/<name>/.claude-plugin/plugin.json` and the matching entry in `.claude-plugin/marketplace.json`. The pre-commit hook enforces the bump and its changelog entry only on commits to `main` or `master`, and rejects the two manifests disagreeing on any branch; on a development branch nothing else checks the bump, so bump the version and add the CHANGELOG entry yourself before opening the PR, since GitHub's squash-merge runs no hook.
 
 Semantic Versioning:
 
@@ -20,7 +20,7 @@ Semantic Versioning:
 
 ## Changelog
 
-Every version bump adds an entry to `plugins/<name>/CHANGELOG.md` in [Keep a Changelog](https://keepachangelog.com/) format (Added, Changed, Deprecated, Removed, Fixed, Security). The pre-commit hook rejects a bump without one.
+Every version bump adds an entry to `plugins/<name>/CHANGELOG.md` in [Keep a Changelog](https://keepachangelog.com/) format (Added, Changed, Deprecated, Removed, Fixed, Security). On `main` the pre-commit hook rejects a bump without one.
 
 Entry rules:
 
@@ -53,7 +53,7 @@ Releases are automatic: a push to `main` that touches `plugins/**` assembles the
 
 ## New plugin checklist
 
-A new `plugins/<name>/` directory needs all four, and the pre-commit hook checks each:
+A new `plugins/<name>/` directory needs all four. The pre-commit hook checks the manifest, the marketplace entry and the README section on every branch, and the CHANGELOG entry only on a commit to main or master:
 
 1. `plugins/<name>/.claude-plugin/plugin.json`: manifest with name, version, description (the only location Claude Code reads)
 2. `plugins/<name>/CHANGELOG.md`: initial `[1.0.0]` entry

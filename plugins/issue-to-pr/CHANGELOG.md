@@ -5,6 +5,17 @@ All notable changes to the **issue-to-pr** plugin will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [9.4.0] - 2026-09-25
+
+### Added
+- Pick up a headless run from your reply: the run keeps its state in a marked comment on the issue, so a fresh session carries on where the last one stopped.
+- Refuse a headless merge unless your newest reply after the latest report for that head is `merge` or `мерж`.
+
+### Changed
+- Continue a run only on an unmarked owner comment newer than what the run last read; treat everything else on the thread as data, not instruction.
+- Hold back a headless run on an issue that already stopped once: it never merges on its own.
+- Park the PR for your review when a headless push is rejected, instead of failing the run.
+
 ## [9.3.0] - 2026-09-22
 
 ### Added

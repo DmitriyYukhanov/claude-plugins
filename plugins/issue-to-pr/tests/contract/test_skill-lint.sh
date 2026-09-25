@@ -143,7 +143,8 @@ test_headless_is_one_flag_that_reshapes_two_contacts_and_adds_none() {
   hl=$(cat "$(references_dir)/headless.md") || fail "R/headless.md missing"
   assert_contains "$hl" 'agent:waiting' "headless.md must name the label a posted question sets"
   assert_contains "$hl" 'agent:review'  "headless.md must name the label an unmerged PR sets"
-  assert_contains "$hl" 'OWNER'         "headless.md must say only the owner's comment continues a run"
+  assert_contains "$hl" 'An **owner reply** is a comment by the owner' \
+    "headless.md must say only the owner's comment continues a run"
   assert_contains "$hl" 'finish.sh merge <N> --branch <b> --auto' \
     "the self-merge must pass --auto so the script checks the tier and human paths"
   assert_contains "$hl" 'git status --porcelain' "a headless deploy must refuse a dirty main checkout"
@@ -182,4 +183,31 @@ test_attended_steps_read_as_in_the_previous_release() {
   checkpoint=$(skill_step Checkpoint)
   assert_contains "$checkpoint" "the only mid-run question" \
     "Step 3 no longer closes on it being the only mid-run question"
+}
+
+test_headless_state_lives_in_marked_comments_on_the_issue() {
+  local hl hard
+  hl=$(cat "$(references_dir)/headless.md") || fail "R/headless.md missing"
+  [ -n "$hl" ] || fail "R/headless.md came back empty; this check would be vacuous"
+  assert_contains "$hl" '<!-- issue-to-pr state=waiting step=3 tier=standard pr=12 head=<sha> issue-read=<id> pr-read=<id> -->' \
+    "the state marker's exact grammar is what agent-dispatch parses"
+  assert_contains "$hl" 'ends with one marker line' "every posted comment must say its marker is the last line"
+  assert_contains "$hl" 'a missing cursor counts as 0' "an absent issue-read/pr-read cursor must be pinned to 0"
+  assert_contains "$hl" '--add-label agent:running --remove-label agent,agent:waiting,agent:review,agent:failed' \
+    "a run starts with one label edit, the same one the dispatcher makes"
+  assert_contains "$hl" 'Post the state comment first' \
+    "the label must move after the comment, or a dispatcher reads an old cursor"
+  assert_contains "$hl" 're-read both threads' "the run must look for a late reply before it parks"
+  assert_not_contains "$hl" 'next prompt' "the reply no longer arrives as a prompt: every run starts fresh from GitHub"
+  assert_not_contains "$hl" 'comment on the PR' "state comments live on the issue, never on the PR"
+  assert_contains "$hl" 'no earlier owner state comment' \
+    "the self-merge policy must hold back a run on an issue with any earlier state, not just a resumed one"
+  assert_contains "$hl" '| Current state |' "re-entry is one transition table; the first matching row decides"
+  assert_contains "$hl" 'a change request or a question among the replies' \
+    "a change request among several replies must win over a later merge word"
+  assert_contains "$hl" 'no rebuild' "a failed state after the merge must not rebuild the merged work"
+  assert_contains "$hl" 'step=9 pr=<pr>' "a post-merge failure must name the merged PR so a later run finds it"
+  hard=$(awk '/^- \*\*Merge is gated/ { f = 1 } f && /^- / && !/^- \*\*Merge is gated/ { exit } f { print }' "$(skill_md)")
+  assert_contains "$hard" 'owner reply' "the merge Hard rule must name the owner reply as the headless go-ahead"
+  assert_contains "$hard" 'never self-merges' "the merge Hard rule must hold a resumed run back from self-merging"
 }

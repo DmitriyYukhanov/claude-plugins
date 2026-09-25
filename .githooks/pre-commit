@@ -2,9 +2,9 @@
 # Pre-commit hook: enforce plugin version bumps, marketplace sync, changelog, and new plugin registration
 #
 # Checks:
-# 1. When files inside plugins/<name>/ change, plugin.json version must be bumped
+# 1. On main/master: when files inside plugins/<name>/ change, plugin.json version must be bumped
 # 2. When plugin.json version changes, marketplace.json must match
-# 3. When plugin.json version changes, CHANGELOG.md must be updated
+# 3. On main/master: when plugin.json version changes, CHANGELOG.md must be updated
 # 4. When a new plugin directory appears, it must be registered in marketplace.json and README.md
 #
 # Follows Keep a Changelog / Semantic Versioning conventions.
@@ -21,6 +21,14 @@ if [ -z "$staged_files" ]; then
   exit 0
 fi
 
+# Version bumps and changelog entries are release bookkeeping, owed by what lands on main. A
+# development branch commits freely and carries its bump before the PR; only a commit made on
+# main or master is held to Checks 1 and 3 here.
+release_branch=
+case "$(git symbolic-ref --short -q HEAD || true)" in
+  main | master) release_branch=yes ;;
+esac
+
 # Collect unique plugin names that have changed files (excluding plugin.json itself)
 changed_plugins=()
 while IFS= read -r file; do
@@ -36,7 +44,7 @@ done <<< "$staged_files"
 # ── Check 1: plugin.json version bump ──────────────────────────────────
 
 version_errors=()
-if [ ${#changed_plugins[@]} -gt 0 ]; then
+if [ -n "$release_branch" ] && [ ${#changed_plugins[@]} -gt 0 ]; then
   for plugin in "${changed_plugins[@]}"; do
     plugin_json="plugins/${plugin}/.claude-plugin/plugin.json"
 
@@ -149,6 +157,7 @@ done
 
 changelog_errors=()
 for plugin_json in $(echo "$staged_files" | grep -E '^plugins/[^/]+/\.claude-plugin/plugin\.json$' || true); do
+  [ -n "$release_branch" ] || break
   plugin_name=$(echo "$plugin_json" | sed 's|plugins/\([^/]*\)/\.claude-plugin/plugin\.json|\1|')
   changelog="plugins/${plugin_name}/CHANGELOG.md"
 
