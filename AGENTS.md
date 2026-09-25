@@ -53,7 +53,7 @@ Releases are automatic: a push to `main` that touches `plugins/**` assembles the
 
 ## New plugin checklist
 
-A new `plugins/<name>/` directory needs all four, and the pre-commit hook checks each:
+A new `plugins/<name>/` directory needs all four. The pre-commit hook checks the manifest, the marketplace entry and the README section on every branch, and the CHANGELOG entry only on a commit to main or master:
 
 1. `plugins/<name>/.claude-plugin/plugin.json`: manifest with name, version, description (the only location Claude Code reads)
 2. `plugins/<name>/CHANGELOG.md`: initial `[1.0.0]` entry

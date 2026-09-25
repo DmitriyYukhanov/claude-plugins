@@ -43,9 +43,11 @@ and cleanup. Hard gates block forward progress; everything between them scales t
 merge" become comments on the issue, labels (`agent:running`, `agent:waiting`, `agent:review`,
 `agent:failed`) carry the state, and a marker line in each comment records where the run stopped.
 Your reply on the issue or the PR is picked up by the next `--headless` run you (or a dispatcher)
-start; that run reads the state back and carries on. A PR whose tier is at or under `--auto-merge` (default `trivial`; `none` outside
-headless) merges on its own when its gates, reviews and ratchet were all clean and the diff
-touches no `human_paths`. A run on an issue that already stopped once never merges on its own.
+start; that run reads the state back and carries on. A headless PR merges when you reply `merge`
+(or `мерж`) after its latest report. An older reply, or any other word, does not merge it. A PR
+whose tier is at or under `--auto-merge` (default `trivial`; `none` outside headless) merges on
+its own when its gates, reviews and ratchet were all clean and the diff touches no
+`human_paths`. A run on an issue that already stopped once never merges on its own.
 
 - **Isolated per task.** Each run cuts its branch inside a dedicated
   `../<repo>-worktrees/issue-<N>` git worktree, so several local agents can drive different

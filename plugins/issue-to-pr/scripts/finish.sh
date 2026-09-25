@@ -131,10 +131,14 @@ headless_guard() { # pr-number: returns on an attended merge or the owner's word
   local labels owner rows prows line sid=0 st="" spr="" shead="" wid=0 word=""
   labels=$(gh issue view "$issue" --json labels --jq '.labels[].name | ascii_downcase' 2>/dev/null) ||
     stop headless-unprovable "issue-to-pr: could not read the labels of issue #$issue, so whether this merge is headless is unknown. Check gh is authenticated, then re-run."
-  # ponytail: headless = agent:running (Step 0 and the dispatcher set it before any work); a label lost mid-run merges attended-style
+  # ponytail: headless = any of agent:running|waiting|review (Step 0 and the dispatcher set one before any work);
+  # an issue that lost all three merges attended-style
   # ponytail: same token: the agent posts as the owner's gh login, so this proves an unmarked comment by that login, not a human's hand;
-  # a prompt-injected agent could post 'merge' itself or drop agent:running. Upgrade path: a separate token for the agent.
-  case $'\n'"${labels//$'\r'/}"$'\n' in *$'\n'agent:running$'\n'*) ;; *) return 0 ;; esac
+  # a prompt-injected agent could post 'merge' itself or drop the agent:* labels. Upgrade path: a separate token for the agent.
+  case $'\n'"${labels//$'\r'/}"$'\n' in
+    *$'\n'agent:running$'\n'* | *$'\n'agent:waiting$'\n'* | *$'\n'agent:review$'\n'*) ;;
+    *) return 0 ;;
+  esac
   owner=$(gh api user --jq .login 2>/dev/null) || owner=""
   owner=${owner%$'\r'}
   [ -n "$owner" ] ||
@@ -154,7 +158,7 @@ headless_guard() { # pr-number: returns on an attended merge or the owner's word
     return 0
   fi
   if [ "$st" != review ] || [ -z "$1" ] || [ "$spr" != "$1" ] || [ "$shead" != "$head_sha" ]; then
-    stop headless-unapproved "issue-to-pr: a headless merge needs a state=review report for PR #$1 at ${head_sha:0:12}, and the current state of issue #$issue is not that (state=${st:-none} pr=${spr:-none} head=${shead:0:12}). Post that report on the issue, label agent:review, and end the turn."
+    stop headless-unapproved "issue-to-pr: a headless merge needs a state=review report for PR #$1 at ${head_sha:0:12}, and the current state of issue #$issue is not that (state=${st:-none} pr=${spr:-none} head=${shead:0:12}). Post that report (pr=$1 head=$head_sha) on the issue, label agent:review, and end the turn. If this is an attended run, remove the agent:* labels from issue #$issue and re-run."
   fi
   prows=$(gh api "repos/{owner}/{repo}/issues/$1/comments" --paginate --jq "$MARKER_JQ" 2>/dev/null) ||
     stop headless-unprovable "issue-to-pr: could not read the conversation of PR #$1, so the owner's word on it is unknown. Check gh is authenticated, then re-run."
@@ -164,8 +168,8 @@ headless_guard() { # pr-number: returns on an attended merge or the owner's word
       wid=$R_ID word=$R_BODY
     fi
   done <<<"$rows"$'\n'"$prows"
-  case "$word" in merge | мерж) return 0 ;; esac
-  stop headless-unapproved "issue-to-pr: the owner's newest word after the report for ${head_sha:0:12} is not 'merge' (${word:-nothing yet}). Answer it in a new state=review comment on the issue, label agent:review, and end the turn."
+  case "$word" in merge | мерж | Мерж | МЕРЖ) return 0 ;; esac # jq's ascii_downcase leaves Cyrillic as typed
+  stop headless-unapproved "issue-to-pr: the owner's newest word after the report for ${head_sha:0:12} is not 'merge' (${word:-nothing yet}). Answer it in a new state=review comment (pr=$1 head=$head_sha) on the issue, label agent:review, and end the turn. If this is an attended run, remove the agent:* labels from issue #$issue and re-run."
 }
 
 registered_wt() { # the registered worktree ending in /issue-<N>, or empty

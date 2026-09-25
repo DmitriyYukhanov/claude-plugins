@@ -501,7 +501,7 @@ run_auto() { run_script finish.sh merge 6 --branch feat/issue-6-x --auto trivial
 run_plain() { run_script finish.sh merge 6 --branch feat/issue-6-x; }
 
 test_attended_merge_reads_the_labels_and_nothing_else() {
-  headless_setup agent:review
+  headless_setup bug
   comment 6 100 octo "$(report waiting 12 "$SHA_OK")" "stopped"
   run_plain
   assert_rc 0
@@ -586,6 +586,43 @@ test_headless_plain_merge_heeds_the_owner_newest_word() {
   comment 6 103 octo "" "wait, change the title"
   run_plain
   assert_headless_stop headless-unapproved "a later owner word did not revoke the merge"
+}
+
+test_headless_plain_merge_reads_the_newest_state_not_the_oldest() {
+  headless_setup
+  comment 6 101 octo "$(report review 12 "$SHA_OK")" "report"
+  comment 6 102 octo "$(report failed 12 "$SHA_OK")" "failed"
+  comment 6 103 octo "" "merge"
+  run_plain
+  assert_headless_stop headless-unapproved "a merge went through on a state the run had already left"
+  assert_contains "$ERR" "head=$SHA_OK" "the stop must give the full head sha the report needs"
+  assert_contains "$ERR" "remove the agent:* labels from issue #6" "the stop must name the attended way out"
+}
+
+test_headless_plain_merge_takes_only_the_exact_word() {
+  headless_setup
+  comment 6 101 octo "$(report review 12 "$SHA_OK")" "report"
+  comment 6 102 octo "" "don't merge"
+  run_plain
+  assert_headless_stop headless-unapproved "a word containing merge was read as merge"
+  assert_contains "$ERR" "head=$SHA_OK" "the stop must give the full head sha the report needs"
+  assert_contains "$ERR" "remove the agent:* labels from issue #6" "the stop must name the attended way out"
+}
+
+test_headless_plain_merge_takes_a_capitalised_russian_word() {
+  headless_setup
+  comment 6 101 octo "$(report review 12 "$SHA_OK")" "report"
+  comment 12 102 octo "" "Мерж"
+  run_plain
+  assert_rc 0
+  assert_key "$OUT" MERGED true
+}
+
+test_headless_is_any_live_agent_label() {
+  headless_setup agent:review
+  comment 12 105 octo "" "merge"
+  run_plain
+  assert_headless_stop headless-unapproved "an agent:review issue merged as if attended"
 }
 
 test_headless_merge_fails_closed_when_github_cannot_be_read() {
