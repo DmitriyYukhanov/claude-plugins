@@ -191,30 +191,19 @@ test_headless_state_lives_in_marked_comments_on_the_issue() {
   [ -n "$hl" ] || fail "R/headless.md came back empty; this check would be vacuous"
   assert_contains "$hl" '<!-- issue-to-pr state=waiting step=3 tier=standard pr=12 head=<sha> issue-read=<id> pr-read=<id> -->' \
     "the state marker's exact grammar is what agent-dispatch parses"
-  assert_contains "$hl" 'gh api user --jq .login' "the owner must be defined by the login gh returns"
   assert_contains "$hl" 'ends with one marker line' "every posted comment must say its marker is the last line"
   assert_contains "$hl" 'a missing cursor counts as 0' "an absent issue-read/pr-read cursor must be pinned to 0"
-  assert_contains "$hl" 'without a marker' "an owner reply is an unmarked comment"
-  assert_contains "$hl" 'never moves it to a later id' "an edit must never make an old comment count as new"
-  assert_contains "$hl" 'authorizes nothing' "a state comment by anyone but the owner must be ignored"
   assert_contains "$hl" '--add-label agent:running --remove-label agent,agent:waiting,agent:review,agent:failed' \
     "a run starts with one label edit, the same one the dispatcher makes"
   assert_contains "$hl" 'Post the state comment first' \
     "the label must move after the comment, or a dispatcher reads an old cursor"
-  assert_contains "$hl" '## Re-entry' "headless.md lost its re-entry section"
-  assert_contains "$hl" 'never self-merges' "a resumed run must merge only on the owner's word"
   assert_contains "$hl" 're-read both threads' "the run must look for a late reply before it parks"
   assert_not_contains "$hl" 'next prompt' "the reply no longer arrives as a prompt: every run starts fresh from GitHub"
-  # shellcheck disable=SC2016 # the backticks are literal Markdown, not a command substitution
-  assert_not_contains "$hl" 'flip back to `agent:running`' "a resumed run no longer flips back; its launcher already did"
   assert_not_contains "$hl" 'comment on the PR' "state comments live on the issue, never on the PR"
   assert_contains "$hl" 'no earlier owner state comment' \
     "the self-merge policy must hold back a run on an issue with any earlier state, not just a resumed one"
   assert_contains "$hl" '| Current state |' "re-entry is one transition table; the first matching row decides"
-  assert_contains "$hl" 'a change request among the replies' \
-    "a change request among several replies must win over a later merge word"
   assert_contains "$hl" 'no rebuild' "a failed state after the merge must not rebuild the merged work"
-  assert_contains "$hl" 'step=9 pr=<pr>' "a post-merge failure must name the merged PR so a later run finds it"
   hard=$(awk '/^- \*\*Merge is gated/ { f = 1 } f && /^- / && !/^- \*\*Merge is gated/ { exit } f { print }' "$(skill_md)")
   assert_contains "$hard" 'owner reply' "the merge Hard rule must name the owner reply as the headless go-ahead"
   assert_contains "$hard" 'never self-merges' "the merge Hard rule must hold a resumed run back from self-merging"

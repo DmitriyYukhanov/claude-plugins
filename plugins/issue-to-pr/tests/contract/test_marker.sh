@@ -4,7 +4,7 @@ test_marker_parses_a_state_marker_and_ignores_unknown_keys() {
   source "$ITP_SCRIPTS/lib/marker.sh"
   parse_marker $'<!-- issue-to-pr state=review step=7 color=red pr=12 head=abc issue-read=5 pr-read=9 -->\r' ||
     fail "a well-formed state marker was rejected"
-  assert_eq "review 7 12 abc 5 9" "$M_STATE $M_STEP $M_PR $M_HEAD $M_IREAD $M_PREAD"
+  assert_eq "review 12 abc 5 9" "$M_STATE $M_PR $M_HEAD $M_IREAD $M_PREAD"
 }
 
 test_marker_rejects_what_is_not_a_state_marker() {

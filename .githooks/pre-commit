@@ -156,37 +156,36 @@ done
 # ── Check 3: CHANGELOG.md updated when version bumps ──────────────────
 
 changelog_errors=()
-if [ -n "$release_branch" ]; then
-  for plugin_json in $(echo "$staged_files" | grep -E '^plugins/[^/]+/\.claude-plugin/plugin\.json$' || true); do
-    plugin_name=$(echo "$plugin_json" | sed 's|plugins/\([^/]*\)/\.claude-plugin/plugin\.json|\1|')
-    changelog="plugins/${plugin_name}/CHANGELOG.md"
+for plugin_json in $(echo "$staged_files" | grep -E '^plugins/[^/]+/\.claude-plugin/plugin\.json$' || true); do
+  [ -n "$release_branch" ] || break
+  plugin_name=$(echo "$plugin_json" | sed 's|plugins/\([^/]*\)/\.claude-plugin/plugin\.json|\1|')
+  changelog="plugins/${plugin_name}/CHANGELOG.md"
 
-    # Get the new version
-    new_version=$(git show ":${plugin_json}" 2>/dev/null | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | grep -o '[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*' || echo "")
+  # Get the new version
+  new_version=$(git show ":${plugin_json}" 2>/dev/null | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | grep -o '[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*' || echo "")
 
-    if [ -z "$new_version" ]; then
-      continue
-    fi
+  if [ -z "$new_version" ]; then
+    continue
+  fi
 
-    # Check old version to see if it actually changed (skip for brand-new plugins)
-    old_version=$(git show "HEAD:${plugin_json}" 2>/dev/null | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | grep -o '[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*' || echo "0.0.0")
-    if [ "$old_version" = "$new_version" ]; then
-      continue
-    fi
+  # Check old version to see if it actually changed (skip for brand-new plugins)
+  old_version=$(git show "HEAD:${plugin_json}" 2>/dev/null | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | grep -o '[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*' || echo "0.0.0")
+  if [ "$old_version" = "$new_version" ]; then
+    continue
+  fi
 
-    # CHANGELOG.md must be staged
-    if ! echo "$staged_files" | grep -qx "$changelog"; then
-      changelog_errors+=("${plugin_name} (v${new_version}): CHANGELOG.md not staged")
-      continue
-    fi
+  # CHANGELOG.md must be staged
+  if ! echo "$staged_files" | grep -qx "$changelog"; then
+    changelog_errors+=("${plugin_name} (v${new_version}): CHANGELOG.md not staged")
+    continue
+  fi
 
-    # CHANGELOG.md must contain the new version number
-    changelog_content=$(git show ":${changelog}" 2>/dev/null || echo "")
-    if ! echo "$changelog_content" | grep -q "\[${new_version}\]"; then
-      changelog_errors+=("${plugin_name} (v${new_version}): CHANGELOG.md missing entry for [${new_version}]")
-    fi
-  done
-fi
+  # CHANGELOG.md must contain the new version number
+  changelog_content=$(git show ":${changelog}" 2>/dev/null || echo "")
+  if ! echo "$changelog_content" | grep -q "\[${new_version}\]"; then
+    changelog_errors+=("${plugin_name} (v${new_version}): CHANGELOG.md missing entry for [${new_version}]")
+  fi
+done
 
 # ── Check 4: new plugin registration (README + marketplace) ───────────
 

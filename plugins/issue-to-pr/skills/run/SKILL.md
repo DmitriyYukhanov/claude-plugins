@@ -29,11 +29,9 @@ gate's own code in `GATE_<NAME>_EXIT`.
 
 - **Merge is gated on explicit in-session approval**, runs ONLY in the main session, via
   `S/finish.sh merge` — never a bare `gh pr merge`, never `--admin`, never on the turn the PR
-  opens. Force-push only with `--force-with-lease`. Under `--headless` the go-ahead is
-  the owner reply `merge` on GitHub (`R/headless.md`), or, for a fresh run, the `--auto-merge` policy, whose
-  self-merge happens on the report's turn and only through `S/finish.sh merge --auto`. A headless run on an
-  issue that already carries a state comment never self-merges. `S/finish.sh` checks both: the
-  owner's `merge` for the reported head, and no earlier state under `--auto`.
+  opens. Force-push only with `--force-with-lease`. Under `--headless` the go-ahead is the
+  owner reply `merge`, or the `--auto-merge` policy through `S/finish.sh merge --auto`; a run on
+  an issue that already stopped once never self-merges (`R/headless.md`).
 - **Ask contract:** three moments, `--grill` reshapes the first (`R/judgment.md`) — (1) Step 3:
   ONE batched question if the ledger has open items, or the grill in its place, (2) the
   merge gate, (3) a hard stop. Decide everything else yourself and log it, and never ask what a
@@ -46,13 +44,11 @@ gate's own code in `GATE_<NAME>_EXIT`.
 - **Humanize** all human-facing text (report, PR body, UI strings > 1–2 words) at every tier,
   using the companion or its fallback — not code, logs or commit subjects.
 
-**`--headless`** (unattended, launched by a dispatcher): every run starts from the state the last
-one left on the issue; Step 3's question and Step 8's approval travel as GitHub comments and label
-flips, and a PR whose tier is at or under `--auto-merge`
-(default `trivial` headless, `none` otherwise) merges without one — all of it in `R/headless.md`.
-Step 0 takes an issue number only (free text is a stop), `--grill` has nobody to confirm the
-design and is a stop too; every other step reads exactly as below. `--auto-merge` does nothing
-without `--headless`.
+**`--headless`** (unattended, launched by a dispatcher): Step 3's question and Step 8's approval
+travel as comments on the issue, and a PR at or under `--auto-merge` (default `trivial` headless,
+`none` otherwise) merges without one, all in `R/headless.md`. Step 0 takes an issue number only
+(free text is a stop), `--grill` has nobody to confirm the design and is a stop too; every other
+step reads exactly as below.
 
 ## Steps
 

@@ -7,9 +7,9 @@
 # shellcheck disable=SC2034 # read by the scripts that source this file
 MARKER_JQ='.[] | [.id, .user.login, ((.body | split("\n") | map(rtrimstr("\r")) | map(select(startswith("<!-- issue-to-pr"))) | last) // ""), (.body | gsub("^\\s+|\\s+$"; "") | ascii_downcase)] | @tsv'
 
-parse_marker() { # marker-line -> M_STATE M_STEP M_PR M_HEAD M_IREAD M_PREAD; rc 1 unless a well-formed state marker
+parse_marker() { # marker-line -> M_STATE M_PR M_HEAD M_IREAD M_PREAD; rc 1 unless a well-formed state marker
   local m=${1%$'\r'} tok k v toks
-  M_STATE='' M_STEP='' M_PR='' M_HEAD='' M_IREAD='' M_PREAD=''
+  M_STATE='' M_PR='' M_HEAD='' M_IREAD='' M_PREAD=''
   case "$m" in '<!-- issue-to-pr '*' -->') ;; *) return 1 ;; esac
   m=${m#'<!-- issue-to-pr '}
   m=${m%' -->'}
@@ -21,7 +21,7 @@ parse_marker() { # marker-line -> M_STATE M_STEP M_PR M_HEAD M_IREAD M_PREAD; rc
     [ "$k" != "$tok" ] || continue
     case "$k" in
       state) M_STATE=$v ;;
-      step) M_STEP=$v ;;
+      step) ;; # the resuming model reads it; no script does
       head) M_HEAD=$v ;;
       pr | issue-read | pr-read)
         case "$v" in *[!0-9]*) return 1 ;; esac
