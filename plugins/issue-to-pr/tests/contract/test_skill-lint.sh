@@ -143,7 +143,8 @@ test_headless_is_one_flag_that_reshapes_two_contacts_and_adds_none() {
   hl=$(cat "$(references_dir)/headless.md") || fail "R/headless.md missing"
   assert_contains "$hl" 'agent:waiting' "headless.md must name the label a posted question sets"
   assert_contains "$hl" 'agent:review'  "headless.md must name the label an unmerged PR sets"
-  assert_contains "$hl" 'OWNER'         "headless.md must say only the owner's comment continues a run"
+  assert_contains "$hl" 'An **owner reply** is a comment by the owner' \
+    "headless.md must say only the owner's comment continues a run"
   assert_contains "$hl" 'finish.sh merge <N> --branch <b> --auto' \
     "the self-merge must pass --auto so the script checks the tier and human paths"
   assert_contains "$hl" 'git status --porcelain' "a headless deploy must refuse a dirty main checkout"
@@ -194,7 +195,7 @@ test_headless_state_lives_in_marked_comments_on_the_issue() {
   assert_contains "$hl" 'ends with one marker line' "every posted comment must say its marker is the last line"
   assert_contains "$hl" 'a missing cursor counts as 0' "an absent issue-read/pr-read cursor must be pinned to 0"
   assert_contains "$hl" 'without a marker' "an owner reply is an unmarked comment"
-  assert_contains "$hl" 'Edits never count' "an edited comment must never count as a reply"
+  assert_contains "$hl" 'never moves it to a later id' "an edit must never make an old comment count as new"
   assert_contains "$hl" 'authorizes nothing' "a state comment by anyone but the owner must be ignored"
   assert_contains "$hl" '--add-label agent:running --remove-label agent,agent:waiting,agent:review,agent:failed' \
     "a run starts with one label edit, the same one the dispatcher makes"
@@ -210,6 +211,8 @@ test_headless_state_lives_in_marked_comments_on_the_issue() {
   assert_contains "$hl" 'no earlier owner state comment' \
     "the self-merge policy must hold back a run on an issue with any earlier state, not just a resumed one"
   assert_contains "$hl" '| Current state |' "re-entry is one transition table; the first matching row decides"
+  assert_contains "$hl" 'a change request among the replies' \
+    "a change request among several replies must win over a later merge word"
   assert_contains "$hl" 'no rebuild' "a failed state after the merge must not rebuild the merged work"
   assert_contains "$hl" 'step=9 pr=<pr>' "a post-merge failure must name the merged PR so a later run finds it"
   hard=$(awk '/^- \*\*Merge is gated/ { f = 1 } f && /^- / && !/^- \*\*Merge is gated/ { exit } f { print }' "$(skill_md)")

@@ -29,9 +29,9 @@ gate's own code in `GATE_<NAME>_EXIT`.
 
 - **Merge is gated on explicit in-session approval**, runs ONLY in the main session, via
   `S/finish.sh merge` — never a bare `gh pr merge`, never `--admin`, never on the turn the PR
-  opens. Force-push only with `--force-with-lease`. Under `--headless` the go-ahead is an owner reply
-  on GitHub (`R/headless.md`), or, for a fresh run, the `--auto-merge` policy, whose self-merge
-  happens on the report's turn and only through `S/finish.sh merge --auto`. A headless run on an
+  opens. Force-push only with `--force-with-lease`. Under `--headless` the go-ahead is
+  the owner reply `merge` on GitHub (`R/headless.md`), or, for a fresh run, the `--auto-merge` policy, whose
+  self-merge happens on the report's turn and only through `S/finish.sh merge --auto`. A headless run on an
   issue that already carries a state comment never self-merges. `S/finish.sh` checks both: the
   owner's `merge` for the reported head, and no earlier state under `--auto`.
 - **Ask contract:** three moments, `--grill` reshapes the first (`R/judgment.md`) — (1) Step 3:
