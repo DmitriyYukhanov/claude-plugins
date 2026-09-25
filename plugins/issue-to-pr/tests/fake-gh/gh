@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# A stand-in for gh: answers the four calls finish.sh makes, shaped by FAKE_GH_SCENARIO.
+# A stand-in for gh: answers the calls finish.sh makes, shaped by FAKE_GH_SCENARIO. With
+# FAKE_GH_FIX set it also serves the headless reads (user, issue labels, comments) from files there.
 set -uo pipefail
 
 if [ -n "${FAKE_GH_LOG:-}" ]; then
@@ -8,6 +9,11 @@ fi
 
 scenario=${FAKE_GH_SCENARIO:-happy}
 SHA="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+
+serve() { # fixture [default]: FAKE_GH_FIX/<fixture>, else the default; fail-<fixture> exits 1
+  [ ! -e "$FAKE_GH_FIX/fail-$1" ] || exit 1
+  if [ -f "$FAKE_GH_FIX/$1" ]; then cat "$FAKE_GH_FIX/$1"; else printf '%s' "${2-}"; fi
+}
 
 case "${1:-} ${2:-}" in
   "repo view")
@@ -25,12 +31,12 @@ case "${1:-} ${2:-}" in
     ;;
   "pr view")
     case "$*" in
-      *reviewDecision*) # merge: head sha, review decision, base
+      *reviewDecision*) # merge: head sha, review decision, base, PR number
         case "$scenario" in
           pr-unreadable) exit 1 ;;
-          review-changes-requested) printf '%s\tCHANGES_REQUESTED\tmain\n' "$SHA" ;;
-          stacked-base) printf '%s\t\tfeat/issue-5-parent\n' "$SHA" ;;
-          *) printf '%s\tAPPROVED\tmain\n' "$SHA" ;;
+          review-changes-requested) printf '%s\tCHANGES_REQUESTED\tmain\t12\n' "$SHA" ;;
+          stacked-base) printf '%s\t\tfeat/issue-5-parent\t12\n' "$SHA" ;;
+          *) printf '%s\tAPPROVED\tmain\t12\n' "$SHA" ;;
         esac
         ;;
       *) # cleanup: PR state
@@ -49,6 +55,19 @@ case "${1:-} ${2:-}" in
         ;;
       *) exit 0 ;;
     esac
+    ;;
+  "api user")
+    [ -n "${FAKE_GH_FIX:-}" ] || exit 0
+    serve user $'octo\n'
+    ;;
+  "issue view") # headless: the issue's label names
+    [ -n "${FAKE_GH_FIX:-}" ] || exit 0
+    serve "labels-${3:-}"
+    ;;
+  "api repos/"*/comments) # headless: a thread's comments as TSV id, login, marker, body
+    [ -n "${FAKE_GH_FIX:-}" ] || exit 0
+    n=${2%/comments}
+    serve "comments-${n##*/}"
     ;;
   *) exit 0 ;;
 esac

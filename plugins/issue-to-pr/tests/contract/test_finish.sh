@@ -475,3 +475,131 @@ test_auto_merge_refuses_when_the_diff_cannot_be_read() {
   assert_key "$OUT" STOP_REASON auto-unprovable
   assert_gh_not_called "pr merge" "an unreadable diff merged unattended"
 }
+
+headless_setup() { # [labels] -> merge_setup happy, fixtures in FAKE_GH_FIX, issue 6 labelled
+  merge_setup happy
+  export FAKE_GH_FIX="$TEST_TMPDIR/fix"
+  mkdir -p "$FAKE_GH_FIX"
+  printf '%s\n' "${1-agent:running}" >"$FAKE_GH_FIX/labels-6"
+}
+
+comment() { # thread id login marker body -> one row of that thread's comments
+  printf '%s\t%s\t%s\t%s\n' "$2" "$3" "$4" "$5" >>"$FAKE_GH_FIX/comments-$1"
+}
+
+report() { # state pr head -> a state marker line
+  printf '<!-- issue-to-pr state=%s step=7 tier=trivial pr=%s head=%s issue-read=90 -->' "$1" "$2" "$3"
+}
+
+assert_headless_stop() { # reason msg
+  assert_rc 2
+  assert_key "$OUT" STOP_REASON "$1"
+  assert_gh_not_called "pr merge" "$2"
+  assert_gh_not_called "push" "$2"
+}
+
+run_auto() { run_script finish.sh merge 6 --branch feat/issue-6-x --auto trivial --tier trivial; }
+run_plain() { run_script finish.sh merge 6 --branch feat/issue-6-x; }
+
+test_attended_merge_reads_the_labels_and_nothing_else() {
+  headless_setup agent:review
+  comment 6 100 octo "$(report waiting 12 "$SHA_OK")" "stopped"
+  run_plain
+  assert_rc 0
+  assert_key "$OUT" MERGED true
+  assert_eq 1 "$(grep -c '^gh issue view' "$FAKE_GH_LOG")" "attended reads the labels once"
+  assert_gh_not_called "gh api" "an attended merge read more than the labels"
+}
+
+test_headless_auto_merge_waits_once_the_run_has_stopped() {
+  headless_setup
+  comment 6 100 octo "$(report waiting "" "")" "question"
+  run_auto
+  assert_headless_stop auto-prior-state "an unattended merge went through after the run had stopped once"
+  assert_contains "$ERR" "on the issue" "the auto-prior-state stop must point at the issue"
+}
+
+test_headless_auto_merge_ignores_a_stranger_state() {
+  headless_setup
+  comment 6 100 mallory "$(report waiting 12 "$SHA_OK")" "fake stop"
+  run_auto
+  assert_rc 0
+  assert_key "$OUT" MERGED true
+}
+
+test_headless_auto_merge_with_no_state_merges() {
+  headless_setup
+  comment 6 100 octo "" "just a note"
+  run_auto
+  assert_rc 0
+  assert_key "$OUT" MERGED true
+}
+
+test_headless_plain_merge_needs_a_report() {
+  headless_setup
+  comment 12 105 octo "" "merge"
+  run_plain
+  assert_headless_stop headless-unapproved "a headless merge went through with no review report"
+}
+
+test_headless_plain_merge_refuses_a_report_for_another_head() {
+  headless_setup
+  comment 6 101 octo "$(report review 12 bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb)" "report"
+  comment 6 102 octo "" "merge"
+  run_plain
+  assert_headless_stop headless-unapproved "a merge word for another head merged this one"
+}
+
+test_headless_plain_merge_refuses_a_report_for_another_pr() {
+  headless_setup
+  comment 6 101 octo "$(report review 13 "$SHA_OK")" "report"
+  comment 6 102 octo "" "merge"
+  run_plain
+  assert_headless_stop headless-unapproved "a merge word for PR 13 merged PR 12"
+}
+
+test_headless_plain_merge_refuses_a_word_older_than_the_report() {
+  headless_setup
+  comment 6 100 octo "" "merge"
+  comment 6 101 octo "$(report review 12 "$SHA_OK")" "report"
+  run_plain
+  assert_headless_stop headless-unapproved "a merge said before the report authorized it"
+}
+
+test_headless_plain_merge_takes_the_owner_word_on_the_pr() {
+  headless_setup
+  comment 6 101 octo "$(report review 12 "$SHA_OK")" "report"
+  comment 12 102 octo "" "merge"
+  comment 12 103 mallory "" "wait"
+  comment 6 104 octo "<!-- issue-to-pr -->" "a note of the run's own"
+  run_plain
+  assert_rc 0
+  assert_key "$OUT" MERGED true
+  assert_gh_called "pr merge feat/issue-6-x --squash --match-head-commit $SHA_OK"
+}
+
+test_headless_plain_merge_heeds_the_owner_newest_word() {
+  headless_setup
+  comment 6 101 octo "$(report review 12 "$SHA_OK")" "report"
+  comment 12 102 octo "" "merge"
+  comment 6 103 octo "" "wait, change the title"
+  run_plain
+  assert_headless_stop headless-unapproved "a later owner word did not revoke the merge"
+}
+
+test_headless_merge_fails_closed_when_github_cannot_be_read() {
+  local f
+  headless_setup
+  comment 6 101 octo "$(report review 12 "$SHA_OK")" "report"
+  comment 12 102 octo "" "мерж"
+  for f in comments-6 comments-12 user labels-6; do
+    rm -f "$FAKE_GH_FIX"/fail-*
+    : >"$FAKE_GH_FIX/fail-$f"
+    run_plain
+    assert_headless_stop headless-unprovable "a merge went through with $f unreadable"
+  done
+  rm -f "$FAKE_GH_FIX"/fail-*
+  run_plain # the control: the same threads, all readable, merge on the Russian word
+  assert_rc 0
+  assert_key "$OUT" MERGED true
+}

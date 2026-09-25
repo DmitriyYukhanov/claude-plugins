@@ -4,6 +4,8 @@ set -uo pipefail
 SCRIPT_DIR=${BASH_SOURCE[0]%/*}
 # shellcheck source=lib/common.sh
 source "$SCRIPT_DIR/lib/common.sh"
+# shellcheck source=lib/marker.sh
+source "$SCRIPT_DIR/lib/marker.sh"
 
 # finish.sh merge   <N> --branch <b> [--method squash|merge|rebase] [--auto <threshold> --tier <tier>]
 # finish.sh cleanup <N> --branch <b> [--keep-branch]
@@ -36,14 +38,15 @@ root=$(repo_root)
 [ -n "$root" ] || degrade not-a-git-repo "finish: not inside a git repository"
 
 cmd_merge() {
-  local pr head_sha decision base_ref receipt push_out merge_out default_ref base_rev globs pathspecs changed hit
+  local pr head_sha decision base_ref pr_number receipt push_out merge_out default_ref base_rev globs pathspecs changed hit
   # reviewDecision alone is null on a base branch that does not require review, however many
   # reviews a PR has, so the reviews themselves decide and the field only confirms them
-  pr=$(gh pr view "$branch" --json headRefOid,reviewDecision,latestReviews,baseRefName \
-    --jq '"\(.headRefOid)\t\(if .reviewDecision == "CHANGES_REQUESTED" or any(.latestReviews[]?; .state == "CHANGES_REQUESTED") then "CHANGES_REQUESTED" else .reviewDecision // "" end)\t\(.baseRefName)"' 2>/dev/null) || pr=""
+  pr=$(gh pr view "$branch" --json headRefOid,reviewDecision,latestReviews,baseRefName,number \
+    --jq '"\(.headRefOid)\t\(if .reviewDecision == "CHANGES_REQUESTED" or any(.latestReviews[]?; .state == "CHANGES_REQUESTED") then "CHANGES_REQUESTED" else .reviewDecision // "" end)\t\(.baseRefName)\t\(.number)"' 2>/dev/null) || pr=""
   head_sha=$(printf '%s' "$pr" | cut -f1)
   decision=$(printf '%s' "$pr" | cut -f2)
   base_ref=$(printf '%s' "$pr" | cut -f3)
+  pr_number=$(printf '%s' "$pr" | cut -f4)
   case "$head_sha" in '' | null)
     stop pr-unreadable "issue-to-pr: could not read the PR for $branch. Check it exists and gh is authenticated, then hand back." ;;
   esac
@@ -58,6 +61,7 @@ cmd_merge() {
   esac
   [ "$decision" != CHANGES_REQUESTED ] ||
     stop review-blocked "issue-to-pr: $branch has a review requesting changes. Address it, push, re-run the gates, and re-approve."
+  headless_guard "$pr_number"
 
   if [ -n "$auto" ]; then
     [ "$(tier_rank "$tier")" -le "$(tier_rank "$auto")" ] ||
@@ -110,6 +114,56 @@ cmd_merge() {
     emit BASE_IS_DEFAULT true
   fi
   done_ok
+}
+
+row() { # comment TSV line -> R_ID R_LOGIN R_MARKER R_BODY; rc 1 on a row with no numeric id
+  local l=${1%$'\r'}
+  R_ID=${l%%$'\t'*}
+  l=${l#*$'\t'}
+  R_LOGIN=${l%%$'\t'*}
+  l=${l#*$'\t'}
+  R_MARKER=${l%%$'\t'*}
+  R_BODY=${l#*$'\t'}
+  case "$R_ID" in '' | *[!0-9]*) return 1 ;; esac
+}
+
+headless_guard() { # pr-number: returns on an attended merge or the owner's word for head_sha
+  local labels owner rows prows line sid=0 st="" spr="" shead="" wid=0 word=""
+  labels=$(gh issue view "$issue" --json labels --jq '.labels[].name' 2>/dev/null) ||
+    stop headless-unprovable "issue-to-pr: could not read the labels of issue #$issue, so whether this merge is headless is unknown. Check gh is authenticated, then re-run."
+  # ponytail: headless = agent:running (Step 0 and the dispatcher set it before any work); a label lost mid-run merges attended-style
+  case $'\n'"${labels//$'\r'/}"$'\n' in *$'\n'agent:running$'\n'*) ;; *) return 0 ;; esac
+  owner=$(gh api user --jq .login 2>/dev/null) || owner=""
+  owner=${owner%$'\r'}
+  [ -n "$owner" ] ||
+    stop headless-unprovable "issue-to-pr: could not read the owner's login (gh api user), so no comment can authorize a headless merge of issue #$issue. Check gh is authenticated, then re-run."
+  rows=$(gh api "repos/{owner}/{repo}/issues/$issue/comments" --paginate --jq "$MARKER_JQ" 2>/dev/null) ||
+    stop headless-unprovable "issue-to-pr: could not read the comments on issue #$issue, so the run's state is unknown. Check gh is authenticated, then re-run."
+  while IFS= read -r line; do
+    row "$line" || continue
+    [ "$R_LOGIN" = "$owner" ] || continue
+    parse_marker "$R_MARKER" || continue
+    sid=$R_ID st=$M_STATE spr=$M_PR shead=$M_HEAD
+  done <<<"$rows"
+
+  if [ -n "$auto" ]; then
+    [ -z "$st" ] ||
+      stop auto-prior-state "issue-to-pr: issue #$issue already stopped once, so this PR waits for the owner's 'merge'. Post a state=review comment on the issue that it waits for 'merge', label agent:review, and end the turn."
+    return 0
+  fi
+  if [ "$st" != review ] || [ -z "$1" ] || [ "$spr" != "$1" ] || [ "$shead" != "$head_sha" ]; then
+    stop headless-unapproved "issue-to-pr: a headless merge needs a state=review report for PR #$1 at ${head_sha:0:12}, and the current state of issue #$issue is not that (state=${st:-none} pr=${spr:-none} head=${shead:0:12}). Post that report on the issue, label agent:review, and end the turn."
+  fi
+  prows=$(gh api "repos/{owner}/{repo}/issues/$1/comments" --paginate --jq "$MARKER_JQ" 2>/dev/null) ||
+    stop headless-unprovable "issue-to-pr: could not read the conversation of PR #$1, so the owner's word on it is unknown. Check gh is authenticated, then re-run."
+  while IFS= read -r line; do
+    row "$line" || continue
+    if [ "$R_LOGIN" = "$owner" ] && [ -z "$R_MARKER" ] && [ "$R_ID" -gt "$sid" ] && [ "$R_ID" -gt "$wid" ]; then
+      wid=$R_ID word=$R_BODY
+    fi
+  done <<<"$rows"$'\n'"$prows"
+  case "$word" in merge | мерж) return 0 ;; esac
+  stop headless-unapproved "issue-to-pr: the owner's newest word after the report for ${head_sha:0:12} is not 'merge' (${word:-nothing yet}). Answer it in a new state=review comment on the issue, label agent:review, and end the turn."
 }
 
 registered_wt() { # the registered worktree ending in /issue-<N>, or empty
