@@ -314,12 +314,31 @@ assert_dead() { # pid what
   if kill -0 "$1" 2>/dev/null; then fail "$2 (pid $1) is still alive"; fi
 }
 
+kill_stray_run() { # safety net for a launching test: a broken stop must not strand the fake
+  # CLI's real gate process (a 600s sleep) or, on Windows, the job.ps1 launcher, even when the
+  # test itself fails. Chained with the runner's own EXIT trap, which this replaces.
+  local leader='' child=''
+  if [ -s "$FIX/hang.pids" ]; then read -r leader child <"$FIX/hang.pids"; fi
+  [ -n "$leader" ] && kill -KILL "$leader" 2>/dev/null
+  [ -n "$child" ] && kill -KILL "$child" 2>/dev/null
+  if on_windows_host && [ -f "$HOME/.agent-dispatch/lock/run" ]; then
+    taskkill //F //PID "$(cat "$HOME/.agent-dispatch/lock/run" 2>/dev/null)" >/dev/null 2>&1
+  fi
+  cd / 2>/dev/null
+  rm -rf "$TEST_TMPDIR"
+}
+
 test_the_deadline_stops_the_run_and_fails_it() {
-  local leader child
+  local leader child start
   setup_env
+  trap kill_stray_run EXIT
   open_issue 4 agent
   export FAKE_CLI_MODE=hang FAKE_SLEEP_STEP=3600 FAKE_SLEEP_REAL=1
+  start=$SECONDS
   dispatch
+  # SECONDS is bash's own real-time clock, untouched by the fake date/sleep fixtures: a stop that
+  # does nothing would still "pass" once the real 600s sleep ends on its own, just 500x too slow.
+  [ "$((SECONDS - start))" -lt 120 ] || fail "the tick took $((SECONDS - start))s; the stop did nothing and it waited out the real 600s sleep"
   assert_rc 0
   assert_key "$OUT" OUTCOME agent:failed
   assert_contains "$(cat "$FIX/posted-4")" "4-hour deadline"
@@ -363,6 +382,7 @@ test_a_dead_ticks_lock_without_a_run_is_reconciled() {
 test_a_dead_ticks_run_is_stopped_and_reconciled() {
   local leader child
   setup_env
+  trap kill_stray_run EXIT
   open_issue 4 agent:running
   export FAKE_CLI_MODE=hang
   (

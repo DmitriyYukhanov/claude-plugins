@@ -171,14 +171,18 @@ write_run_script() { # path host issue tier log -> $LOCK/run.sh
   } >"$LOCK/run.sh"
 }
 
-winpid_of() { # cygpid -> the launcher's own powershell.exe winpid; empty if it never shows up.
-  # MSYS's fork-then-exec of a native target briefly reports a placeholder image (its own
-  # bash.exe) at this cygpid before /proc/<cygpid>/winpid settles on the real target, and that
-  # placeholder can itself sit still across two immediate reads; only the image name tells them
-  # apart, so a candidate is trusted once, not just when it stops changing. No `sleep` here:
-  # tests replay it through a fake clock, which would corrupt a caller's deadline math.
-  local v seen='' i=0
-  while [ "$i" -lt 100 ]; do
+winpid_of() { # cygpid -> the launcher's confirmed powershell.exe winpid; empty once it has exited
+  # without ever being confirmed. MSYS's fork-then-exec of a native target briefly reports a
+  # placeholder image (its own bash.exe) at this cygpid before /proc/<cygpid>/winpid settles on
+  # the real target, and that placeholder can itself sit still across two immediate reads; only
+  # the image name tells them apart, so a candidate is trusted once confirmed, never handed out
+  # unconfirmed. Bounded by the launcher's own life, not a fixed budget: a fixed iteration cap can
+  # run out while the launcher is still alive and simply slow to settle, which is exactly the case
+  # where the caller must not lose the ability to stop it. No `sleep` here: tests replay it
+  # through a fake clock, which would corrupt a caller's deadline math; the read (and, on a
+  # changed candidate, tasklist) calls provide their own pacing.
+  local v seen=''
+  while kill -0 "$1" 2>/dev/null; do
     v=$(cat "/proc/$1/winpid" 2>/dev/null)
     if [ -n "$v" ] && [ "$v" != "$seen" ]; then
       seen=$v
@@ -187,9 +191,8 @@ winpid_of() { # cygpid -> the launcher's own powershell.exe winpid; empty if it 
         return 0
       fi
     fi
-    i=$((i + 1))
   done
-  printf '%s' "$seen"
+  printf ''
 }
 
 launch() { # runs $LOCK/run.sh -> RUN_PID (to wait on), RUN_ID (to stop), recorded in the lock

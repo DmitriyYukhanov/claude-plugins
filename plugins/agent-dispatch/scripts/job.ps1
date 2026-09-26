@@ -2,7 +2,14 @@
 # job object that dies with this process, so stopping this one process stops every process the
 # run started, however deep, including Git Bash grandchildren whose parent already exited
 # (taskkill /T misses those). Only two paths come in: PowerShell 5.1 mangles quoted arguments.
-Add-Type @'
+# ErrorActionPreference=Stop, so a failed Add-Type compile (a non-terminating error by default)
+# cannot fall through to `& $args[0] $args[1]` running bash outside the job object; the catch
+# below is the actual guarantee (a `throw` from Enter() is already terminating either way) and
+# always exits non-zero, since `& ...` failing to even start bash leaves $LASTEXITCODE $null,
+# and `exit $null` is 0, not a failure.
+$ErrorActionPreference = 'Stop'
+try {
+  Add-Type @'
 using System;
 using System.Runtime.InteropServices;
 public static class AgentDispatchJob {
@@ -21,6 +28,11 @@ public static class AgentDispatchJob {
   }
 }
 '@
-[AgentDispatchJob]::Enter()
-& $args[0] $args[1]
-exit $LASTEXITCODE
+  [AgentDispatchJob]::Enter()
+  & $args[0] $args[1]
+  if ($null -eq $LASTEXITCODE) { exit 1 }
+  exit $LASTEXITCODE
+} catch {
+  Write-Error $_
+  exit 1
+}
