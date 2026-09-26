@@ -7,11 +7,5 @@
 plugins/issue-to-pr/** text eol=lf
 plugins/issue-to-pr/tests/fake-gh/gh text eol=lf
 
-# agent-dispatch ships the same kind of extension-less fixture shims (fake gh, fake claude/codex,
-# a fake date and sleep) for the same reason.
+# agent-dispatch: the same, for its extension-less fixture shims too.
 plugins/agent-dispatch/** text eol=lf
-plugins/agent-dispatch/tests/fixtures/fake-gh/gh text eol=lf
-plugins/agent-dispatch/tests/fixtures/fake-cli/claude text eol=lf
-plugins/agent-dispatch/tests/fixtures/fake-cli/codex text eol=lf
-plugins/agent-dispatch/tests/fixtures/bin/date text eol=lf
-plugins/agent-dispatch/tests/fixtures/bin/sleep text eol=lf

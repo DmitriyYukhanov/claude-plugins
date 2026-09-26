@@ -333,6 +333,15 @@ dead_pid() { # -> a pid that has already exited
   printf '%s' "$p"
 }
 
+dead_tick_lock() { # [log] -> the lock a tick that died left for octo/widgets#4
+  local lock="$HOME/.agent-dispatch/lock"
+  mkdir -p "$lock"
+  printf 'octo/widgets\n' >"$lock/repo"
+  printf '4\n' >"$lock/issue"
+  dead_pid >"$lock/tick"
+  if [ -n "${1:-}" ]; then printf '%s\n' "$1" >"$lock/log"; fi
+}
+
 assert_dead() { # pid what
   local _i=0
   while kill -0 "$1" 2>/dev/null && [ "$_i" -lt 25 ]; do
@@ -392,11 +401,7 @@ test_a_dead_ticks_lock_without_a_run_is_reconciled() {
   setup_env
   lock="$HOME/.agent-dispatch/lock"
   open_issue 4 agent:running
-  mkdir -p "$lock"
-  printf 'octo/widgets\n' >"$lock/repo"
-  printf '4\n' >"$lock/issue"
-  dead_pid >"$lock/tick"
-  printf '%s\n' "$HOME/.agent-dispatch/logs/octo_widgets_4_20260101T000000Z.log" >"$lock/log"
+  dead_tick_lock "$HOME/.agent-dispatch/logs/octo_widgets_4_20260101T000000Z.log"
   : >"$FIX/issues"
   dispatch
   assert_rc 0
@@ -416,11 +421,8 @@ test_a_dead_ticks_run_is_stopped_and_reconciled() {
   (
     # shellcheck source=../../scripts/dispatch.sh
     source "$AD_SCRIPTS/dispatch.sh"
-    mkdir -p "$LOCK" "$AD_HOME/logs"
-    printf 'octo/widgets\n' >"$LOCK/repo"
-    printf '4\n' >"$LOCK/issue"
-    dead_pid >"$LOCK/tick"
-    printf '%s\n' "$AD_HOME/logs/run.log" >"$LOCK/log"
+    mkdir -p "$AD_HOME/logs"
+    dead_tick_lock "$AD_HOME/logs/run.log"
     write_run_script "$TEST_TMPDIR/checkout" claude 4 trivial "$AD_HOME/logs/run.log"
     launch >/dev/null
   )
@@ -439,10 +441,7 @@ test_recovery_keeps_the_lock_while_github_is_unreachable() {
   setup_env
   lock="$HOME/.agent-dispatch/lock"
   open_issue 4 agent:running
-  mkdir -p "$lock"
-  printf 'octo/widgets\n' >"$lock/repo"
-  printf '4\n' >"$lock/issue"
-  dead_pid >"$lock/tick"
+  dead_tick_lock
   : >"$FIX/fail-labels-4"
   dispatch
   assert_rc 1
@@ -633,10 +632,7 @@ test_a_dead_ticks_launch_without_a_run_id_keeps_the_lock() {
   setup_env
   lock="$HOME/.agent-dispatch/lock"
   open_issue 4 agent:running
-  mkdir -p "$lock"
-  printf 'octo/widgets\n' >"$lock/repo"
-  printf '4\n' >"$lock/issue"
-  dead_pid >"$lock/tick"
+  dead_tick_lock
   : >"$lock/launched"
   dispatch
   assert_rc 1
@@ -646,6 +642,11 @@ test_a_dead_ticks_launch_without_a_run_id_keeps_the_lock() {
   return 0
 }
 
+run_job() { # bash.exe script -> job.ps1's exit code
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w "$AD_SCRIPTS/job.ps1")" \
+    "$(cygpath -w "$1")" "$(cygpath -w "$2")" </dev/null >/dev/null 2>&1
+}
+
 test_the_windows_launcher_records_its_own_pid_before_bash_starts() {
   on_windows_host || { printf 'job.ps1 only runs on Windows; skipped\n'; return 0; }
   local d="$TEST_TMPDIR/lock"
@@ -653,20 +654,9 @@ test_the_windows_launcher_records_its_own_pid_before_bash_starts() {
   # The script checks, from inside the run, that `run` already names a live powershell.exe.
   # shellcheck disable=SC2016 # $(cat ...) runs inside the generated script, not here
   printf 'tasklist //FI "PID eq $(cat %q)" //NH > %q\n' "$d/run" "$d/seen" >"$d/run.sh"
-  powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w "$AD_SCRIPTS/job.ps1")" \
-    "$(cygpath -w "$BASH")" "$(cygpath -w "$d/run.sh")" </dev/null >/dev/null 2>&1
+  run_job "$BASH" "$d/run.sh"
   assert_eq 0 "$?" "exit code"
   assert_contains "$(tr '[:upper:]' '[:lower:]' <"$d/seen")" powershell.exe "run did not name the launcher while bash ran"
-}
-
-# F6: the launcher's own failures are not CLI errors.
-test_a_launcher_that_cannot_start_the_run_exits_96() {
-  on_windows_host || { printf 'job.ps1 only runs on Windows; skipped\n'; return 0; }
-  printf 'exit 0\n' >"$TEST_TMPDIR/run.sh"
-  # No lock directory next to the script: job.ps1 cannot record its pid, so bash must never start.
-  powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w "$AD_SCRIPTS/job.ps1")" \
-    "$(cygpath -w "$BASH")" "$(cygpath -w "$TEST_TMPDIR/nowhere/run.sh")" </dev/null >/dev/null 2>&1
-  assert_eq 96 "$?" "exit code"
 }
 
 test_launcher_exit_codes_name_their_cause() {
@@ -745,10 +735,7 @@ test_a_dead_ticks_stale_launch_without_a_run_id_is_reconciled() {
   setup_env
   lock="$HOME/.agent-dispatch/lock"
   open_issue 4 agent:running
-  mkdir -p "$lock"
-  printf 'octo/widgets\n' >"$lock/repo"
-  printf '4\n' >"$lock/issue"
-  dead_pid >"$lock/tick"
+  dead_tick_lock
   : >"$lock/launched"
   touch -t 202001010000 "$lock/launched"
   : >"$FIX/issues"
@@ -762,15 +749,14 @@ test_a_dead_ticks_stale_launch_without_a_run_id_is_reconciled() {
 
 test_the_launcher_exits_96_without_bash_and_passes_the_scripts_code_through() {
   on_windows_host || { printf 'job.ps1 only runs on Windows; skipped\n'; return 0; }
-  local ps1
-  ps1=$(cygpath -w "$AD_SCRIPTS/job.ps1")
   mkdir -p "$TEST_TMPDIR/lock"
   printf 'exit 5\n' >"$TEST_TMPDIR/lock/run.sh"
-  powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$ps1" "$(cygpath -w "$TEST_TMPDIR/no-bash.exe")" \
-    "$(cygpath -w "$TEST_TMPDIR/lock/run.sh")" </dev/null >/dev/null 2>&1
+  run_job "$TEST_TMPDIR/no-bash.exe" "$TEST_TMPDIR/lock/run.sh"
   assert_eq 96 "$?" "a bash.exe that cannot start is the launcher's failure"
-  powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$ps1" "$(cygpath -w "$BASH")" \
-    "$(cygpath -w "$TEST_TMPDIR/lock/run.sh")" </dev/null >/dev/null 2>&1
+  # No lock directory next to the script: job.ps1 cannot record its pid, so bash must never start.
+  run_job "$BASH" "$TEST_TMPDIR/nowhere/run.sh"
+  assert_eq 96 "$?" "a pid it cannot record is the launcher's failure"
+  run_job "$BASH" "$TEST_TMPDIR/lock/run.sh"
   assert_eq 5 "$?" "the script's own exit code passes through"
 }
 

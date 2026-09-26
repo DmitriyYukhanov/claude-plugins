@@ -1,10 +1,7 @@
 #!/usr/bin/env bash
 # agent-dispatch contract tests. Runs under bash 3.2 (macOS system bash) and up; every nested
 # shell is "$BASH", so the interpreter that started this file runs every test.
-# shellcheck disable=SC2016
-# SC2016: shellcheck only parses a `-c` script's own $1/$2 as positional params, not generic
-# unexpanded variables, when the interpreter is the literal word "bash"; "$BASH" defeats that
-# recognition, so it always flags this correct, intentional nested-script idiom.
+# shellcheck disable=SC2016 # nested "$BASH" -c scripts use their own $1/$2
 set -uo pipefail
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)

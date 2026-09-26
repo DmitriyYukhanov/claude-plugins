@@ -51,15 +51,13 @@ has_label() { # csv label
 
 # Ruling R1: split a MARKER_JQ row by parameter expansion, never `IFS=$'\t' read`, which
 # collapses a plain reply's consecutive marker/body tabs. Mirrors finish.sh's row().
-# shellcheck disable=SC2034 # R_BODY completes the row() contract; no caller here needs the body.
-row() { # comment TSV line -> R_ID R_LOGIN R_MARKER R_BODY; rc 1 on a row with no numeric id
+row() { # comment TSV line -> R_ID R_LOGIN R_MARKER (the body column is not needed here); rc 1 on a row with no numeric id
   local l=${1%$'\r'}
   R_ID=${l%%$'\t'*}
   l=${l#*$'\t'}
   R_LOGIN=${l%%$'\t'*}
   l=${l#*$'\t'}
   R_MARKER=${l%%$'\t'*}
-  R_BODY=${l#*$'\t'}
   case "$R_ID" in '' | *[!0-9]*) return 1 ;; esac
 }
 
@@ -294,7 +292,7 @@ gone() { # run-id -> rc 0 once nothing of the run is left; rc 1 while it lives o
 
 # shellcheck disable=SC2016,SC2088 # the backticks are Markdown; the tilde is shown, not expanded
 reconcile() { # repo issue cause log cli-error(0|1 CLI|2 launcher) -> OUTCOME [PAUSED]; rc 1 when GitHub failed
-  local labels body="$AD_HOME/.comment.md" shown=$4 comments prmark='' cause=$3 from=agent:running clierr=$5
+  local labels body="$AD_HOME/.comment.md" shown=$4 comments prmark='' cause=$3 from=agent:running clierr=$5 why=''
   if [ -z "$OWNER" ]; then # Ruling R2: recover() may call us before main() resolves OWNER
     OWNER=$(gh api user --jq .login 2>/dev/null | tr -d '\r')
     [ -n "$OWNER" ] || return 1
@@ -317,16 +315,18 @@ reconcile() { # repo issue cause log cli-error(0|1 CLI|2 launcher) -> OUTCOME [P
   comments=$(gh api "repos/$1/issues/$2/comments" --paginate --jq "$MARKER_JQ" 2>/dev/null) || return 1
   if current_state "$comments" && [ -n "$M_PR" ]; then prmark=" pr=$M_PR"; fi
   case "$shown" in "$HOME"/*) shown="~${shown#"$HOME"}" ;; esac
-  if [ "$clierr" != 0 ]; then
+  case "$clierr" in # a failure every next run would repeat pauses dispatching
+    1) why='An error like this usually means the CLI is logged out or out of allowance, and the next issue would fail the same way.' ;;
+    2) why='Every run on this machine would hit the same launcher failure.' ;;
+  esac
+  if [ -n "$why" ]; then
     : >"$AD_HOME/paused"
     say "PAUSED=true"
   fi
   {
     printf 'The dispatcher marked this run failed: %s. Its log stays on the machine that ran it, at `%s`.\n' "$cause" "$shown"
-    if [ "$clierr" = 1 ]; then
-      printf '\nDispatching is paused for every repo until `~/.agent-dispatch/paused` is deleted. An error like this usually means the CLI is logged out or out of allowance, and the next issue would fail the same way.\n'
-    elif [ "$clierr" = 2 ]; then
-      printf '\nDispatching is paused for every repo until `~/.agent-dispatch/paused` is deleted. Every run on this machine would hit the same launcher failure.\n'
+    if [ -n "$why" ]; then
+      printf '\nDispatching is paused for every repo until you delete `~/.agent-dispatch/paused`. %s\n' "$why"
     fi
     printf '\nTo retry, label the issue `agent` again.\n\n<!-- issue-to-pr state=failed%s -->\n' "$prmark"
   } >"$body"
@@ -391,7 +391,6 @@ run_issue() { # the picked issue: lock, flip, launch, wait, reconcile
       stop_run "$(run_id)"
       cause="it ran past the $((DEADLINE_SECONDS / 3600))-hour deadline"
       printf '%s\n' "$cause" >"$LOCK/cause" # for recovery, if the stop does not take
-      printf '0\n' >"$LOCK/clierr"
       break
     fi
     sleep "$POLL_SECONDS"
