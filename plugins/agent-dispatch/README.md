@@ -21,8 +21,9 @@ its log on your machine; the log itself never leaves it.
 
 Only you count: an `agent` label someone else applied, or a comment someone else wrote, starts
 nothing. The same goes for edits: if someone else changes the title or body after you label the
-issue, it waits until you label it again. Everything is posted from your own GitHub account, so GitHub will not notify you about
-it; setup prints a saved search to watch instead.
+issue `agent`, it waits until you label it `agent` again, even if a run has parked it since.
+Everything is posted from your own GitHub account, so GitHub will not notify you about it; setup
+prints a saved search to watch instead.
 
 ## Install
 

@@ -304,13 +304,10 @@ test_jq_projections_shape_the_tsv() {
   expected="7${tab}octo${tab}<!-- issue-to-pr state=waiting issue-read=6 -->${tab}which one?${bs}r${bs}n${bs}r${bs}n<!-- issue-to-pr state=waiting issue-read=6 -->${nl}8${tab}octo${tab}${tab}mit"
   assert_eq "$expected" \
     "$(printf '%s' '[{"id":7,"user":{"login":"octo"},"body":"Which one?\r\n\r\n<!-- issue-to-pr state=waiting issue-read=6 -->"},{"id":8,"user":{"login":"octo"},"body":"MIT"}]' | jq -r "$MARKER_JQ" | tr -d '\r')"
-  # The events projection keeps every application of the queried label (owner_approved takes the
-  # last one itself) and every rename, and nothing else: another label, even the queue label
-  # "agent" on the reply path, never counts.
-  assert_eq "$(printf 'labeled\tmallory\t2026-09-26T09:00:00Z\nrenamed\tocto\t2026-09-26T09:30:00Z')" \
-    "$(printf '%s' '[{"event":"labeled","label":{"name":"agent"},"actor":{"login":"mallory"},"created_at":"2026-09-26T09:00:00Z"},{"event":"labeled","label":{"name":"bug"},"actor":{"login":"octo"},"created_at":"2026-09-26T09:10:00Z"},{"event":"renamed","actor":{"login":"octo"},"created_at":"2026-09-26T09:30:00Z","rename":{"from":"a","to":"b"}}]' | jq -r "$(label_events_jq agent)" | tr -d '\r')"
-  assert_eq "$(printf 'labeled\tmallory\t2026-09-26T10:00:00Z\nlabeled\tocto\t2026-09-26T11:00:00Z')" \
-    "$(printf '%s' '[{"event":"labeled","label":{"name":"agent"},"actor":{"login":"octo"},"created_at":"2026-09-26T09:00:00Z"},{"event":"labeled","label":{"name":"agent:waiting"},"actor":{"login":"mallory"},"created_at":"2026-09-26T10:00:00Z"},{"event":"labeled","label":{"name":"agent:waiting"},"actor":{"login":"octo"},"created_at":"2026-09-26T11:00:00Z"}]' | jq -r "$(label_events_jq agent:waiting)" | tr -d '\r')"
+  # The events projection keeps every agent* label application (owner_approved picks the ones it
+  # needs) and every rename, and nothing else; a rename has no label.
+  assert_eq "$(printf 'labeled\tagent\tmallory\t2026-09-26T09:00:00Z\nlabeled\tagent:waiting\tocto\t2026-09-26T09:20:00Z\nrenamed\t\tocto\t2026-09-26T09:30:00Z')" \
+    "$(printf '%s' '[{"event":"labeled","label":{"name":"agent"},"actor":{"login":"mallory"},"created_at":"2026-09-26T09:00:00Z"},{"event":"labeled","label":{"name":"bug"},"actor":{"login":"octo"},"created_at":"2026-09-26T09:10:00Z"},{"event":"labeled","label":{"name":"agent:waiting"},"actor":{"login":"octo"},"created_at":"2026-09-26T09:20:00Z"},{"event":"unlabeled","label":{"name":"agent"},"actor":{"login":"octo"},"created_at":"2026-09-26T09:25:00Z"},{"event":"renamed","actor":{"login":"octo"},"created_at":"2026-09-26T09:30:00Z","rename":{"from":"a","to":"b"}}]' | jq -r "$JQ_LABEL_EVENTS" | tr -d '\r')"
   # GraphQL: a never-edited issue has a null lastEditedAt and editor; an edited one names both.
   assert_eq "$(printf '\t')" \
     "$(printf '%s' '{"data":{"repository":{"issue":{"lastEditedAt":null,"editor":null}}}}' | jq -r "$JQ_EDIT" | tr -d '\r')"
@@ -513,24 +510,55 @@ test_edits_before_the_label_are_approved_by_it() {
   assert_key "$OUT" ISSUE "octo/widgets#4"
 }
 
-test_a_reply_on_an_issue_a_stranger_edited_after_it_parked_is_skipped() {
-  setup_env
-  open_issue 7 agent:waiting
+# The reply path's content approval is the owner's latest `agent` label, not the park the run itself
+# applied: an edit by someone else after it, mid-run included, holds the issue.
+reply_issue_7() { # a parked issue 7 with a pending owner reply
+  open_issue 7 "$1"
   comment 7 100 octo
   comment 7 101 octo '<!-- issue-to-pr state=waiting issue-read=100 -->'
   comment 7 102 octo
-  labelled_at 7 agent:waiting octo 2026-09-26T10:00:00Z
+}
+
+test_a_reply_on_an_issue_a_stranger_edited_since_the_agent_label_is_skipped() {
+  setup_env
+  reply_issue_7 agent:waiting
+  printf 'agent\tocto\t2026-09-26T08:00:00Z\nagent:waiting\tocto\t2026-09-26T10:00:00Z\n' >"$FIX/events-7"
+  body_edited 7 2026-09-26T09:00:00Z mallory
+  dispatch
+  assert_key "$OUT" TICK idle "an edit while the run worked is not covered by its park"
   body_edited 7 2026-09-26T11:00:00Z mallory
   dispatch
   assert_key "$OUT" TICK idle
-  printf 'agent:waiting\tocto\t2026-09-26T10:00:00Z\nrenamed\tmallory\t2026-09-26T11:00:00Z\n' >"$FIX/events-7"
   rm "$FIX/graphql-7"
+  printf 'agent\tocto\t2026-09-26T08:00:00Z\nrenamed\tmallory\t2026-09-26T09:00:00Z\nagent:waiting\tocto\t2026-09-26T10:00:00Z\n' \
+    >"$FIX/events-7"
   dispatch
   assert_key "$OUT" TICK idle
-  printf 'agent:waiting\tocto\t2026-09-26T10:00:00Z\n' >"$FIX/events-7"
+  printf 'agent\tocto\t2026-09-26T08:00:00Z\nagent:waiting\tocto\t2026-09-26T10:00:00Z\n' >"$FIX/events-7"
+  body_edited 7 2026-09-26T07:00:00Z mallory
+  dispatch
+  assert_key "$OUT" ISSUE "octo/widgets#7" "an edit before the agent label is covered by it"
+  assert_key "$OUT" PICK reply
+}
+
+test_the_owner_relabelling_agent_re_approves_a_parked_issue() {
+  setup_env
+  reply_issue_7 agent,agent:waiting
+  printf 'agent\tocto\t2026-09-26T08:00:00Z\nagent:waiting\tocto\t2026-09-26T10:00:00Z\nagent\tocto\t2026-09-26T12:00:00Z\n' \
+    >"$FIX/events-7"
   body_edited 7 2026-09-26T09:00:00Z mallory
   dispatch
-  assert_key "$OUT" ISSUE "octo/widgets#7" "an edit before the park is covered by it"
+  assert_key "$OUT" ISSUE "octo/widgets#7"
+  assert_key "$OUT" PICK reply
+  assert_eq 1 "$(cli_log | grep -c .)" "one tick, one run: the queue path skips a parked issue"
+}
+
+test_a_parked_label_someone_else_applied_still_blocks_the_reply() {
+  setup_env
+  reply_issue_7 agent:waiting
+  printf 'agent\tocto\t2026-09-26T08:00:00Z\nagent:waiting\tmallory\t2026-09-26T10:00:00Z\n' >"$FIX/events-7"
+  dispatch
+  assert_key "$OUT" TICK idle
 }
 
 test_an_unreadable_edit_history_is_skipped() {
@@ -696,4 +724,40 @@ test_a_run_that_outlives_its_stop_keeps_the_lock() {
   [ -d "$HOME/.agent-dispatch/lock" ] || fail "a run still alive after its stop keeps the lock"
   [ -e "$FIX/posted-4" ] && fail "reconciled a run that is still alive"
   return 0
+}
+
+# A launched marker with no run id means "still starting" only briefly: job.ps1 records its pid
+# before it starts bash, so a launcher silent for over a minute never ran the CLI.
+test_a_dead_ticks_stale_launch_without_a_run_id_is_reconciled() {
+  local lock
+  setup_env
+  lock="$HOME/.agent-dispatch/lock"
+  open_issue 4 agent:running
+  mkdir -p "$lock"
+  printf 'octo/widgets\n' >"$lock/repo"
+  printf '4\n' >"$lock/issue"
+  dead_pid >"$lock/tick"
+  : >"$lock/launched"
+  touch -t 202001010000 "$lock/launched"
+  : >"$FIX/issues"
+  dispatch
+  assert_rc 0
+  assert_key "$OUT" RECOVERED "octo/widgets#4"
+  assert_eq "agent:failed" "$(cat "$FIX/labels-4")"
+  [ -d "$lock" ] && fail "a stale launch kept the lock"
+  return 0
+}
+
+test_the_launcher_exits_96_without_bash_and_passes_the_scripts_code_through() {
+  on_windows_host || { printf 'job.ps1 only runs on Windows; skipped\n'; return 0; }
+  local ps1
+  ps1=$(cygpath -w "$AD_SCRIPTS/job.ps1")
+  mkdir -p "$TEST_TMPDIR/lock"
+  printf 'exit 5\n' >"$TEST_TMPDIR/lock/run.sh"
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$ps1" "$(cygpath -w "$TEST_TMPDIR/no-bash.exe")" \
+    "$(cygpath -w "$TEST_TMPDIR/lock/run.sh")" </dev/null >/dev/null 2>&1
+  assert_eq 96 "$?" "a bash.exe that cannot start is the launcher's failure"
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$ps1" "$(cygpath -w "$BASH")" \
+    "$(cygpath -w "$TEST_TMPDIR/lock/run.sh")" </dev/null >/dev/null 2>&1
+  assert_eq 5 "$?" "the script's own exit code passes through"
 }

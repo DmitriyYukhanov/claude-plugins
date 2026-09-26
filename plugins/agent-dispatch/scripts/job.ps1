@@ -5,10 +5,11 @@
 # Before bash starts, this process writes its own pid to `run` next to the script (the tick's
 # lock), so the tick can stop the run from the moment the CLI can exist. The pid goes to run.tmp
 # first and is renamed into place, so a reader sees no file or the whole number, never half of it.
-# ErrorActionPreference=Stop makes every failure in the first block terminating: nothing there
-# can fall through to running bash outside the job object. That block exits 96, which the tick
-# reads as "the launcher could not start the run"; the catch writes to the console directly,
-# since Write-Error under Stop would itself throw and exit 1 instead.
+# ErrorActionPreference=Stop makes every failure before bash runs terminating, a bash.exe that
+# cannot start included (the call throws): nothing can fall through to running bash outside the
+# job object. All of them exit 96, which the tick reads as "the launcher could not start the run";
+# once bash runs, its exit code is this process's. The catch writes to the console directly, since
+# Write-Error under Stop would itself throw and exit 1 instead.
 $ErrorActionPreference = 'Stop'
 try {
   Add-Type @'
@@ -34,15 +35,10 @@ public static class AgentDispatchJob {
   $run = Join-Path (Split-Path -Parent $args[1]) 'run'
   [IO.File]::WriteAllText("$run.tmp", "$PID`n")
   Move-Item -Force -LiteralPath "$run.tmp" -Destination $run
+  & $args[0] $args[1]
 } catch {
   [Console]::Error.WriteLine("agent-dispatch: $_")
   exit 96
 }
-try {
-  & $args[0] $args[1]
-  if ($null -eq $LASTEXITCODE) { exit 1 } # bash never started: `exit $null` would be 0
-  exit $LASTEXITCODE
-} catch {
-  [Console]::Error.WriteLine("agent-dispatch: $_")
-  exit 1
-}
+if ($null -eq $LASTEXITCODE) { exit 96 } # bash never started: `exit $null` would be 0
+exit $LASTEXITCODE

@@ -19,7 +19,7 @@ OWNER= # Ruling R2: recover() may reconcile before main sets this; reconcile res
 PICK_WHY='' PICK_IREAD='' PICK_PREAD='' # a reply pick's cursors; empty when recover() reconciles
 
 JQ_ISSUES='.[] | [.number, ([.labels[].name] | join(","))] | @tsv'
-JQ_LABEL_EVENTS='.[] | select((.event == "labeled" and .label.name == "%LABEL%") or .event == "renamed") | [.event, .actor.login, .created_at] | @tsv'
+JQ_LABEL_EVENTS='.[] | select((.event == "labeled" and (.label.name | startswith("agent"))) or .event == "renamed") | [.event, (.label.name // ""), .actor.login, .created_at] | @tsv'
 # shellcheck disable=SC2016 # $o $r $n are GraphQL variables, not shell ones
 GQL_EDIT='query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){issue(number:$n){lastEditedAt editor{login}}}}'
 JQ_EDIT='.data.repository.issue | [.lastEditedAt // "", .editor.login // ""] | @tsv'
@@ -124,22 +124,27 @@ owner_replied() { # repo issue -> rc 0 when the issue's current state has an own
   reply_in "$c" "$M_PREAD"
 }
 
-label_events_jq() { printf '%s' "${JQ_LABEL_EVENTS//%LABEL%/$1}"; } # bash 3.2: pattern substitution, not templating printf (SC2059)
-
 # ponytail: checked at pick time; an edit landing in the seconds before the run reads the issue
 # still gets through. Closing that needs the run itself to re-check, which issue-to-pr does not.
 owner_approved() { # repo issue label -> rc 0 when the owner applied that label last and nobody
-  # else changed the title or the body since; rc 1 when any of it cannot be read
-  local rows line ev who at by='' since='' renamed=''
-  rows=$(gh api "repos/$1/issues/$2/events" --paginate --jq "$(label_events_jq "$3")" 2>/dev/null) || return 1
+  # else changed the title or the body since the owner last applied `agent` (the content approval:
+  # on the reply path the parked label is the run's own, so it approves nothing); rc 1 when any of
+  # it cannot be read
+  local rows line ev lbl who at by='' since='' renamed=''
+  rows=$(gh api "repos/$1/issues/$2/events" --paginate --jq "$JQ_LABEL_EVENTS" 2>/dev/null) || return 1
   while IFS= read -r line; do # events come oldest first
     line=${line%$'\r'}
     ev=${line%%$'\t'*}
     line=${line#*$'\t'}
+    lbl=${line%%$'\t'*}
+    line=${line#*$'\t'}
     who=${line%%$'\t'*}
     at=${line#*$'\t'}
     case "$ev" in
-      labeled) by=$who since=$at renamed='' ;;
+      labeled)
+        if [ "$lbl" = "$3" ]; then by=$who; fi
+        if [ "$lbl" = agent ] && [ "$who" = "$OWNER" ]; then since=$at renamed=''; fi
+        ;;
       renamed) if [ "$who" != "$OWNER" ]; then renamed=1; fi ;;
     esac
   done <<<"$rows"
@@ -326,7 +331,9 @@ recover() { # a lock at tick start: a live tick (busy), or a dead one's run to s
   if [ -n "$run" ]; then
     stop_run "$run"
     gone "$run" || die recover "the run of a dead tick ($repo#$n, id $run) is still alive; the next tick retries"
-  elif [ -e "$LOCK/launched" ]; then
+  elif [ -e "$LOCK/launched" ] && [ -z "$(find "$LOCK/launched" -mmin +1 2>/dev/null)" ]; then
+    # job.ps1 records its pid before it starts bash, so a launcher silent for over a minute never
+    # ran the CLI: past that, the lock is reconciled like one with no run.
     die recover "the launcher of a dead tick's run ($repo#$n) has not recorded its id yet; the next tick retries"
   fi
   if [ -n "$repo" ] && [ -n "$n" ]; then
