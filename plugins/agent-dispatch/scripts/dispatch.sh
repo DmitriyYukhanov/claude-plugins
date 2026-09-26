@@ -21,8 +21,9 @@ PICK_WHY='' PICK_IREAD='' PICK_PREAD='' # a reply pick's cursors; empty when rec
 JQ_ISSUES='.[] | [.number, ([.labels[].name] | join(","))] | @tsv'
 JQ_LABEL_EVENTS='.[] | select((.event == "labeled" and (.label.name | startswith("agent"))) or .event == "renamed") | [.event, (.label.name // ""), .actor.login, .created_at] | @tsv'
 # shellcheck disable=SC2016 # $o $r $n are GraphQL variables, not shell ones
-GQL_EDIT='query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){issue(number:$n){lastEditedAt editor{login}}}}'
-JQ_EDIT='.data.repository.issue | [.lastEditedAt // "", .editor.login // ""] | @tsv'
+# The body's edit history, newest first (first: 50 is the newest page; last: would be the oldest).
+GQL_EDITS='query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){issue(number:$n){userContentEdits(first:50){totalCount nodes{editedAt editor{login}}}}}}'
+JQ_EDITS='.data.repository.issue.userContentEdits | (.totalCount | tostring), (.nodes[] | [.editedAt // "", .editor.login // ""] | @tsv)'
 
 # ponytail: one global lock; per-repo locks if parallel runs ever matter.
 
@@ -130,7 +131,7 @@ owner_approved() { # repo issue label -> rc 0 when the owner applied that label 
   # else changed the title or the body since the owner last applied `agent` (the content approval:
   # on the reply path the parked label is the run's own, so it approves nothing); rc 1 when any of
   # it cannot be read
-  local rows line ev lbl who at by='' since='' renamed=''
+  local rows line ev lbl who at by='' since='' renamed='' total='' seen=0
   rows=$(gh api "repos/$1/issues/$2/events" --paginate --jq "$JQ_LABEL_EVENTS" 2>/dev/null) || return 1
   while IFS= read -r line; do # events come oldest first
     line=${line%$'\r'}
@@ -149,12 +150,29 @@ owner_approved() { # repo issue label -> rc 0 when the owner applied that label 
     esac
   done <<<"$rows"
   if [ "$by" != "$OWNER" ] || [ -n "$renamed" ]; then return 1; fi
-  line=$(gh api graphql -f query="$GQL_EDIT" -f o="${1%%/*}" -f r="${1#*/}" -F n="$2" --jq "$JQ_EDIT" 2>/dev/null) || return 1
-  line=${line%$'\r'}
-  at=${line%%$'\t'*}
-  who=${line#*$'\t'}
-  # ISO-8601 UTC stamps order as strings; an edit in the label's own second counts as after it.
-  if [ -n "$at" ] && [ "$who" != "$OWNER" ] && ! [ "$at" \< "$since" ]; then return 1; fi
+  # Every body edit since the approval must be the owner's: the last editor alone would let a
+  # later owner edit launder a stranger's. ISO-8601 UTC stamps order as strings; an edit in the
+  # label's own second, or with no time or no editor, counts against it.
+  rows=$(gh api graphql -f query="$GQL_EDITS" -f o="${1%%/*}" -f r="${1#*/}" -F n="$2" --jq "$JQ_EDITS" 2>/dev/null) || return 1
+  at=''
+  while IFS= read -r line; do
+    line=${line%$'\r'}
+    if [ -z "$total" ]; then
+      total=${line:-0}
+      continue
+    fi
+    [ -n "$line" ] || continue
+    seen=$((seen + 1))
+    at=${line%%$'\t'*}
+    who=${line#*$'\t'}
+    if [ -z "$at" ] || ! [ "$at" \< "$since" ]; then
+      [ "$who" = "$OWNER" ] || return 1
+    fi
+  done <<<"$rows"
+  case "$total" in *[!0-9]*) return 1 ;; esac
+  # Past one page, the unread edits are older than the oldest read; they matter only when that one
+  # is not already before the approval.
+  if [ "$total" -gt "$seen" ] && { [ -z "$at" ] || ! [ "$at" \< "$since" ]; }; then return 1; fi
   return 0
 }
 
@@ -276,7 +294,7 @@ gone() { # run-id -> rc 0 once nothing of the run is left; rc 1 while it lives o
 
 # shellcheck disable=SC2016,SC2088 # the backticks are Markdown; the tilde is shown, not expanded
 reconcile() { # repo issue cause log cli-error(0|1 CLI|2 launcher) -> OUTCOME [PAUSED]; rc 1 when GitHub failed
-  local labels body="$AD_HOME/.comment.md" shown=$4 comments prmark='' cause=$3 from=agent:running
+  local labels body="$AD_HOME/.comment.md" shown=$4 comments prmark='' cause=$3 from=agent:running clierr=$5
   if [ -z "$OWNER" ]; then # Ruling R2: recover() may call us before main() resolves OWNER
     OWNER=$(gh api user --jq .login 2>/dev/null | tr -d '\r')
     [ -n "$OWNER" ] || return 1
@@ -292,22 +310,22 @@ reconcile() { # repo issue cause log cli-error(0|1 CLI|2 launcher) -> OUTCOME [P
       say "OUTCOME=$(printf '%s\n' "$labels" | grep '^agent' | head -1)"
       return 0
     fi
-    cause="the run parked again without reading your reply"
+    cause="the run parked again without reading your reply" clierr=0 # whatever the CLI exited with
   fi
   # Amendment #2: carry the run's PR, if the issue's own current state already named one, so a
   # retry (or a human) can still find it from the failure comment alone.
   comments=$(gh api "repos/$1/issues/$2/comments" --paginate --jq "$MARKER_JQ" 2>/dev/null) || return 1
   if current_state "$comments" && [ -n "$M_PR" ]; then prmark=" pr=$M_PR"; fi
   case "$shown" in "$HOME"/*) shown="~${shown#"$HOME"}" ;; esac
-  if [ "$5" != 0 ]; then
+  if [ "$clierr" != 0 ]; then
     : >"$AD_HOME/paused"
     say "PAUSED=true"
   fi
   {
     printf 'The dispatcher marked this run failed: %s. Its log stays on the machine that ran it, at `%s`.\n' "$cause" "$shown"
-    if [ "$5" = 1 ]; then
+    if [ "$clierr" = 1 ]; then
       printf '\nDispatching is paused for every repo until `~/.agent-dispatch/paused` is deleted. An error like this usually means the CLI is logged out or out of allowance, and the next issue would fail the same way.\n'
-    elif [ "$5" = 2 ]; then
+    elif [ "$clierr" = 2 ]; then
       printf '\nDispatching is paused for every repo until `~/.agent-dispatch/paused` is deleted. Every run on this machine would hit the same launcher failure.\n'
     fi
     printf '\nTo retry, label the issue `agent` again.\n\n<!-- issue-to-pr state=failed%s -->\n' "$prmark"
@@ -372,6 +390,8 @@ run_issue() { # the picked issue: lock, flip, launch, wait, reconcile
     if [ "$(now)" -ge "$deadline" ]; then
       stop_run "$(run_id)"
       cause="it ran past the $((DEADLINE_SECONDS / 3600))-hour deadline"
+      printf '%s\n' "$cause" >"$LOCK/cause" # for recovery, if the stop does not take
+      printf '0\n' >"$LOCK/clierr"
       break
     fi
     sleep "$POLL_SECONDS"

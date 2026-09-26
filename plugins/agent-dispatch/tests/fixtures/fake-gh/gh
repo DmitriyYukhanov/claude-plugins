@@ -24,7 +24,7 @@ serve() { # name
 
 case "${1:-} ${2:-}" in
   "api user") serve user ;;
-  "api graphql") # the issue's `lastEditedAt\teditor` (a missing file: never edited)
+  "api graphql") # the body's edit history: totalCount, then `editedAt\teditor` rows, newest first
     n=$(value_of -F "$@")
     serve "graphql-${n#n=}"
     ;;

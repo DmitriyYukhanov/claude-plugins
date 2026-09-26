@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # A stand-in for claude and codex: logs its argv, then acts out FAKE_CLI_MODE on the issue it was
 # given (exit:<rc>, flip:<label> as a run that parked, is-error as Claude at its usage limit,
-# hang as a run that never ends, with a child standing in for a gate).
+# hang as a run that never ends, with a child standing in for a gate). FAKE_CLI_EXIT: the exit code
+# after the mode (default 0).
 set -uo pipefail
 printf '%s %s\n' "${FAKE_CLI_NAME:-claude}" "$*" >>"$FAKE_CLI_LOG"
 n=$(printf '%s' "$*" | sed -n 's/.*issue-to-pr:run \([0-9][0-9]*\).*/\1/p')
@@ -20,4 +21,4 @@ case "${FAKE_CLI_MODE:-exit:0}" in
     wait
     ;;
 esac
-exit 0
+exit "${FAKE_CLI_EXIT:-0}"

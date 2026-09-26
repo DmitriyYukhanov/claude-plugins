@@ -308,11 +308,12 @@ test_jq_projections_shape_the_tsv() {
   # needs) and every rename, and nothing else; a rename has no label.
   assert_eq "$(printf 'labeled\tagent\tmallory\t2026-09-26T09:00:00Z\nlabeled\tagent:waiting\tocto\t2026-09-26T09:20:00Z\nrenamed\t\tocto\t2026-09-26T09:30:00Z')" \
     "$(printf '%s' '[{"event":"labeled","label":{"name":"agent"},"actor":{"login":"mallory"},"created_at":"2026-09-26T09:00:00Z"},{"event":"labeled","label":{"name":"bug"},"actor":{"login":"octo"},"created_at":"2026-09-26T09:10:00Z"},{"event":"labeled","label":{"name":"agent:waiting"},"actor":{"login":"octo"},"created_at":"2026-09-26T09:20:00Z"},{"event":"unlabeled","label":{"name":"agent"},"actor":{"login":"octo"},"created_at":"2026-09-26T09:25:00Z"},{"event":"renamed","actor":{"login":"octo"},"created_at":"2026-09-26T09:30:00Z","rename":{"from":"a","to":"b"}}]' | jq -r "$JQ_LABEL_EVENTS" | tr -d '\r')"
-  # GraphQL: a never-edited issue has a null lastEditedAt and editor; an edited one names both.
-  assert_eq "$(printf '\t')" \
-    "$(printf '%s' '{"data":{"repository":{"issue":{"lastEditedAt":null,"editor":null}}}}' | jq -r "$JQ_EDIT" | tr -d '\r')"
-  assert_eq "$(printf '2026-09-26T11:00:00Z\tmallory')" \
-    "$(printf '%s' '{"data":{"repository":{"issue":{"lastEditedAt":"2026-09-26T11:00:00Z","editor":{"login":"mallory"}}}}}' | jq -r "$JQ_EDIT" | tr -d '\r')"
+  # GraphQL edit history: the count first, then one row per version, newest first; a deleted
+  # editor projects as empty, which owner_approved reads as not the owner.
+  assert_eq "0" \
+    "$(printf '%s' '{"data":{"repository":{"issue":{"userContentEdits":{"totalCount":0,"nodes":[]}}}}}' | jq -r "$JQ_EDITS" | tr -d '\r')"
+  assert_eq "$(printf '2\n2026-09-26T11:00:00Z\tmallory\n2026-09-26T09:00:00Z\t')" \
+    "$(printf '%s' '{"data":{"repository":{"issue":{"userContentEdits":{"totalCount":2,"nodes":[{"editedAt":"2026-09-26T11:00:00Z","editor":{"login":"mallory"}},{"editedAt":"2026-09-26T09:00:00Z","editor":null}]}}}}}' | jq -r "$JQ_EDITS" | tr -d '\r')"
 }
 
 wait_for() { # file -> waits up to 20 s for it to be non-empty
@@ -465,8 +466,17 @@ test_a_failed_issue_listing_is_an_error_not_idle() {
 labelled_at() { # n label actor time -> the issue's event history holds only that application
   printf '%s\t%s\t%s\n' "$2" "$3" "$4" >"$FIX/events-$1"
 }
-body_edited() { # n time login -> GraphQL's lastEditedAt and editor for the issue
-  printf '%s\t%s\n' "$2" "$3" >"$FIX/graphql-$1"
+body_edited() { # n time login [time login]... -> the body's edit history, newest first, as the
+  # userContentEdits projection prints it: totalCount, then `editedAt\teditor` rows
+  local n=$1
+  shift
+  {
+    printf '%s\n' "$(($# / 2))"
+    while [ "$#" -gt 1 ]; do
+      printf '%s\t%s\n' "$1" "$2"
+      shift 2
+    done
+  } >"$FIX/graphql-$n"
 }
 
 test_a_body_a_stranger_edited_after_the_label_is_skipped() {
@@ -670,7 +680,7 @@ test_launcher_exit_codes_name_their_cause() {
   run_cause 97 claude "$TEST_TMPDIR/run.log" "$TEST_TMPDIR/gone"
   assert_eq "the checkout $TEST_TMPDIR/gone is missing" "$CAUSE"
   assert_eq 0 "$CLIERR" "a missing checkout is not a CLI error"
-  # shellcheck disable=SC2329 # replaces the sourced dispatch.sh's own, which gone/run_cause call
+  # shellcheck disable=SC2317,SC2329 # replaces the sourced dispatch.sh's own, which run_cause calls
   on_windows() { return 0; }
   run_cause 96 claude "$TEST_TMPDIR/run.log" "$TEST_TMPDIR/checkout"
   assert_eq "the Windows launcher could not start the run" "$CAUSE"
@@ -698,7 +708,7 @@ test_an_unreadable_process_list_is_not_a_stopped_run() {
   setup_env
   # shellcheck source=../../scripts/dispatch.sh
   source "$AD_SCRIPTS/dispatch.sh"
-  # shellcheck disable=SC2329 # replaces the sourced dispatch.sh's own, which gone/run_cause call
+  # shellcheck disable=SC2317,SC2329 # replaces the sourced dispatch.sh's own, which gone calls
   on_windows() { return 0; }
   mkdir -p "$TEST_TMPDIR/bin"
   printf '#!/bin/sh\nexit 1\n' >"$TEST_TMPDIR/bin/tasklist"
@@ -722,6 +732,8 @@ test_a_run_that_outlives_its_stop_keeps_the_lock() {
   assert_rc 1
   assert_key "$OUT" REASON recover
   [ -d "$HOME/.agent-dispatch/lock" ] || fail "a run still alive after its stop keeps the lock"
+  assert_contains "$(cat "$HOME/.agent-dispatch/lock/cause" 2>/dev/null)" "4-hour deadline" \
+    "the kept lock must tell recovery why the run was stopped"
   [ -e "$FIX/posted-4" ] && fail "reconciled a run that is still alive"
   return 0
 }
@@ -760,4 +772,47 @@ test_the_launcher_exits_96_without_bash_and_passes_the_scripts_code_through() {
   powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$ps1" "$(cygpath -w "$BASH")" \
     "$(cygpath -w "$TEST_TMPDIR/lock/run.sh")" </dev/null >/dev/null 2>&1
   assert_eq 5 "$?" "the script's own exit code passes through"
+}
+
+test_a_strangers_edit_is_not_laundered_by_a_later_owner_edit() {
+  setup_env
+  open_issue 4 agent
+  labelled_at 4 agent octo 2026-09-26T10:00:00Z
+  body_edited 4 2026-09-26T12:00:00Z octo 2026-09-26T11:00:00Z mallory 2026-09-26T09:00:00Z octo
+  dispatch
+  assert_key "$OUT" TICK idle
+  [ -z "$(cli_log)" ] || fail "a later owner edit laundered a stranger's edit after the label"
+}
+
+test_an_edit_history_longer_than_one_page_after_the_label_is_held() {
+  local i
+  setup_env
+  open_issue 4 agent
+  labelled_at 4 agent octo 2026-09-26T10:00:00Z
+  # 51 edits, the 50 newest all the owner's and all after the label: the 51st is unread.
+  { printf '51\n'; i=10; while [ "$i" -lt 60 ]; do printf '2026-09-26T11:%s:00Z\tocto\n' "$i"; i=$((i + 1)); done; } \
+    >"$FIX/graphql-4"
+  dispatch
+  assert_key "$OUT" TICK idle "an unread edit after the approval is unverifiable"
+  # The same page reaching back past the label proves the rest is older.
+  printf '2026-09-26T09:00:00Z\tmallory\n' >>"$FIX/graphql-4"
+  { printf '52\n'; tail -n +2 "$FIX/graphql-4"; } >"$FIX/.g" && mv "$FIX/.g" "$FIX/graphql-4"
+  export FAKE_CLI_MODE=flip:agent:review
+  dispatch
+  assert_key "$OUT" ISSUE "octo/widgets#4"
+}
+
+test_an_unread_reply_fails_without_pausing_even_when_the_cli_errored() {
+  setup_env
+  open_issue 7 agent:waiting
+  comment 7 100 octo
+  comment 7 101 octo '<!-- issue-to-pr state=waiting issue-read=100 -->'
+  comment 7 102 octo
+  export FAKE_CLI_MODE=flip:agent:waiting FAKE_CLI_EXIT=1
+  dispatch
+  assert_key "$OUT" OUTCOME agent:failed
+  assert_contains "$(cat "$FIX/posted-7" 2>/dev/null)" "parked again without reading your reply"
+  assert_not_contains "$(cat "$FIX/posted-7")" "logged out"
+  [ -e "$HOME/.agent-dispatch/paused" ] && fail "an unread reply is not a CLI error, whatever the exit code"
+  return 0
 }
