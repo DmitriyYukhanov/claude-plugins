@@ -18,7 +18,7 @@ RUN_LABELS="agent,agent:waiting,agent:review,agent:failed"
 OWNER= # Ruling R2: recover() may reconcile before main sets this; reconcile resolves it itself.
 
 JQ_ISSUES='.[] | [.number, ([.labels[].name] | join(","))] | @tsv'
-JQ_LABEL_ACTORS='.[] | select(.event == "labeled" and .label.name == "agent") | .actor.login'
+JQ_LABEL_ACTORS='.[] | select(.event == "labeled" and .label.name == "%LABEL%") | .actor.login'
 
 # ponytail: one global lock; per-repo locks if parallel runs ever matter.
 
@@ -120,19 +120,21 @@ owner_replied() { # repo issue -> rc 0 when the issue's current state has an own
   reply_in "$c" "$M_PREAD"
 }
 
-owner_labelled() { # repo issue -> rc 0 when the latest `agent` label on it was the owner's
+label_actors_jq() { printf '%s' "${JQ_LABEL_ACTORS//%LABEL%/$1}"; } # bash 3.2: pattern substitution, not templating printf (SC2059)
+
+owner_labelled() { # repo issue label -> rc 0 when the latest application of that label was the owner's
   local actors
-  actors=$(gh api "repos/$1/issues/$2/events" --paginate --jq "$JQ_LABEL_ACTORS" 2>/dev/null) || return 1
+  actors=$(gh api "repos/$1/issues/$2/events" --paginate --jq "$(label_actors_jq "$3")" 2>/dev/null) || return 1
   [ "$(printf '%s\n' "$actors" | tr -d '\r' | grep . | tail -1)" = "$OWNER" ]
 }
 
 pick() { # -> PICK_I PICK_N PICK_WHY; rc 1 when nothing is due
-  local i=0 n labels why
+  local i=0 n labels why parked
   local -a issues
   issues=()
   while [ "$i" -lt "${#CONF_REPO[@]}" ]; do
-    issues+=("$(gh issue list -R "${CONF_REPO[$i]}" --state open --limit 500 --json number,labels \
-      --jq "$JQ_ISSUES" 2>/dev/null | tr -d '\r' | sort -n)")
+    issues+=("$(gh issue list -R "${CONF_REPO[$i]}" --state open --search 'label:agent,agent:waiting,agent:review' \
+      --limit 500 --json number,labels --jq "$JQ_ISSUES" 2>/dev/null | tr -d '\r' | sort -n)")
     i=$((i + 1))
   done
   for why in reply queue; do
@@ -141,13 +143,16 @@ pick() { # -> PICK_I PICK_N PICK_WHY; rc 1 when nothing is due
       while IFS=$'\t' read -r n labels; do
         [ -n "$n" ] || continue
         if [ "$why" = reply ]; then
-          if ! has_label "$labels" agent:waiting && ! has_label "$labels" agent:review; then continue; fi
+          if has_label "$labels" agent:waiting; then parked=agent:waiting
+          elif has_label "$labels" agent:review; then parked=agent:review
+          else continue; fi
+          owner_labelled "${CONF_REPO[$i]}" "$n" "$parked" || continue
           owner_replied "${CONF_REPO[$i]}" "$n" || continue
         else
           has_label "$labels" agent || continue
           if has_label "$labels" agent:running || has_label "$labels" agent:waiting ||
             has_label "$labels" agent:review; then continue; fi
-          owner_labelled "${CONF_REPO[$i]}" "$n" || continue
+          owner_labelled "${CONF_REPO[$i]}" "$n" agent || continue
         fi
         PICK_I=$i PICK_N=$n PICK_WHY=$why
         return 0
@@ -171,18 +176,20 @@ write_run_script() { # path host issue tier log -> $LOCK/run.sh
   } >"$LOCK/run.sh"
 }
 
-winpid_of() { # cygpid -> the launcher's confirmed powershell.exe winpid; empty once it has exited
-  # without ever being confirmed. MSYS's fork-then-exec of a native target briefly reports a
-  # placeholder image (its own bash.exe) at this cygpid before /proc/<cygpid>/winpid settles on
-  # the real target, and that placeholder can itself sit still across two immediate reads; only
-  # the image name tells them apart, so a candidate is trusted once confirmed, never handed out
-  # unconfirmed. Bounded by the launcher's own life, not a fixed budget: a fixed iteration cap can
-  # run out while the launcher is still alive and simply slow to settle, which is exactly the case
-  # where the caller must not lose the ability to stop it. No `sleep` here: tests replay it
-  # through a fake clock, which would corrupt a caller's deadline math; the read (and, on a
-  # changed candidate, tasklist) calls provide their own pacing.
+winpid_of() { # cygpid deadline -> the launcher's confirmed powershell.exe winpid; empty once it
+  # has exited, or once the deadline passes, without ever being confirmed. MSYS's fork-then-exec
+  # of a native target briefly reports a placeholder image (its own bash.exe) at this cygpid
+  # before /proc/<cygpid>/winpid settles on the real target, and that placeholder can itself sit
+  # still across two immediate reads; only the image name tells them apart, so a candidate is
+  # trusted once confirmed, never handed out unconfirmed. Bounded by the launcher's own life and
+  # by the deadline the caller must still enforce: a fixed iteration cap can run out while the
+  # launcher is simply slow to settle, which is exactly the case where the caller must not lose
+  # the ability to stop it; the deadline is what keeps a broken tasklist from spinning this past
+  # the run's own time budget. No `sleep` here: tests replay it through a fake clock, which would
+  # corrupt a caller's deadline math; the read (and, on a changed candidate, tasklist) calls
+  # provide their own pacing.
   local v seen=''
-  while kill -0 "$1" 2>/dev/null; do
+  while kill -0 "$1" 2>/dev/null && [ "$(now)" -lt "$2" ]; do
     v=$(cat "/proc/$1/winpid" 2>/dev/null)
     if [ -n "$v" ] && [ "$v" != "$seen" ]; then
       seen=$v
@@ -195,14 +202,15 @@ winpid_of() { # cygpid -> the launcher's confirmed powershell.exe winpid; empty 
   printf ''
 }
 
-launch() { # runs $LOCK/run.sh -> RUN_PID (to wait on), RUN_ID (to stop), recorded in the lock
+launch() { # deadline; runs $LOCK/run.sh -> RUN_PID (to wait on), RUN_ID (to stop, maybe empty
+  # when winpid_of never confirmed it), recorded in the lock
   if on_windows; then
     # job.ps1 holds the run in a job object: stopping it stops every process the run started,
     # Git Bash grandchildren and orphans included, which taskkill //T misses.
     powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w "$HERE/job.ps1")" \
       "$(cygpath -w "$BASH")" "$(cygpath -w "$LOCK/run.sh")" </dev/null >/dev/null 2>&1 &
     RUN_PID=$!
-    RUN_ID=$(winpid_of "$RUN_PID")
+    RUN_ID=$(winpid_of "$RUN_PID" "$1")
     say "LAUNCHER=job"
   else
     set -m
@@ -317,13 +325,20 @@ run_issue() { # the picked issue: lock, flip, launch, wait, reconcile
     die flip "could not label $repo#$n agent:running; nothing was launched"
   fi
   write_run_script "$path" "$host" "$n" "$tier" "$log"
-  launch
   deadline=$(($(now) + DEADLINE_SECONDS))
+  launch "$deadline"
   while kill -0 "$RUN_PID" 2>/dev/null; do
     if [ "$(now)" -ge "$deadline" ]; then
-      stop_run "$RUN_ID"
-      cause="it ran past the $((DEADLINE_SECONDS / 3600))-hour deadline"
-      break
+      if [ -n "$RUN_ID" ]; then
+        stop_run "$RUN_ID"
+        cause="it ran past the $((DEADLINE_SECONDS / 3600))-hour deadline"
+        break
+      fi
+      # winpid_of never confirmed an id (e.g. a broken tasklist): stop what we launched by its
+      # MSYS pid instead. This only reaches the launcher itself, and can miss grandchildren a job
+      # object would have taken with it, which is why the RUN_ID path above is the preferred one.
+      kill "$RUN_PID" 2>/dev/null
+      die recover "$repo#$n's run id was never confirmed before the deadline; the next tick retries"
     fi
     sleep "$POLL_SECONDS"
   done
@@ -342,8 +357,11 @@ run_issue() { # the picked issue: lock, flip, launch, wait, reconcile
   fi
   printf '%s\n' "$cause" >"$LOCK/cause"
   printf '%s\n' "$clierr" >"$LOCK/clierr"
-  on_windows || kill -KILL -- "-$RUN_ID" 2>/dev/null # whatever the exited run left behind
-  gone "$RUN_ID" || die recover "processes of $repo#$n are still alive (id $RUN_ID); the next tick retries"
+  if [ -n "$RUN_ID" ]; then
+    on_windows || kill -KILL -- "-$RUN_ID" 2>/dev/null # whatever the exited run left behind
+    gone "$RUN_ID" || die recover "processes of $repo#$n are still alive (id $RUN_ID); the next tick retries"
+  fi # else: RUN_ID is only ever empty on Windows, and only once the launcher itself (wait, above)
+     # has already exited, which frees its job object and everything still in it.
   reconcile "$repo" "$n" "$cause" "$log" "$clierr" ||
     die github "could not reach GitHub to reconcile $repo#$n; the next tick retries"
   rm -rf "$LOCK"

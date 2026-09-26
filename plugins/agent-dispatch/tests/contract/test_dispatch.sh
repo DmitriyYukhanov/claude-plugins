@@ -29,10 +29,18 @@ dispatch() { # -> OUT ERR RC
   ERR=$(cat "$TEST_TMPDIR/.err")
 }
 
-open_issue() { # n labels,csv [actor] -> an open issue, its labels, and who last labelled it agent
+open_issue() { # n labels,csv [actor] -> an open issue, its labels, and who last applied the
+  # label pick() cares about here: agent:waiting or agent:review if the issue carries one
+  # (the reply path checks that one), else agent (the queue path's own check).
+  local lbl
   printf '%s\t%s\n' "$1" "$2" >>"$FIX/issues"
   printf '%s\n' "$2" | tr ',' '\n' >"$FIX/labels-$1"
-  printf '%s\n' "${3:-octo}" >"$FIX/events-$1"
+  case ",$2," in
+    *,agent:waiting,*) lbl=agent:waiting ;;
+    *,agent:review,*) lbl=agent:review ;;
+    *) lbl=agent ;;
+  esac
+  printf '%s\t%s\n' "$lbl" "${3:-octo}" >"$FIX/events-$1"
 }
 
 comment() { # n id login [marker] -> one projected comment on thread n
@@ -68,7 +76,7 @@ test_queue_launches_the_oldest_issue_the_owner_labelled() {
 test_an_agent_label_someone_else_applied_is_skipped() {
   setup_env
   open_issue 4 agent mallory
-  printf 'octo\nmallory\n' >"$FIX/events-4"
+  printf 'agent\tocto\nagent\tmallory\n' >"$FIX/events-4"
   dispatch
   assert_key "$OUT" TICK idle
   [ -z "$(cli_log)" ] || fail "launched on a label the owner did not apply"
@@ -105,6 +113,18 @@ test_an_owner_reply_on_the_issue_goes_before_the_queue() {
   dispatch
   assert_key "$OUT" ISSUE "octo/widgets#7"
   assert_key "$OUT" PICK reply
+}
+
+test_a_reply_on_a_parked_label_someone_else_applied_is_skipped() {
+  setup_env
+  open_issue 7 agent:waiting
+  printf 'agent:waiting\tmallory\n' >"$FIX/events-7"
+  comment 7 100 octo
+  comment 7 101 octo '<!-- issue-to-pr state=waiting issue-read=100 -->'
+  comment 7 102 octo
+  dispatch
+  assert_key "$OUT" TICK idle
+  [ -z "$(cli_log)" ] || fail "launched on a parked label a stranger applied, despite a valid owner reply"
 }
 
 test_r1_a_four_column_row_with_an_empty_marker_is_a_plain_reply() {
@@ -285,7 +305,12 @@ test_jq_projections_shape_the_tsv() {
   assert_eq "$expected" \
     "$(printf '%s' '[{"id":7,"user":{"login":"octo"},"body":"Which one?\r\n\r\n<!-- issue-to-pr state=waiting issue-read=6 -->"},{"id":8,"user":{"login":"octo"},"body":"MIT"}]' | jq -r "$MARKER_JQ" | tr -d '\r')"
   assert_eq "mallory" \
-    "$(printf '%s' '[{"event":"labeled","label":{"name":"agent"},"actor":{"login":"mallory"}},{"event":"labeled","label":{"name":"bug"},"actor":{"login":"octo"}}]' | jq -r "$JQ_LABEL_ACTORS" | tr -d '\r')"
+    "$(printf '%s' '[{"event":"labeled","label":{"name":"agent"},"actor":{"login":"mallory"}},{"event":"labeled","label":{"name":"bug"},"actor":{"login":"octo"}}]' | jq -r "$(label_actors_jq agent)" | tr -d '\r')"
+  # The reply path projects a colon-bearing label the same way; label_actors_jq must select every
+  # agent:waiting event (owner_labelled takes the last one itself) and skip the unrelated "agent"
+  # queue-labeling event in the same history.
+  assert_eq "$(printf 'mallory\nocto')" \
+    "$(printf '%s' '[{"event":"labeled","label":{"name":"agent"},"actor":{"login":"octo"}},{"event":"labeled","label":{"name":"agent:waiting"},"actor":{"login":"mallory"}},{"event":"labeled","label":{"name":"agent:waiting"},"actor":{"login":"octo"}}]' | jq -r "$(label_actors_jq agent:waiting)" | tr -d '\r')"
 }
 
 wait_for() { # file -> waits up to 20 s for it to be non-empty
@@ -326,6 +351,20 @@ kill_stray_run() { # safety net for a launching test: a broken stop must not str
   fi
   cd / 2>/dev/null
   rm -rf "$TEST_TMPDIR"
+}
+
+test_winpid_of_never_hands_out_an_id_past_its_own_deadline() {
+  # A cheap, direct pin: a broken tasklist must not let winpid_of spin for the run's whole
+  # lifetime just because the launcher (stood in for here by a real sleep) is still alive.
+  on_windows_host || { printf 'winpid_of only runs on Windows; skipped\n'; return 0; }
+  setup_env
+  # shellcheck source=../../scripts/dispatch.sh
+  source "$AD_SCRIPTS/dispatch.sh"
+  "$REAL_SLEEP" 5 &
+  local pid=$! got
+  got=$(winpid_of "$pid" "$(($(now) - 1))")
+  kill -KILL "$pid" 2>/dev/null
+  [ -z "$got" ] || fail "winpid_of returned [$got] after its own deadline had already passed"
 }
 
 test_the_deadline_stops_the_run_and_fails_it() {
@@ -394,7 +433,7 @@ test_a_dead_ticks_run_is_stopped_and_reconciled() {
     dead_pid >"$LOCK/tick"
     printf '%s\n' "$AD_HOME/logs/run.log" >"$LOCK/log"
     write_run_script "$TEST_TMPDIR/checkout" claude 4 trivial "$AD_HOME/logs/run.log"
-    launch >/dev/null
+    launch "$(($(now) + DEADLINE_SECONDS))" >/dev/null
   )
   wait_for "$FIX/hang.pids"
   read -r leader child <"$FIX/hang.pids"

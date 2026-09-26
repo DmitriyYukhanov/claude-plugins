@@ -29,7 +29,18 @@ case "${1:-} ${2:-}" in
     n=${n##*/}
     case "$2" in
       */comments) serve "comments-$n" ;;
-      */events) serve "events-$n" ;;
+      */events)
+        # The real --jq projection is ignored elsewhere in this file, but here the query names the
+        # label owner_labelled() is asking about, so events-<n> can hold every label's actor
+        # history (`<label>\t<actor>` rows) and this filters to the one queried.
+        [ -e "$F/fail-events-$n" ] && exit 1
+        lbl=$(value_of --jq "$@")
+        lbl=${lbl#*'label.name == "'}
+        lbl=${lbl%%'"'*}
+        while IFS=$'\t' read -r l a; do
+          [ "$l" = "$lbl" ] && printf '%s\n' "$a"
+        done <"$F/events-$n" 2>/dev/null
+        ;;
     esac
     ;;
   "repo view") serve repo ;;

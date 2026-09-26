@@ -11,7 +11,8 @@ Each tick starts at most one run:
 
 1. **Replies first.** An issue waiting on you (`agent:waiting` or `agent:review`) with a new
    comment of yours since the run parked.
-2. **Then the queue.** The oldest open issue labelled `agent`, labelled by you.
+2. **Then the queue.** The oldest open issue labelled `agent` by you, oldest first within a repo;
+   repos are tried in the order `repos.conf` lists them.
 
 The tick sets `agent:running`, starts the run and waits for it. The run itself parks the issue at
 `agent:waiting` (it has a question), `agent:review` (a PR waits for your `merge`), or closes it by

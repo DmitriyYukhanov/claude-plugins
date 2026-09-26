@@ -22,6 +22,7 @@ absolute path.
    ```
    # <main checkout, absolute path> | claude|codex | trivial|standard|complex|none
    /home/you/code/my-app | claude | trivial
+   C:\Users\you\code\my-app | codex | standard
    ```
 
    The third field is the `--auto-merge` threshold: work at or under it merges without asking.
@@ -45,7 +46,11 @@ absolute path.
    through `pwsh`. Warn and print `winget install Microsoft.PowerShell`. Also check
    `command -v tasklist`: the launcher confirms and stops the run through it, and a scheduled
    task normally has it on PATH already (it lives in System32), but a locked-down PATH is worth
-   one line of warning if you see it missing.
+   one line of warning if you see it missing. Also resolve `bash.exe`: run
+   `(Get-Command git).Source` to get `<git root>\cmd\git.exe`, then drop `cmd\git.exe` and add
+   `bin\bash.exe`. Git for Windows always keeps `bash.exe` there, whether the install is
+   machine-wide, per-user or through scoop, so this is what fills `<bash.exe path>` below. Do not
+   guess `$env:ProgramFiles\Git\bin\bash.exe`; that path only holds for a machine-wide install.
 
 ## 2. What to print
 
@@ -73,18 +78,18 @@ mkdir -p ~/.agent-dispatch && cp "S/tick.sh" ~/.agent-dispatch/tick.sh
 `<host>` below is the host you are running in now (`claude` or `codex`): the tick reads that
 host's install record.
 
-**Scheduler**, for the current OS only. Every `<...>` placeholder below (`<host>`, `<home>`, the
-PATH list) stands for a real value on this machine; fill each one in before you print it. launchd,
-systemd and the Windows script all read a literal `<...>` as text, not something they resolve for
-you, and a literal `<...>` left in the plist is invalid XML that `launchctl bootstrap` will
-refuse.
+**Scheduler**, for the current OS only. Every `<...>` placeholder below (`<host>`, `<home>`,
+`<bash.exe path>`, the PATH list) stands for a real value on this machine; fill each one in before
+you print it. launchd, systemd and the Windows script all read a literal `<...>` as text, not
+something they resolve for you, and a literal `<...>` left in the plist is invalid XML that
+`launchctl bootstrap` will refuse.
 
-- Windows, in PowerShell (Git for Windows' `bash.exe`; a bare `bash` is the WSL launcher).
-  Wrapping bash in `conhost.exe --headless` is what keeps the scheduled run from flashing a
-  console window open every three minutes:
+- Windows, in PowerShell (Git for Windows' `bash.exe`, resolved in check 5 above; a bare `bash` is
+  the WSL launcher). Wrapping bash in `conhost.exe --headless` is what keeps the scheduled run
+  from flashing a console window open every three minutes:
 
   ```powershell
-  $bash = "$env:ProgramFiles\Git\bin\bash.exe"
+  $bash = "<bash.exe path>"
   $tick = "$HOME\.agent-dispatch\tick.sh"
   $a = New-ScheduledTaskAction -Execute 'conhost.exe' -Argument "--headless `"$bash`" `"$tick`" <host>"
   $t = New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes 3)

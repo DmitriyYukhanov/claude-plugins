@@ -10,11 +10,13 @@ on:
     paths:
       - 'plugins/agent-dispatch/**'
       - 'plugins/issue-to-pr/tests/lib/**'
+      - 'plugins/issue-to-pr/scripts/lib/marker.sh'
       - '.github/workflows/agent-dispatch-tests.yml'
   pull_request:
     paths:
       - 'plugins/agent-dispatch/**'
       - 'plugins/issue-to-pr/tests/lib/**'
+      - 'plugins/issue-to-pr/scripts/lib/marker.sh'
       - '.github/workflows/agent-dispatch-tests.yml'
 
 jobs:
