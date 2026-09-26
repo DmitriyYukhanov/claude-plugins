@@ -44,13 +44,13 @@ absolute path.
 5. Windows only: `command -v pwsh`. A path under `WindowsApps` is the Store build, whose child
    processes escape the job object that lets a tick stop a run, and Codex runs its commands
    through `pwsh`. Warn and print `winget install Microsoft.PowerShell`. Also check
-   `command -v tasklist`: the launcher confirms and stops the run through it, and a scheduled
-   task normally has it on PATH already (it lives in System32), but a locked-down PATH is worth
-   one line of warning if you see it missing. Also resolve `bash.exe`: run
-   `(Get-Command git).Source` to get `<git root>\cmd\git.exe`, then drop `cmd\git.exe` and add
-   `bin\bash.exe`. Git for Windows always keeps `bash.exe` there, whether the install is
-   machine-wide, per-user or through scoop, so this is what fills `<bash.exe path>` below. Do not
-   guess `$env:ProgramFiles\Git\bin\bash.exe`; that path only holds for a machine-wide install.
+   `command -v tasklist`: the tick uses it to confirm a stopped run is gone, and a scheduled task
+   normally has it on PATH already (it lives in System32), but a locked-down PATH is worth one
+   line of warning if you see it missing. Also resolve `bash.exe`: run `git --exec-path`, which
+   prints `<git root>/mingw64/libexec/git-core` from the real install even when `git` on PATH is a
+   scoop shim; drop the last three path parts and add `bin/bash.exe`. That is what fills
+   `<bash.exe path>` below. Do not guess `$env:ProgramFiles\Git\bin\bash.exe`; that path only
+   holds for a machine-wide install.
 
 ## 2. What to print
 
@@ -155,3 +155,5 @@ One block: checks passed and failed, then the printed pieces in the order to app
 labels, tick.sh, scheduler, saved search). Close with how it behaves: label an issue `agent`;
 the tick log is `~/.agent-dispatch/logs/tick.log`, each run's log sits next to it; a CLI error
 creates `~/.agent-dispatch/paused`, and dispatching resumes once the owner deletes that file.
+Disabling or uninstalling the plugin does not stop the scheduled tick: to stop dispatching, delete
+the scheduler entry or create `~/.agent-dispatch/paused`.

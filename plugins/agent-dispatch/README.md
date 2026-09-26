@@ -20,7 +20,8 @@ merging. A run that ends without doing either is marked `agent:failed` with a co
 its log on your machine; the log itself never leaves it.
 
 Only you count: an `agent` label someone else applied, or a comment someone else wrote, starts
-nothing. Everything is posted from your own GitHub account, so GitHub will not notify you about
+nothing. The same goes for edits: if someone else changes the title or body after you label the
+issue, it waits until you label it again. Everything is posted from your own GitHub account, so GitHub will not notify you about
 it; setup prints a saved search to watch instead.
 
 ## Install
@@ -40,7 +41,8 @@ scheduler entry to install. It installs nothing itself.
   The last field is the `--auto-merge` threshold.
 - `logs/`: `tick.log`, and one log per run.
 - `paused`: created when a CLI errors out (usually logged out or out of allowance). No run starts
-  until you delete it.
+  until you delete it. Create it yourself to stop dispatching: disabling or uninstalling the plugin
+  leaves the scheduled tick running.
 - `lock/`: the run in progress. A tick that died leaves it behind; the next tick stops what is
   left of that run and marks the issue failed.
 
@@ -51,4 +53,5 @@ PowerShell with `winget install Microsoft.PowerShell` rather than from the Store
 Store build starts cannot be stopped with the rest of the run. If Windows policy blocks the job
 object the launcher needs to hold a run, no run starts at all, and the tick reports it as a
 failure. On macOS and Linux a process that detaches into its own session escapes the stop; none
-of the tested CLIs does.
+of the tested CLIs does. The check for edits runs when the tick picks the issue, so an edit that
+lands in the few seconds before the run reads the issue still gets through.
