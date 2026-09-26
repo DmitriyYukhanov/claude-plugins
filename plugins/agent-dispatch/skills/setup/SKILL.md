@@ -73,7 +73,11 @@ mkdir -p ~/.agent-dispatch && cp "S/tick.sh" ~/.agent-dispatch/tick.sh
 `<host>` below is the host you are running in now (`claude` or `codex`): the tick reads that
 host's install record.
 
-**Scheduler**, for the current OS only:
+**Scheduler**, for the current OS only. Every `<...>` placeholder below (`<host>`, `<home>`, the
+PATH list) stands for a real value on this machine; fill each one in before you print it. launchd,
+systemd and the Windows script all read a literal `<...>` as text, not something they resolve for
+you, and a literal `<...>` left in the plist is invalid XML that `launchctl bootstrap` will
+refuse.
 
 - Windows, in PowerShell (Git for Windows' `bash.exe`; a bare `bash` is the WSL launcher).
   Wrapping bash in `conhost.exe --headless` is what keeps the scheduled run from flashing a
@@ -92,7 +96,9 @@ host's install record.
   It runs only while you are logged on, which is what lets it use your CLI logins. Run a tick now
   with `Start-ScheduledTask agent-dispatch`.
 - macOS: `~/Library/LaunchAgents/agent-dispatch.plist` (a LaunchAgent runs in your login
-  session, so the Keychain holding the logins is readable):
+  session, so the Keychain holding the logins is readable). `<home>` below is `$HOME`'s value on
+  this machine, written out in full: launchd never expands `~`, so the plist needs the absolute
+  path already:
 
   ```xml
   <?xml version="1.0" encoding="UTF-8"?>
@@ -100,7 +106,7 @@ host's install record.
   <plist version="1.0"><dict>
     <key>Label</key><string>agent-dispatch</string>
     <key>ProgramArguments</key><array>
-      <string>/bin/bash</string><string>/Users/<you>/.agent-dispatch/tick.sh</string><string><host></string>
+      <string>/bin/bash</string><string><home>/.agent-dispatch/tick.sh</string><string><host></string>
     </array>
     <key>EnvironmentVariables</key><dict>
       <key>PATH</key><string><the directories of gh, claude and codex>:/usr/bin:/bin</string>
@@ -134,9 +140,9 @@ host's install record.
   run a tick now with `systemctl --user start agent-dispatch`. A oneshot unit never runs twice at
   once.
 
-Resolve `<the directories of gh, claude and codex>` from `command -v` on this machine and print
-the filled-in value. Run a tick by hand only through the scheduler, as above: it is what keeps
-two ticks from overlapping.
+Find the PATH list with `command -v gh`, `command -v claude` and `command -v codex` on this
+machine. Run a tick by hand only through the scheduler, as above: it is what keeps two ticks from
+overlapping.
 
 ## 3. Report
 
