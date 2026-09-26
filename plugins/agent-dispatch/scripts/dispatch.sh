@@ -129,12 +129,14 @@ owner_labelled() { # repo issue label -> rc 0 when the latest application of tha
 }
 
 pick() { # -> PICK_I PICK_N PICK_WHY; rc 1 when nothing is due
-  local i=0 n labels why parked
+  local i=0 n labels why parked out
   local -a issues
   issues=()
   while [ "$i" -lt "${#CONF_REPO[@]}" ]; do
-    issues+=("$(gh issue list -R "${CONF_REPO[$i]}" --state open --search 'label:agent,agent:waiting,agent:review' \
-      --limit 500 --json number,labels --jq "$JQ_ISSUES" 2>/dev/null | tr -d '\r' | sort -n)")
+    out=$(gh issue list -R "${CONF_REPO[$i]}" --state open --search 'label:agent,agent:waiting,agent:review' \
+      --limit 500 --json number,labels --jq "$JQ_ISSUES" 2>/dev/null) ||
+      die github "could not list the open issues of ${CONF_REPO[$i]}"
+    issues+=("$(printf '%s\n' "$out" | tr -d '\r' | sort -n)")
     i=$((i + 1))
   done
   for why in reply queue; do

@@ -115,3 +115,15 @@ test_tick_refuses_an_uninstalled_host() {
   RC=$?
   assert_rc 4 "an unknown host is a wrong call"
 }
+
+test_tick_refuses_a_disabled_codex_install() {
+  export HOME="$TEST_TMPDIR/home"
+  stub_dispatch "$HOME/.codex/plugins/cache/market/agent-dispatch/1.0.0"
+  printf '[plugins."agent-dispatch@market"]\nenabled = false\n\n[plugins."other@market"]\nenabled = true\n' \
+    >"$HOME/.codex/config.toml"
+  OUT='' ERR=''
+  "$BASH" "$AD_SCRIPTS/tick.sh" codex
+  RC=$?
+  assert_rc 1 "a disabled Codex install must not dispatch"
+  assert_not_contains "$(tick_log)" "DISPATCH_RAN"
+}

@@ -460,3 +460,14 @@ test_recovery_keeps_the_lock_while_github_is_unreachable() {
   assert_key "$OUT" REASON recover
   [ -d "$lock" ] || fail "the lock is the only record of the run; it must survive a failed reconcile"
 }
+
+test_a_failed_issue_listing_is_an_error_not_idle() {
+  setup_env
+  open_issue 4 agent
+  : >"$FIX/fail-issues"
+  dispatch
+  assert_rc 1
+  assert_key "$OUT" REASON github
+  assert_key "$OUT" TICK error
+  [ -z "$(cli_log)" ] || fail "launched without a listing"
+}

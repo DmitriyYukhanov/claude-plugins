@@ -23,7 +23,9 @@ case "$host" in
     fi
     ;;
   codex)
-    if grep -q '^\[plugins\."agent-dispatch@' "$HOME/.codex/config.toml" 2>/dev/null; then
+    # The agent-dispatch section, up to the next [header], must say enabled = true.
+    if sed -n '/^\[plugins\."agent-dispatch@/,/^\[/p' "$HOME/.codex/config.toml" 2>/dev/null |
+      grep -q -E '^[[:space:]]*enabled[[:space:]]*=[[:space:]]*true([[:space:]#]|$)'; then
       set -- "$HOME"/.codex/plugins/cache/*/agent-dispatch/*/
       if [ "$#" -eq 1 ] && [ -d "$1" ]; then d=${1%/}; fi
     fi
