@@ -6,3 +6,6 @@
 # shim (CRLF is the number-one way these break on the author's own machine).
 plugins/issue-to-pr/** text eol=lf
 plugins/issue-to-pr/tests/fake-gh/gh text eol=lf
+
+# agent-dispatch: the same, for its extension-less fixture shims too.
+plugins/agent-dispatch/** text eol=lf
