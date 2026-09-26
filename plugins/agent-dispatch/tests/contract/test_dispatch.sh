@@ -358,20 +358,6 @@ kill_stray_run() { # safety net for a launching test: a broken stop must not str
   rm -rf "$TEST_TMPDIR"
 }
 
-test_winpid_of_never_hands_out_an_id_past_its_own_deadline() {
-  # A cheap, direct pin: a broken tasklist must not let winpid_of spin for the run's whole
-  # lifetime just because the launcher (stood in for here by a real sleep) is still alive.
-  on_windows_host || { printf 'winpid_of only runs on Windows; skipped\n'; return 0; }
-  setup_env
-  # shellcheck source=../../scripts/dispatch.sh
-  source "$AD_SCRIPTS/dispatch.sh"
-  "$REAL_SLEEP" 5 &
-  local pid=$! got
-  got=$(winpid_of "$pid" "$(($(now) - 1))")
-  kill -KILL "$pid" 2>/dev/null
-  [ -z "$got" ] || fail "winpid_of returned [$got] after its own deadline had already passed"
-}
-
 test_the_deadline_stops_the_run_and_fails_it() {
   local leader child start
   setup_env
@@ -438,7 +424,7 @@ test_a_dead_ticks_run_is_stopped_and_reconciled() {
     dead_pid >"$LOCK/tick"
     printf '%s\n' "$AD_HOME/logs/run.log" >"$LOCK/log"
     write_run_script "$TEST_TMPDIR/checkout" claude 4 trivial "$AD_HOME/logs/run.log"
-    launch "$(($(now) + DEADLINE_SECONDS))" >/dev/null
+    launch >/dev/null
   )
   wait_for "$FIX/hang.pids"
   read -r leader child <"$FIX/hang.pids"
@@ -601,4 +587,113 @@ test_a_reply_run_that_moved_its_cursor_stays_parked() {
   assert_key "$OUT" OUTCOME agent:waiting
   [ -e "$FIX/posted-7" ] && fail "a run that read the reply needs no dispatcher comment"
   assert_eq "agent:waiting" "$(cat "$FIX/labels-7")"
+}
+
+# F2: the launcher's id reaches the lock before the CLI can start; a launch without it is kept.
+test_a_dead_ticks_launch_without_a_run_id_keeps_the_lock() {
+  local lock
+  setup_env
+  lock="$HOME/.agent-dispatch/lock"
+  open_issue 4 agent:running
+  mkdir -p "$lock"
+  printf 'octo/widgets\n' >"$lock/repo"
+  printf '4\n' >"$lock/issue"
+  dead_pid >"$lock/tick"
+  : >"$lock/launched"
+  dispatch
+  assert_rc 1
+  assert_key "$OUT" REASON recover
+  [ -d "$lock" ] || fail "the launcher may still be starting; its lock must survive"
+  [ -e "$FIX/posted-4" ] && fail "reconciled a run that may still be starting"
+  return 0
+}
+
+test_the_windows_launcher_records_its_own_pid_before_bash_starts() {
+  on_windows_host || { printf 'job.ps1 only runs on Windows; skipped\n'; return 0; }
+  local d="$TEST_TMPDIR/lock"
+  mkdir -p "$d"
+  # The script checks, from inside the run, that `run` already names a live powershell.exe.
+  # shellcheck disable=SC2016 # $(cat ...) runs inside the generated script, not here
+  printf 'tasklist //FI "PID eq $(cat %q)" //NH > %q\n' "$d/run" "$d/seen" >"$d/run.sh"
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w "$AD_SCRIPTS/job.ps1")" \
+    "$(cygpath -w "$BASH")" "$(cygpath -w "$d/run.sh")" </dev/null >/dev/null 2>&1
+  assert_eq 0 "$?" "exit code"
+  assert_contains "$(tr '[:upper:]' '[:lower:]' <"$d/seen")" powershell.exe "run did not name the launcher while bash ran"
+}
+
+# F6: the launcher's own failures are not CLI errors.
+test_a_launcher_that_cannot_start_the_run_exits_96() {
+  on_windows_host || { printf 'job.ps1 only runs on Windows; skipped\n'; return 0; }
+  printf 'exit 0\n' >"$TEST_TMPDIR/run.sh"
+  # No lock directory next to the script: job.ps1 cannot record its pid, so bash must never start.
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w "$AD_SCRIPTS/job.ps1")" \
+    "$(cygpath -w "$BASH")" "$(cygpath -w "$TEST_TMPDIR/nowhere/run.sh")" </dev/null >/dev/null 2>&1
+  assert_eq 96 "$?" "exit code"
+}
+
+test_launcher_exit_codes_name_their_cause() {
+  setup_env
+  # shellcheck source=../../scripts/dispatch.sh
+  source "$AD_SCRIPTS/dispatch.sh"
+  mkdir -p "$LOCK"
+  write_run_script "$TEST_TMPDIR/gone" claude 4 trivial "$TEST_TMPDIR/run.log"
+  "$BASH" "$LOCK/run.sh"
+  assert_eq 97 "$?" "exit code"
+  run_cause 97 claude "$TEST_TMPDIR/run.log" "$TEST_TMPDIR/gone"
+  assert_eq "the checkout $TEST_TMPDIR/gone is missing" "$CAUSE"
+  assert_eq 0 "$CLIERR" "a missing checkout is not a CLI error"
+  # shellcheck disable=SC2329 # replaces the sourced dispatch.sh's own, which gone/run_cause call
+  on_windows() { return 0; }
+  run_cause 96 claude "$TEST_TMPDIR/run.log" "$TEST_TMPDIR/checkout"
+  assert_eq "the Windows launcher could not start the run (no job object)" "$CAUSE"
+  assert_eq 2 "$CLIERR" "every launch would fail the same way: pause"
+  run_cause 3 codex "$TEST_TMPDIR/run.log" "$TEST_TMPDIR/checkout"
+  assert_eq "the codex CLI exited with code 3" "$CAUSE"
+  assert_eq 1 "$CLIERR"
+}
+
+test_a_launcher_failure_pauses_without_blaming_a_logout() {
+  setup_env
+  open_issue 4 agent:running
+  # shellcheck source=../../scripts/dispatch.sh
+  source "$AD_SCRIPTS/dispatch.sh"
+  mkdir -p "$AD_HOME/logs"
+  OUT=$(reconcile octo/widgets 4 "the Windows launcher could not start the run (no job object)" "$AD_HOME/logs/x.log" 2)
+  assert_key "$OUT" PAUSED true
+  [ -e "$HOME/.agent-dispatch/paused" ] || fail "paused was not created"
+  assert_contains "$(cat "$FIX/posted-4")" "paused"
+  assert_not_contains "$(cat "$FIX/posted-4")" "logged out"
+}
+
+# F3: "could not check" is never "stopped".
+test_an_unreadable_process_list_is_not_a_stopped_run() {
+  setup_env
+  # shellcheck source=../../scripts/dispatch.sh
+  source "$AD_SCRIPTS/dispatch.sh"
+  # shellcheck disable=SC2329 # replaces the sourced dispatch.sh's own, which gone/run_cause call
+  on_windows() { return 0; }
+  mkdir -p "$TEST_TMPDIR/bin"
+  printf '#!/bin/sh\nexit 1\n' >"$TEST_TMPDIR/bin/tasklist"
+  chmod +x "$TEST_TMPDIR/bin/tasklist"
+  PATH="$TEST_TMPDIR/bin:$PATH"
+  if gone 4242; then fail "a failed tasklist was read as a stopped run"; fi
+  printf '#!/bin/sh\necho "INFO: No tasks are running which match the specified criteria."\n' >"$TEST_TMPDIR/bin/tasklist"
+  gone 4242 || fail "tasklist's own no-match answer is a stopped run"
+}
+
+test_a_run_that_outlives_its_stop_keeps_the_lock() {
+  setup_env
+  trap kill_stray_run EXIT
+  open_issue 4 agent
+  export FAKE_CLI_MODE=hang FAKE_SLEEP_STEP=3600 FAKE_SLEEP_REAL=0.1
+  # A stop that does nothing stands in for one that did not take: the tick must not block on wait.
+  # shellcheck disable=SC2016 # $1 belongs to the nested shell
+  OUT=$("$BASH" -c 'source "$1"; stop_run() { :; }; main' _ "$AD_SCRIPTS/dispatch.sh" 2>"$TEST_TMPDIR/.err")
+  RC=$?
+  ERR=$(cat "$TEST_TMPDIR/.err")
+  assert_rc 1
+  assert_key "$OUT" REASON recover
+  [ -d "$HOME/.agent-dispatch/lock" ] || fail "a run still alive after its stop keeps the lock"
+  [ -e "$FIX/posted-4" ] && fail "reconciled a run that is still alive"
+  return 0
 }

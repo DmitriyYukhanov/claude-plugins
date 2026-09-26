@@ -204,54 +204,47 @@ write_run_script() { # path host issue tier log -> $LOCK/run.sh
   } >"$LOCK/run.sh"
 }
 
-winpid_of() { # cygpid deadline -> the launcher's confirmed powershell.exe winpid; empty once it
-  # has exited, or once the deadline passes, without ever being confirmed. MSYS's fork-then-exec
-  # of a native target briefly reports a placeholder image (its own bash.exe) at this cygpid
-  # before /proc/<cygpid>/winpid settles on the real target, and that placeholder can itself sit
-  # still across two immediate reads; only the image name tells them apart, so a candidate is
-  # trusted once confirmed, never handed out unconfirmed. Bounded by the launcher's own life and
-  # by the deadline the caller must still enforce: a fixed iteration cap can run out while the
-  # launcher is simply slow to settle, which is exactly the case where the caller must not lose
-  # the ability to stop it; the deadline is what keeps a broken tasklist from spinning this past
-  # the run's own time budget. No `sleep` here: tests replay it through a fake clock, which would
-  # corrupt a caller's deadline math; the read (and, on a changed candidate, tasklist) calls
-  # provide their own pacing.
-  local v seen=''
-  while kill -0 "$1" 2>/dev/null && [ "$(now)" -lt "$2" ]; do
-    v=$(cat "/proc/$1/winpid" 2>/dev/null)
-    if [ -n "$v" ] && [ "$v" != "$seen" ]; then
-      seen=$v
-      if tasklist //FI "PID eq $v" //FI "IMAGENAME eq powershell.exe" //NH 2>/dev/null | grep -qi powershell; then
-        printf '%s' "$v"
-        return 0
-      fi
-    fi
-  done
-  printf ''
-}
-
-launch() { # deadline; runs $LOCK/run.sh -> RUN_PID (to wait on), RUN_ID (to stop, maybe empty
-  # when winpid_of never confirmed it), recorded in the lock
+launch() { # runs $LOCK/run.sh -> RUN_PID (to wait on); the id that stops the run goes to $LOCK/run
+  : >"$LOCK/launched"
   if on_windows; then
     # job.ps1 holds the run in a job object: stopping it stops every process the run started,
-    # Git Bash grandchildren and orphans included, which taskkill //T misses.
+    # Git Bash grandchildren and orphans included, which taskkill //T misses. It writes its own
+    # Windows pid to $LOCK/run before it starts bash.
     powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w "$HERE/job.ps1")" \
       "$(cygpath -w "$BASH")" "$(cygpath -w "$LOCK/run.sh")" </dev/null >/dev/null 2>&1 &
     RUN_PID=$!
-    RUN_ID=$(winpid_of "$RUN_PID" "$1")
     say "LAUNCHER=job"
   else
     set -m
     "$BASH" "$LOCK/run.sh" </dev/null >/dev/null 2>&1 &
     RUN_PID=$!
     set +m
-    RUN_ID=$RUN_PID
+    printf '%s\n' "$RUN_PID" >"$LOCK/run"
     say "LAUNCHER=group"
   fi
-  printf '%s\n' "$RUN_ID" >"$LOCK/run"
+}
+
+run_id() { trim "$(cat "$LOCK/run" 2>/dev/null)"; }
+
+# ponytail: 96 and 97 are the launcher's own codes; a CLI that itself exits 97 (or 96 on Windows)
+# is reported as the launcher's failure.
+run_cause() { # rc host log checkout -> CAUSE, CLIERR (0 no pause, 1 the CLI failed, 2 the launcher)
+  CAUSE='' CLIERR=0
+  if [ "$1" -eq 97 ]; then
+    CAUSE="the checkout $4 is missing"
+  elif [ "$1" -eq 96 ] && on_windows; then
+    CAUSE="the Windows launcher could not start the run (no job object)" CLIERR=2
+  elif [ "$1" -ne 0 ]; then
+    CAUSE="the $2 CLI exited with code $1" CLIERR=1
+  elif [ "$2" = claude ] && grep '"type":"result"' "$3" 2>/dev/null | tail -1 | grep -q '"is_error":true'; then
+    CAUSE="the claude CLI reported an error" CLIERR=1
+  else
+    CAUSE="it ended without leaving a state"
+  fi
 }
 
 stop_run() { # run-id: the job launcher's Windows pid, or the run's process group
+  [ -n "$1" ] || return 0
   if on_windows; then
     taskkill //F //FI "PID eq $1" //FI "IMAGENAME eq powershell.exe" >/dev/null 2>&1
   else
@@ -261,11 +254,13 @@ stop_run() { # run-id: the job launcher's Windows pid, or the run's process grou
   return 0
 }
 
-gone() { # run-id -> rc 0 once nothing of the run is left
-  local _
+gone() { # run-id -> rc 0 once nothing of the run is left; rc 1 while it lives or cannot be checked
+  local _ out
   for _ in 1 2 3 4 5; do
     if on_windows; then
-      tasklist //FI "PID eq $1" //FI "IMAGENAME eq powershell.exe" //NH 2>/dev/null | grep -qi powershell || return 0
+      # tasklist exits 0 with an INFO line when nothing matches; a failure says nothing either way.
+      out=$(tasklist //FI "PID eq $1" //FI "IMAGENAME eq powershell.exe" //NH 2>/dev/null) || return 1
+      printf '%s\n' "$out" | grep -qi powershell || return 0
     else
       kill -0 -- "-$1" 2>/dev/null || return 0
     fi
@@ -275,7 +270,7 @@ gone() { # run-id -> rc 0 once nothing of the run is left
 }
 
 # shellcheck disable=SC2016,SC2088 # the backticks are Markdown; the tilde is shown, not expanded
-reconcile() { # repo issue cause log cli-error -> OUTCOME [PAUSED]; rc 1 when GitHub failed
+reconcile() { # repo issue cause log cli-error(0|1 CLI|2 launcher) -> OUTCOME [PAUSED]; rc 1 when GitHub failed
   local labels body="$AD_HOME/.comment.md" shown=$4 comments prmark='' cause=$3 from=agent:running
   if [ -z "$OWNER" ]; then # Ruling R2: recover() may call us before main() resolves OWNER
     OWNER=$(gh api user --jq .login 2>/dev/null | tr -d '\r')
@@ -299,7 +294,7 @@ reconcile() { # repo issue cause log cli-error -> OUTCOME [PAUSED]; rc 1 when Gi
   comments=$(gh api "repos/$1/issues/$2/comments" --paginate --jq "$MARKER_JQ" 2>/dev/null) || return 1
   if current_state "$comments" && [ -n "$M_PR" ]; then prmark=" pr=$M_PR"; fi
   case "$shown" in "$HOME"/*) shown="~${shown#"$HOME"}" ;; esac
-  if [ "$5" = 1 ]; then
+  if [ "$5" != 0 ]; then
     : >"$AD_HOME/paused"
     say "PAUSED=true"
   fi
@@ -307,6 +302,8 @@ reconcile() { # repo issue cause log cli-error -> OUTCOME [PAUSED]; rc 1 when Gi
     printf 'The dispatcher marked this run failed: %s. Its log stays on the machine that ran it, at `%s`.\n' "$cause" "$shown"
     if [ "$5" = 1 ]; then
       printf '\nDispatching is paused for every repo until `~/.agent-dispatch/paused` is deleted. An error like this usually means the CLI is logged out or out of allowance, and the next issue would fail the same way.\n'
+    elif [ "$5" = 2 ]; then
+      printf '\nDispatching is paused for every repo until `~/.agent-dispatch/paused` is deleted. Every run on this machine would hit the same launcher failure.\n'
     fi
     printf '\nTo retry, label the issue `agent` again.\n\n<!-- issue-to-pr state=failed%s -->\n' "$prmark"
   } >"$body"
@@ -325,10 +322,12 @@ recover() { # a lock at tick start: a live tick (busy), or a dead one's run to s
   fi
   repo=$(cat "$LOCK/repo" 2>/dev/null)
   n=$(cat "$LOCK/issue" 2>/dev/null)
-  run=$(cat "$LOCK/run" 2>/dev/null)
+  run=$(run_id)
   if [ -n "$run" ]; then
     stop_run "$run"
     gone "$run" || die recover "the run of a dead tick ($repo#$n, id $run) is still alive; the next tick retries"
+  elif [ -e "$LOCK/launched" ]; then
+    die recover "the launcher of a dead tick's run ($repo#$n) has not recorded its id yet; the next tick retries"
   fi
   if [ -n "$repo" ] && [ -n "$n" ]; then
     cause=$(cat "$LOCK/cause" 2>/dev/null)
@@ -343,7 +342,7 @@ recover() { # a lock at tick start: a live tick (busy), or a dead one's run to s
 
 run_issue() { # the picked issue: lock, flip, launch, wait, reconcile
   local repo=${CONF_REPO[$PICK_I]} path=${CONF_PATH[$PICK_I]} host=${CONF_HOST[$PICK_I]}
-  local tier=${CONF_TIER[$PICK_I]} n=$PICK_N log rc cause='' clierr=0 deadline
+  local tier=${CONF_TIER[$PICK_I]} n=$PICK_N log rc cause='' clierr=0 deadline waited=0 id
   say "ISSUE=$repo#$n"
   say "PICK=$PICK_WHY"
   mkdir "$LOCK" 2>/dev/null || {
@@ -361,42 +360,34 @@ run_issue() { # the picked issue: lock, flip, launch, wait, reconcile
   fi
   write_run_script "$path" "$host" "$n" "$tier" "$log"
   deadline=$(($(now) + DEADLINE_SECONDS))
-  launch "$deadline"
+  launch
   while kill -0 "$RUN_PID" 2>/dev/null; do
     if [ "$(now)" -ge "$deadline" ]; then
-      if [ -n "$RUN_ID" ]; then
-        stop_run "$RUN_ID"
-        cause="it ran past the $((DEADLINE_SECONDS / 3600))-hour deadline"
-        break
-      fi
-      # winpid_of never confirmed an id (e.g. a broken tasklist): stop what we launched by its
-      # MSYS pid instead. This only reaches the launcher itself, and can miss grandchildren a job
-      # object would have taken with it, which is why the RUN_ID path above is the preferred one.
-      kill "$RUN_PID" 2>/dev/null
-      die recover "$repo#$n's run id was never confirmed before the deadline; the next tick retries"
+      stop_run "$(run_id)"
+      cause="it ran past the $((DEADLINE_SECONDS / 3600))-hour deadline"
+      break
     fi
     sleep "$POLL_SECONDS"
+  done
+  while kill -0 "$RUN_PID" 2>/dev/null; do # a stop that did not take: never block on a bare wait
+    [ "$waited" -lt $((GRACE_SECONDS + 20)) ] ||
+      die recover "the run of $repo#$n outlived its stop; the next tick retries"
+    sleep 1
+    waited=$((waited + 1))
   done
   wait "$RUN_PID"
   rc=$?
   if [ -z "$cause" ]; then
-    if [ "$rc" -ne 0 ]; then
-      cause="the $host CLI exited with code $rc"
-      clierr=1
-    elif [ "$host" = claude ] && grep '"type":"result"' "$log" 2>/dev/null | tail -1 | grep -q '"is_error":true'; then
-      cause="the claude CLI reported an error"
-      clierr=1
-    else
-      cause="it ended without leaving a state"
-    fi
+    run_cause "$rc" "$host" "$log" "$path"
+    cause=$CAUSE clierr=$CLIERR
   fi
   printf '%s\n' "$cause" >"$LOCK/cause"
   printf '%s\n' "$clierr" >"$LOCK/clierr"
-  if [ -n "$RUN_ID" ]; then
-    on_windows || kill -KILL -- "-$RUN_ID" 2>/dev/null # whatever the exited run left behind
-    gone "$RUN_ID" || die recover "processes of $repo#$n are still alive (id $RUN_ID); the next tick retries"
-  fi # else: RUN_ID is only ever empty on Windows, and only once the launcher itself (wait, above)
-     # has already exited, which frees its job object and everything still in it.
+  id=$(run_id) # empty only when job.ps1 failed before it started bash: nothing of the run exists
+  if [ -n "$id" ]; then
+    on_windows || kill -KILL -- "-$id" 2>/dev/null # whatever the exited run left behind
+    gone "$id" || die recover "processes of $repo#$n are still alive (id $id); the next tick retries"
+  fi
   reconcile "$repo" "$n" "$cause" "$log" "$clierr" ||
     die github "could not reach GitHub to reconcile $repo#$n; the next tick retries"
   rm -rf "$LOCK"

@@ -2,11 +2,13 @@
 # job object that dies with this process, so stopping this one process stops every process the
 # run started, however deep, including Git Bash grandchildren whose parent already exited
 # (taskkill /T misses those). Only two paths come in: PowerShell 5.1 mangles quoted arguments.
-# ErrorActionPreference=Stop, so a failed Add-Type compile (a non-terminating error by default)
-# cannot fall through to `& $args[0] $args[1]` running bash outside the job object; the catch
-# below is the actual guarantee (a `throw` from Enter() is already terminating either way) and
-# always exits non-zero, since `& ...` failing to even start bash leaves $LASTEXITCODE $null,
-# and `exit $null` is 0, not a failure.
+# Before bash starts, this process writes its own pid to `run` next to the script (the tick's
+# lock), so the tick can stop the run from the moment the CLI can exist. The pid goes to run.tmp
+# first and is renamed into place, so a reader sees no file or the whole number, never half of it.
+# ErrorActionPreference=Stop makes every failure in the first block terminating: nothing there
+# can fall through to running bash outside the job object. That block exits 96, which the tick
+# reads as "the launcher could not start the run"; the catch writes to the console directly,
+# since Write-Error under Stop would itself throw and exit 1 instead.
 $ErrorActionPreference = 'Stop'
 try {
   Add-Type @'
@@ -29,10 +31,18 @@ public static class AgentDispatchJob {
 }
 '@
   [AgentDispatchJob]::Enter()
+  $run = Join-Path (Split-Path -Parent $args[1]) 'run'
+  [IO.File]::WriteAllText("$run.tmp", "$PID`n")
+  Move-Item -Force -LiteralPath "$run.tmp" -Destination $run
+} catch {
+  [Console]::Error.WriteLine("agent-dispatch: $_")
+  exit 96
+}
+try {
   & $args[0] $args[1]
-  if ($null -eq $LASTEXITCODE) { exit 1 }
+  if ($null -eq $LASTEXITCODE) { exit 1 } # bash never started: `exit $null` would be 0
   exit $LASTEXITCODE
 } catch {
-  Write-Error $_
+  [Console]::Error.WriteLine("agent-dispatch: $_")
   exit 1
 }
