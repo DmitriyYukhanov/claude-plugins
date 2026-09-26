@@ -16,6 +16,7 @@ POLL_SECONDS=20
 GRACE_SECONDS=10
 RUN_LABELS="agent,agent:waiting,agent:review,agent:failed"
 OWNER= # Ruling R2: recover() may reconcile before main sets this; reconcile resolves it itself.
+PICK_WHY='' PICK_IREAD='' PICK_PREAD='' # a reply pick's cursors; empty when recover() reconciles
 
 JQ_ISSUES='.[] | [.number, ([.labels[].name] | join(","))] | @tsv'
 JQ_LABEL_EVENTS='.[] | select((.event == "labeled" and .label.name == "%LABEL%") or .event == "renamed") | [.event, .actor.login, .created_at] | @tsv'
@@ -174,6 +175,7 @@ pick() { # -> PICK_I PICK_N PICK_WHY; rc 1 when nothing is due
           else continue; fi
           owner_approved "${CONF_REPO[$i]}" "$n" "$parked" || continue
           owner_replied "${CONF_REPO[$i]}" "$n" || continue
+          PICK_IREAD=$M_IREAD PICK_PREAD=$M_PREAD
         else
           has_label "$labels" agent || continue
           if has_label "$labels" agent:running || has_label "$labels" agent:waiting ||
@@ -274,7 +276,7 @@ gone() { # run-id -> rc 0 once nothing of the run is left
 
 # shellcheck disable=SC2016,SC2088 # the backticks are Markdown; the tilde is shown, not expanded
 reconcile() { # repo issue cause log cli-error -> OUTCOME [PAUSED]; rc 1 when GitHub failed
-  local labels body="$AD_HOME/.comment.md" shown=$4 comments prmark=
+  local labels body="$AD_HOME/.comment.md" shown=$4 comments prmark='' cause=$3 from=agent:running
   if [ -z "$OWNER" ]; then # Ruling R2: recover() may call us before main() resolves OWNER
     OWNER=$(gh api user --jq .login 2>/dev/null | tr -d '\r')
     [ -n "$OWNER" ] || return 1
@@ -282,8 +284,15 @@ reconcile() { # repo issue cause log cli-error -> OUTCOME [PAUSED]; rc 1 when Gi
   labels=$(gh issue view "$2" -R "$1" --json labels --jq '.labels[].name' 2>/dev/null) || return 1
   labels=$(printf '%s\n' "$labels" | tr -d '\r')
   if ! printf '%s\n' "$labels" | grep -qx 'agent:running'; then
-    say "OUTCOME=$(printf '%s\n' "$labels" | grep '^agent' | head -1)"
-    return 0
+    # A reply run that parked again at the cursors it started from, with the reply that started it
+    # still above them, would be picked again every tick: that one fails instead.
+    from=$(printf '%s\n' "$labels" | grep -x -E 'agent:(waiting|review)' | head -1)
+    if [ -z "$from" ] || [ "$PICK_WHY" != reply ] || ! owner_replied "$1" "$2" ||
+      [ "$M_IREAD" != "$PICK_IREAD" ] || [ "$M_PREAD" != "$PICK_PREAD" ]; then
+      say "OUTCOME=$(printf '%s\n' "$labels" | grep '^agent' | head -1)"
+      return 0
+    fi
+    cause="the run parked again without reading your reply"
   fi
   # Amendment #2: carry the run's PR, if the issue's own current state already named one, so a
   # retry (or a human) can still find it from the failure comment alone.
@@ -295,14 +304,14 @@ reconcile() { # repo issue cause log cli-error -> OUTCOME [PAUSED]; rc 1 when Gi
     say "PAUSED=true"
   fi
   {
-    printf 'The dispatcher marked this run failed: %s. Its log stays on the machine that ran it, at `%s`.\n' "$3" "$shown"
+    printf 'The dispatcher marked this run failed: %s. Its log stays on the machine that ran it, at `%s`.\n' "$cause" "$shown"
     if [ "$5" = 1 ]; then
       printf '\nDispatching is paused for every repo until `~/.agent-dispatch/paused` is deleted. An error like this usually means the CLI is logged out or out of allowance, and the next issue would fail the same way.\n'
     fi
     printf '\nTo retry, label the issue `agent` again.\n\n<!-- issue-to-pr state=failed%s -->\n' "$prmark"
   } >"$body"
   gh issue comment "$2" -R "$1" --body-file "$body" >/dev/null 2>&1 || return 1
-  gh issue edit "$2" -R "$1" --add-label agent:failed --remove-label agent:running >/dev/null 2>&1 || return 1
+  gh issue edit "$2" -R "$1" --add-label agent:failed --remove-label "$from" >/dev/null 2>&1 || return 1
   say "OUTCOME=agent:failed"
 }
 

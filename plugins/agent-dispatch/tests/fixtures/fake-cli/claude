@@ -8,6 +8,8 @@ n=$(printf '%s' "$*" | sed -n 's/.*issue-to-pr:run \([0-9][0-9]*\).*/\1/p')
 case "${FAKE_CLI_MODE:-exit:0}" in
   exit:*) exit "${FAKE_CLI_MODE#exit:}" ;;
   flip:*)
+    # FAKE_CLI_COMMENTS: projected comment rows (printf %b) the run posts before it parks.
+    if [ -n "${FAKE_CLI_COMMENTS:-}" ]; then printf '%b' "$FAKE_CLI_COMMENTS" >>"$FAKE_GH_FIX/comments-$n"; fi
     { grep -v -x 'agent:running' "$FAKE_GH_FIX/labels-$n"; printf '%s\n' "${FAKE_CLI_MODE#flip:}"; } >"$FAKE_GH_FIX/.flip"
     mv "$FAKE_GH_FIX/.flip" "$FAKE_GH_FIX/labels-$n"
     ;;

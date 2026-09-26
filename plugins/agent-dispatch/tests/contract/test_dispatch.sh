@@ -555,3 +555,50 @@ test_an_unreadable_edit_history_is_skipped() {
   assert_key "$OUT" TICK idle
   [ -z "$(cli_log)" ] || fail "ran an issue whose edits could not be checked"
 }
+
+# F7: a reply run that parks again with the cursors it started from, while the reply that started
+# it is still above them, would be picked again every tick; it fails instead.
+test_a_reply_run_that_parks_without_reading_the_reply_fails() {
+  setup_env
+  open_issue 7 agent:waiting
+  comment 7 100 octo
+  comment 7 101 octo '<!-- issue-to-pr state=waiting issue-read=100 -->'
+  comment 7 102 octo
+  export FAKE_CLI_MODE=flip:agent:waiting
+  dispatch
+  assert_rc 0
+  assert_key "$OUT" PICK reply
+  assert_key "$OUT" OUTCOME agent:failed
+  assert_contains "$(cat "$FIX/posted-7" 2>/dev/null)" "parked again without reading your reply"
+  assert_contains "$(cat "$FIX/posted-7")" '<!-- issue-to-pr state=failed -->'
+  assert_eq "agent:failed" "$(cat "$FIX/labels-7")"
+  [ -e "$HOME/.agent-dispatch/paused" ] && fail "an unread reply is not a CLI error"
+  return 0
+}
+
+test_a_review_run_that_parks_without_reading_the_pr_reply_fails_with_its_pr() {
+  setup_env
+  open_issue 7 agent:review
+  comment 7 101 octo '<!-- issue-to-pr state=review step=7 pr=12 issue-read=100 pr-read=200 -->'
+  comment 12 201 octo
+  export FAKE_CLI_MODE=flip:agent:review
+  dispatch
+  assert_key "$OUT" OUTCOME agent:failed
+  assert_contains "$(cat "$FIX/posted-7" 2>/dev/null)" '<!-- issue-to-pr state=failed pr=12 -->'
+  assert_eq "agent:failed" "$(cat "$FIX/labels-7")"
+}
+
+test_a_reply_run_that_moved_its_cursor_stays_parked() {
+  # The run read 102 and parked at a new cursor; 104 arrived while it ran and waits for the next tick.
+  setup_env
+  open_issue 7 agent:waiting
+  comment 7 100 octo
+  comment 7 101 octo '<!-- issue-to-pr state=waiting issue-read=100 -->'
+  comment 7 102 octo
+  export FAKE_CLI_MODE=flip:agent:waiting \
+    FAKE_CLI_COMMENTS='103\tocto\t<!-- issue-to-pr state=waiting issue-read=102 -->\n104\tocto\t\n'
+  dispatch
+  assert_key "$OUT" OUTCOME agent:waiting
+  [ -e "$FIX/posted-7" ] && fail "a run that read the reply needs no dispatcher comment"
+  assert_eq "agent:waiting" "$(cat "$FIX/labels-7")"
+}
