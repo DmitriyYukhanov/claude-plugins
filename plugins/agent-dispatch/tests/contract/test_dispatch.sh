@@ -304,13 +304,18 @@ test_jq_projections_shape_the_tsv() {
   expected="7${tab}octo${tab}<!-- issue-to-pr state=waiting issue-read=6 -->${tab}which one?${bs}r${bs}n${bs}r${bs}n<!-- issue-to-pr state=waiting issue-read=6 -->${nl}8${tab}octo${tab}${tab}mit"
   assert_eq "$expected" \
     "$(printf '%s' '[{"id":7,"user":{"login":"octo"},"body":"Which one?\r\n\r\n<!-- issue-to-pr state=waiting issue-read=6 -->"},{"id":8,"user":{"login":"octo"},"body":"MIT"}]' | jq -r "$MARKER_JQ" | tr -d '\r')"
-  assert_eq "mallory" \
-    "$(printf '%s' '[{"event":"labeled","label":{"name":"agent"},"actor":{"login":"mallory"}},{"event":"labeled","label":{"name":"bug"},"actor":{"login":"octo"}}]' | jq -r "$(label_actors_jq agent)" | tr -d '\r')"
-  # The reply path projects a colon-bearing label the same way; label_actors_jq must select every
-  # agent:waiting event (owner_labelled takes the last one itself) and skip the unrelated "agent"
-  # queue-labeling event in the same history.
-  assert_eq "$(printf 'mallory\nocto')" \
-    "$(printf '%s' '[{"event":"labeled","label":{"name":"agent"},"actor":{"login":"octo"}},{"event":"labeled","label":{"name":"agent:waiting"},"actor":{"login":"mallory"}},{"event":"labeled","label":{"name":"agent:waiting"},"actor":{"login":"octo"}}]' | jq -r "$(label_actors_jq agent:waiting)" | tr -d '\r')"
+  # The events projection keeps every application of the queried label (owner_approved takes the
+  # last one itself) and every rename, and nothing else: another label, even the queue label
+  # "agent" on the reply path, never counts.
+  assert_eq "$(printf 'labeled\tmallory\t2026-09-26T09:00:00Z\nrenamed\tocto\t2026-09-26T09:30:00Z')" \
+    "$(printf '%s' '[{"event":"labeled","label":{"name":"agent"},"actor":{"login":"mallory"},"created_at":"2026-09-26T09:00:00Z"},{"event":"labeled","label":{"name":"bug"},"actor":{"login":"octo"},"created_at":"2026-09-26T09:10:00Z"},{"event":"renamed","actor":{"login":"octo"},"created_at":"2026-09-26T09:30:00Z","rename":{"from":"a","to":"b"}}]' | jq -r "$(label_events_jq agent)" | tr -d '\r')"
+  assert_eq "$(printf 'labeled\tmallory\t2026-09-26T10:00:00Z\nlabeled\tocto\t2026-09-26T11:00:00Z')" \
+    "$(printf '%s' '[{"event":"labeled","label":{"name":"agent"},"actor":{"login":"octo"},"created_at":"2026-09-26T09:00:00Z"},{"event":"labeled","label":{"name":"agent:waiting"},"actor":{"login":"mallory"},"created_at":"2026-09-26T10:00:00Z"},{"event":"labeled","label":{"name":"agent:waiting"},"actor":{"login":"octo"},"created_at":"2026-09-26T11:00:00Z"}]' | jq -r "$(label_events_jq agent:waiting)" | tr -d '\r')"
+  # GraphQL: a never-edited issue has a null lastEditedAt and editor; an edited one names both.
+  assert_eq "$(printf '\t')" \
+    "$(printf '%s' '{"data":{"repository":{"issue":{"lastEditedAt":null,"editor":null}}}}' | jq -r "$JQ_EDIT" | tr -d '\r')"
+  assert_eq "$(printf '2026-09-26T11:00:00Z\tmallory')" \
+    "$(printf '%s' '{"data":{"repository":{"issue":{"lastEditedAt":"2026-09-26T11:00:00Z","editor":{"login":"mallory"}}}}}' | jq -r "$JQ_EDIT" | tr -d '\r')"
 }
 
 wait_for() { # file -> waits up to 20 s for it to be non-empty
@@ -470,4 +475,83 @@ test_a_failed_issue_listing_is_an_error_not_idle() {
   assert_key "$OUT" REASON github
   assert_key "$OUT" TICK error
   [ -z "$(cli_log)" ] || fail "launched without a listing"
+}
+
+# F1: an edit to the title or body by anyone but the owner, after the owner's latest application
+# of the label that makes the issue eligible, holds it until the owner labels it again.
+labelled_at() { # n label actor time -> the issue's event history holds only that application
+  printf '%s\t%s\t%s\n' "$2" "$3" "$4" >"$FIX/events-$1"
+}
+body_edited() { # n time login -> GraphQL's lastEditedAt and editor for the issue
+  printf '%s\t%s\n' "$2" "$3" >"$FIX/graphql-$1"
+}
+
+test_a_body_a_stranger_edited_after_the_label_is_skipped() {
+  setup_env
+  open_issue 4 agent
+  labelled_at 4 agent octo 2026-09-26T10:00:00Z
+  body_edited 4 2026-09-26T11:00:00Z mallory
+  dispatch
+  assert_key "$OUT" TICK idle
+  [ -z "$(cli_log)" ] || fail "ran a body a stranger rewrote after the owner's label"
+  assert_gh_called_with "api graphql"
+}
+
+test_a_body_the_owner_edited_after_the_label_is_picked() {
+  setup_env
+  open_issue 4 agent
+  labelled_at 4 agent octo 2026-09-26T10:00:00Z
+  body_edited 4 2026-09-26T11:00:00Z octo
+  export FAKE_CLI_MODE=flip:agent:review
+  dispatch
+  assert_key "$OUT" ISSUE "octo/widgets#4"
+}
+
+test_a_title_a_stranger_renamed_after_the_label_is_skipped() {
+  setup_env
+  open_issue 4 agent
+  printf 'agent\tocto\t2026-09-26T10:00:00Z\nrenamed\tmallory\t2026-09-26T11:00:00Z\n' >"$FIX/events-4"
+  dispatch
+  assert_key "$OUT" TICK idle
+  [ -z "$(cli_log)" ] || fail "ran a title a stranger renamed after the owner's label"
+}
+
+test_edits_before_the_label_are_approved_by_it() {
+  setup_env
+  open_issue 4 agent
+  printf 'agent\tocto\t2026-09-26T08:00:00Z\nrenamed\tmallory\t2026-09-26T09:00:00Z\nagent\tocto\t2026-09-26T10:00:00Z\n' \
+    >"$FIX/events-4"
+  body_edited 4 2026-09-26T09:30:00Z mallory
+  export FAKE_CLI_MODE=flip:agent:review
+  dispatch
+  assert_key "$OUT" ISSUE "octo/widgets#4"
+}
+
+test_a_reply_on_an_issue_a_stranger_edited_after_it_parked_is_skipped() {
+  setup_env
+  open_issue 7 agent:waiting
+  comment 7 100 octo
+  comment 7 101 octo '<!-- issue-to-pr state=waiting issue-read=100 -->'
+  comment 7 102 octo
+  labelled_at 7 agent:waiting octo 2026-09-26T10:00:00Z
+  body_edited 7 2026-09-26T11:00:00Z mallory
+  dispatch
+  assert_key "$OUT" TICK idle
+  printf 'agent:waiting\tocto\t2026-09-26T10:00:00Z\nrenamed\tmallory\t2026-09-26T11:00:00Z\n' >"$FIX/events-7"
+  rm "$FIX/graphql-7"
+  dispatch
+  assert_key "$OUT" TICK idle
+  printf 'agent:waiting\tocto\t2026-09-26T10:00:00Z\n' >"$FIX/events-7"
+  body_edited 7 2026-09-26T09:00:00Z mallory
+  dispatch
+  assert_key "$OUT" ISSUE "octo/widgets#7" "an edit before the park is covered by it"
+}
+
+test_an_unreadable_edit_history_is_skipped() {
+  setup_env
+  open_issue 4 agent
+  : >"$FIX/fail-graphql-4"
+  dispatch
+  assert_key "$OUT" TICK idle
+  [ -z "$(cli_log)" ] || fail "ran an issue whose edits could not be checked"
 }

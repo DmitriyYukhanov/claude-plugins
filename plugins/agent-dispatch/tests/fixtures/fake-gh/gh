@@ -24,6 +24,10 @@ serve() { # name
 
 case "${1:-} ${2:-}" in
   "api user") serve user ;;
+  "api graphql") # the issue's `lastEditedAt\teditor` (a missing file: never edited)
+    n=$(value_of -F "$@")
+    serve "graphql-${n#n=}"
+    ;;
   "api repos/"*)
     n=${2%/*}
     n=${n##*/}
@@ -31,14 +35,16 @@ case "${1:-} ${2:-}" in
       */comments) serve "comments-$n" ;;
       */events)
         # The real --jq projection is ignored elsewhere in this file, but here the query names the
-        # label owner_labelled() is asking about, so events-<n> can hold every label's actor
-        # history (`<label>\t<actor>` rows) and this filters to the one queried.
+        # label owner_approved() is asking about, so events-<n> can hold every label's history
+        # (`<label>\t<actor>[\t<time>]` rows, plus `renamed\t<actor>\t<time>` for title edits) and
+        # this prints what the projection would: the queried label's rows and every rename.
         [ -e "$F/fail-events-$n" ] && exit 1
         lbl=$(value_of --jq "$@")
         lbl=${lbl#*'label.name == "'}
         lbl=${lbl%%'"'*}
-        while IFS=$'\t' read -r l a; do
-          [ "$l" = "$lbl" ] && printf '%s\n' "$a"
+        while IFS=$'\t' read -r l a t; do
+          if [ "$l" = "$lbl" ]; then printf 'labeled\t%s\t%s\n' "$a" "${t:-}"; fi
+          if [ "$l" = renamed ]; then printf 'renamed\t%s\t%s\n' "$a" "${t:-}"; fi
         done <"$F/events-$n" 2>/dev/null
         ;;
     esac
