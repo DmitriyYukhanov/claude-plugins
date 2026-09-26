@@ -238,7 +238,7 @@ run_cause() { # rc host log checkout -> CAUSE, CLIERR (0 no pause, 1 the CLI fai
   if [ "$1" -eq 97 ]; then
     CAUSE="the checkout $4 is missing"
   elif [ "$1" -eq 96 ] && on_windows; then
-    CAUSE="the Windows launcher could not start the run (no job object)" CLIERR=2
+    CAUSE="the Windows launcher could not start the run" CLIERR=2
   elif [ "$1" -ne 0 ]; then
     CAUSE="the $2 CLI exited with code $1" CLIERR=1
   elif [ "$2" = claude ] && grep '"type":"result"' "$3" 2>/dev/null | tail -1 | grep -q '"is_error":true'; then

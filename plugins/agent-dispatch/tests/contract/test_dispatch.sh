@@ -673,7 +673,7 @@ test_launcher_exit_codes_name_their_cause() {
   # shellcheck disable=SC2329 # replaces the sourced dispatch.sh's own, which gone/run_cause call
   on_windows() { return 0; }
   run_cause 96 claude "$TEST_TMPDIR/run.log" "$TEST_TMPDIR/checkout"
-  assert_eq "the Windows launcher could not start the run (no job object)" "$CAUSE"
+  assert_eq "the Windows launcher could not start the run" "$CAUSE"
   assert_eq 2 "$CLIERR" "every launch would fail the same way: pause"
   run_cause 3 codex "$TEST_TMPDIR/run.log" "$TEST_TMPDIR/checkout"
   assert_eq "the codex CLI exited with code 3" "$CAUSE"
@@ -686,7 +686,7 @@ test_a_launcher_failure_pauses_without_blaming_a_logout() {
   # shellcheck source=../../scripts/dispatch.sh
   source "$AD_SCRIPTS/dispatch.sh"
   mkdir -p "$AD_HOME/logs"
-  OUT=$(reconcile octo/widgets 4 "the Windows launcher could not start the run (no job object)" "$AD_HOME/logs/x.log" 2)
+  OUT=$(reconcile octo/widgets 4 "the Windows launcher could not start the run" "$AD_HOME/logs/x.log" 2)
   assert_key "$OUT" PAUSED true
   [ -e "$HOME/.agent-dispatch/paused" ] || fail "paused was not created"
   assert_contains "$(cat "$FIX/posted-4")" "paused"
