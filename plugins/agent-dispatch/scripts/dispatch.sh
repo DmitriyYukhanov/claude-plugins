@@ -171,6 +171,27 @@ write_run_script() { # path host issue tier log -> $LOCK/run.sh
   } >"$LOCK/run.sh"
 }
 
+winpid_of() { # cygpid -> the launcher's own powershell.exe winpid; empty if it never shows up.
+  # MSYS's fork-then-exec of a native target briefly reports a placeholder image (its own
+  # bash.exe) at this cygpid before /proc/<cygpid>/winpid settles on the real target, and that
+  # placeholder can itself sit still across two immediate reads; only the image name tells them
+  # apart, so a candidate is trusted once, not just when it stops changing. No `sleep` here:
+  # tests replay it through a fake clock, which would corrupt a caller's deadline math.
+  local v seen='' i=0
+  while [ "$i" -lt 100 ]; do
+    v=$(cat "/proc/$1/winpid" 2>/dev/null)
+    if [ -n "$v" ] && [ "$v" != "$seen" ]; then
+      seen=$v
+      if tasklist //FI "PID eq $v" //FI "IMAGENAME eq powershell.exe" //NH 2>/dev/null | grep -qi powershell; then
+        printf '%s' "$v"
+        return 0
+      fi
+    fi
+    i=$((i + 1))
+  done
+  printf '%s' "$seen"
+}
+
 launch() { # runs $LOCK/run.sh -> RUN_PID (to wait on), RUN_ID (to stop), recorded in the lock
   if on_windows; then
     # job.ps1 holds the run in a job object: stopping it stops every process the run started,
@@ -178,7 +199,7 @@ launch() { # runs $LOCK/run.sh -> RUN_PID (to wait on), RUN_ID (to stop), record
     powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w "$HERE/job.ps1")" \
       "$(cygpath -w "$BASH")" "$(cygpath -w "$LOCK/run.sh")" </dev/null >/dev/null 2>&1 &
     RUN_PID=$!
-    RUN_ID=$(cat "/proc/$RUN_PID/winpid")
+    RUN_ID=$(winpid_of "$RUN_PID")
     say "LAUNCHER=job"
   else
     set -m

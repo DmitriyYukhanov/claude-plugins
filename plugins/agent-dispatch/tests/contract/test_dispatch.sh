@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Contract tests for dispatch.sh. Fixtures: a fake gh serving files from $FIX, fake claude and
 # codex acting out FAKE_CLI_MODE, and a test clock (date, sleep) so four hours pass in seconds.
-# shellcheck disable=SC2034,SC2088
+# shellcheck disable=SC2034,SC2088,SC2153
 # SC2034: OUT/ERR/RC are read by assert_rc() in the sourced assert.sh, a file shellcheck does not
-# follow from here. SC2088: the log path assertion shows a literal `~`, on purpose.
+# follow from here. SC2088: the log path assertion shows a literal `~`, on purpose. SC2153: a
+# sourced dispatch.sh's own $LOCK, misread as a typo of another test's unrelated local $lock.
 
 setup_env() { # [host] -> HOME, $FIX, PATH with the fakes, one configured repo octo/widgets
   export HOME="$TEST_TMPDIR/home" FIX="$TEST_TMPDIR/fix"
@@ -285,4 +286,118 @@ test_jq_projections_shape_the_tsv() {
     "$(printf '%s' '[{"id":7,"user":{"login":"octo"},"body":"Which one?\r\n\r\n<!-- issue-to-pr state=waiting issue-read=6 -->"},{"id":8,"user":{"login":"octo"},"body":"MIT"}]' | jq -r "$MARKER_JQ" | tr -d '\r')"
   assert_eq "mallory" \
     "$(printf '%s' '[{"event":"labeled","label":{"name":"agent"},"actor":{"login":"mallory"}},{"event":"labeled","label":{"name":"bug"},"actor":{"login":"octo"}}]' | jq -r "$JQ_LABEL_ACTORS" | tr -d '\r')"
+}
+
+wait_for() { # file -> waits up to 20 s for it to be non-empty
+  local _i=0
+  while [ ! -s "$1" ] && [ "$_i" -lt 100 ]; do
+    "$REAL_SLEEP" 0.2
+    _i=$((_i + 1))
+  done
+  [ -s "$1" ] || fail "$1 never appeared"
+}
+
+dead_pid() { # -> a pid that has already exited
+  local p
+  "$BASH" -c 'exit 0' &
+  p=$!
+  wait "$p"
+  printf '%s' "$p"
+}
+
+assert_dead() { # pid what
+  local _i=0
+  while kill -0 "$1" 2>/dev/null && [ "$_i" -lt 25 ]; do
+    "$REAL_SLEEP" 0.2
+    _i=$((_i + 1))
+  done
+  if kill -0 "$1" 2>/dev/null; then fail "$2 (pid $1) is still alive"; fi
+}
+
+test_the_deadline_stops_the_run_and_fails_it() {
+  local leader child
+  setup_env
+  open_issue 4 agent
+  export FAKE_CLI_MODE=hang FAKE_SLEEP_STEP=3600 FAKE_SLEEP_REAL=1
+  dispatch
+  assert_rc 0
+  assert_key "$OUT" OUTCOME agent:failed
+  assert_contains "$(cat "$FIX/posted-4")" "4-hour deadline"
+  [ -e "$HOME/.agent-dispatch/paused" ] && fail "a deadline is not a CLI error"
+  read -r leader child <"$FIX/hang.pids" || fail "the fake run never started"
+  assert_dead "$child" "the run's gate"
+  assert_dead "$leader" "the run"
+}
+
+test_a_live_ticks_lock_is_left_alone() {
+  setup_env
+  open_issue 4 agent
+  mkdir -p "$HOME/.agent-dispatch/lock"
+  printf '%s\n' "$$" >"$HOME/.agent-dispatch/lock/tick"
+  dispatch
+  assert_key "$OUT" TICK busy
+  [ -f "$HOME/.agent-dispatch/lock/tick" ] || fail "a live tick's lock was touched"
+  [ -z "$(cli_log)" ] || fail "launched next to a live tick"
+}
+
+test_a_dead_ticks_lock_without_a_run_is_reconciled() {
+  local lock
+  setup_env
+  lock="$HOME/.agent-dispatch/lock"
+  open_issue 4 agent:running
+  mkdir -p "$lock"
+  printf 'octo/widgets\n' >"$lock/repo"
+  printf '4\n' >"$lock/issue"
+  dead_pid >"$lock/tick"
+  printf '%s\n' "$HOME/.agent-dispatch/logs/octo_widgets_4_20260101T000000Z.log" >"$lock/log"
+  : >"$FIX/issues"
+  dispatch
+  assert_rc 0
+  assert_key "$OUT" RECOVERED "octo/widgets#4"
+  assert_key "$OUT" TICK idle
+  assert_contains "$(cat "$FIX/posted-4")" "stopped before the run finished"
+  [ -d "$lock" ] && fail "the recovered lock was kept"
+  return 0
+}
+
+test_a_dead_ticks_run_is_stopped_and_reconciled() {
+  local leader child
+  setup_env
+  open_issue 4 agent:running
+  export FAKE_CLI_MODE=hang
+  (
+    # shellcheck source=../../scripts/dispatch.sh
+    source "$AD_SCRIPTS/dispatch.sh"
+    mkdir -p "$LOCK" "$AD_HOME/logs"
+    printf 'octo/widgets\n' >"$LOCK/repo"
+    printf '4\n' >"$LOCK/issue"
+    dead_pid >"$LOCK/tick"
+    printf '%s\n' "$AD_HOME/logs/run.log" >"$LOCK/log"
+    write_run_script "$TEST_TMPDIR/checkout" claude 4 trivial "$AD_HOME/logs/run.log"
+    launch >/dev/null
+  )
+  wait_for "$FIX/hang.pids"
+  read -r leader child <"$FIX/hang.pids"
+  dispatch
+  assert_rc 0
+  assert_key "$OUT" RECOVERED "octo/widgets#4"
+  assert_dead "$child" "the dead tick's gate"
+  assert_dead "$leader" "the dead tick's run"
+  assert_eq "agent:failed" "$(cat "$FIX/labels-4")"
+}
+
+test_recovery_keeps_the_lock_while_github_is_unreachable() {
+  local lock
+  setup_env
+  lock="$HOME/.agent-dispatch/lock"
+  open_issue 4 agent:running
+  mkdir -p "$lock"
+  printf 'octo/widgets\n' >"$lock/repo"
+  printf '4\n' >"$lock/issue"
+  dead_pid >"$lock/tick"
+  : >"$FIX/fail-labels-4"
+  dispatch
+  assert_rc 1
+  assert_key "$OUT" REASON recover
+  [ -d "$lock" ] || fail "the lock is the only record of the run; it must survive a failed reconcile"
 }
