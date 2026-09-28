@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# A stand-in for gh: serves agent-dispatch's calls from fixture files in FAKE_GH_FIX. The real
+# --jq projection is ignored; the files hold what it would print. fail-<name> makes a call fail.
+set -uo pipefail
+F=$FAKE_GH_FIX
+printf 'gh %s\n' "$*" >>"$F/gh.log"
+
+value_of() { # flag args... -> the argument after flag
+  local want=$1
+  shift
+  while [ "$#" -gt 0 ]; do
+    if [ "$1" = "$want" ]; then
+      printf '%s' "${2:-}"
+      return
+    fi
+    shift
+  done
+}
+serve() { # name
+  [ -e "$F/fail-$1" ] && exit 1
+  cat "$F/$1" 2>/dev/null
+  exit 0
+}
+
+case "${1:-} ${2:-}" in
+  "api user") serve user ;;
+  "api graphql") # the body's edit history: totalCount, then `editedAt\teditor` rows, newest first
+    n=$(value_of -F "$@")
+    serve "graphql-${n#n=}"
+    ;;
+  "api repos/"*)
+    n=${2%/*}
+    n=${n##*/}
+    case "$2" in
+      */comments) serve "comments-$n" ;;
+      */events)
+        # events-<n> holds `<label>\t<actor>[\t<time>]` rows, plus `renamed\t<actor>\t<time>` for
+        # title edits; this prints them as JQ_LABEL_EVENTS would: `event\tlabel\tactor\ttime`.
+        [ -e "$F/fail-events-$n" ] && exit 1
+        while IFS=$'\t' read -r l a t; do
+          if [ "$l" = renamed ]; then
+            printf 'renamed\t\t%s\t%s\n' "$a" "${t:-}"
+          else
+            printf 'labeled\t%s\t%s\t%s\n' "$l" "$a" "${t:-}"
+          fi
+        done <"$F/events-$n" 2>/dev/null
+        ;;
+    esac
+    ;;
+  "repo view") serve repo ;;
+  "issue list") serve issues ;;
+  "issue view") serve "labels-$3" ;;
+  "issue comment")
+    [ -e "$F/fail-comment" ] && exit 1
+    cat "$(value_of --body-file "$@")" >>"$F/posted-$3"
+    ;;
+  "issue edit")
+    [ -e "$F/fail-edit" ] && exit 1
+    add=$(value_of --add-label "$@")
+    { printf '%s\n' "$add"; value_of --remove-label "$@" | tr ',' '\n'; } | grep . >"$F/.drop"
+    touch "$F/labels-$3"
+    { grep -v -x -F -f "$F/.drop" "$F/labels-$3"; printf '%s\n' "$add"; } | grep . >"$F/.labels"
+    mv "$F/.labels" "$F/labels-$3"
+    ;;
+esac
+exit 0

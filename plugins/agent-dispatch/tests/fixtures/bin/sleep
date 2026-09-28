@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Test clock: each sleep moves FAKE_CLOCK on by FAKE_SLEEP_STEP and really waits FAKE_SLEEP_REAL.
+printf '%s\n' "$(($(cat "$FAKE_CLOCK") + ${FAKE_SLEEP_STEP:-20}))" >"$FAKE_CLOCK"
+"$REAL_SLEEP" "${FAKE_SLEEP_REAL:-0.2}"

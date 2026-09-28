@@ -20,6 +20,7 @@ Add this marketplace:
 Then install plugins by name. The `@` suffix is the marketplace name `dmitriy-claude-plugins` (from this repo's `marketplace.json`), not the GitHub path:
 
 ```bash
+/plugin install agent-dispatch@dmitriy-claude-plugins
 /plugin install issue-to-pr@dmitriy-claude-plugins
 /plugin install codex-collaboration@dmitriy-claude-plugins
 ```
@@ -34,6 +35,7 @@ Codex reads this repo's `.claude-plugin/marketplace.json` as-is, so the same mar
 codex plugin marketplace add DmitriyYukhanov/claude-plugins
 codex plugin add humanizer@dmitriy-claude-plugins
 codex plugin add issue-to-pr@dmitriy-claude-plugins
+codex plugin add agent-dispatch@dmitriy-claude-plugins
 codex plugin list                  # what each marketplace offers, and what is installed
 codex plugin marketplace upgrade   # refresh the snapshots after a release
 ```
@@ -46,6 +48,7 @@ Four plugins here drive Claude Code itself and have nothing to do inside Codex: 
 
 | Plugin | Category | What it does |
 |--------|----------|--------------|
+| [agent-dispatch](#agent-dispatch) | workflow | Start headless issue-to-pr runs from GitHub labels on your own machine, Claude Code or Codex |
 | [agent-teams](#agent-teams) | productivity | Orchestrate multiple Claude Code instances working in parallel with shared tasks and messaging |
 | [claude-md-slim](#claude-md-slim) | development | Shrink an oversized or stale CLAUDE.md into path-scoped rules files, verifying the split lost nothing |
 | [codex-collaboration](#codex-collaboration) | workflow | Cross-model Claude + Codex collaboration: drive/validate loops and parallel dual review |
@@ -61,6 +64,22 @@ Four plugins here drive Claude Code itself and have nothing to do inside Codex: 
 | [unity-dev](#unity-dev) | development | Unity C# workflow: architecture, coding guidelines, tests, CLI builds and runs, and review agents |
 
 ## Plugin details
+
+### agent-dispatch
+
+Label an issue `agent` and your own machine picks it up: a tick every few minutes runs
+`/issue-to-pr:run N --headless` under your Claude Code or Codex login, and your replies on the
+issue or its PR carry the run forward.
+
+- Replies first, then the queue: one run at a time, oldest issue first, only issues you labelled
+  and comments you wrote.
+- Works on Windows (Task Scheduler), macOS (a LaunchAgent) and Linux (a systemd user timer).
+- A hung run is stopped after four hours and marked failed; a logged-out or rate-limited CLI
+  pauses dispatching until you clear it.
+- `/agent-dispatch:setup` checks the machine and prints the repo list, labels and scheduler entry;
+  it installs nothing itself.
+
+[View documentation](./plugins/agent-dispatch/README.md)
 
 ### agent-teams
 
