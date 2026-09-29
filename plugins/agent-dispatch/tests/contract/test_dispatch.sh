@@ -680,6 +680,25 @@ test_launcher_exit_codes_name_their_cause() {
   assert_eq 1 "$CLIERR"
 }
 
+test_a_turn_ended_on_background_work_names_that_cause() {
+  local log="$TEST_TMPDIR/run.log"
+  setup_env
+  # shellcheck source=../../scripts/dispatch.sh
+  source "$AD_SCRIPTS/dispatch.sh"
+  # Claude's stream: the final result, then the host stopping a task nobody waited for.
+  printf '%s\n' '{"type":"system","subtype":"task_notification","task_id":"a1","status":"completed"}' \
+    '{"type":"result","subtype":"success","is_error":false,"stop_reason":"end_turn"}' \
+    '{"type":"system","subtype":"task_notification","task_id":"b2","status":"stopped"}' >"$log"
+  run_cause 0 claude "$log" "$TEST_TMPDIR/checkout"
+  assert_contains "$CAUSE" "background work was still running"
+  assert_eq 0 "$CLIERR" "a run that ended too early is not a CLI error: no pause"
+  # A task stopped before the end of the turn is the run's own business.
+  printf '%s\n' '{"type":"system","subtype":"task_notification","task_id":"b2","status":"stopped"}' \
+    '{"type":"result","subtype":"success","is_error":false,"stop_reason":"end_turn"}' >"$log"
+  run_cause 0 claude "$log" "$TEST_TMPDIR/checkout"
+  assert_eq "it ended without leaving a state" "$CAUSE"
+}
+
 test_a_launcher_failure_pauses_without_blaming_a_logout() {
   setup_env
   open_issue 4 agent:running

@@ -207,6 +207,15 @@ test_attended_steps_read_as_in_the_previous_release() {
     "Step 3 no longer closes on it being the only mid-run question"
 }
 
+test_a_headless_turn_never_ends_on_background_work() {
+  local hl
+  hl=$(cat "$(references_dir)/headless.md") || fail "R/headless.md missing"
+  [ -n "$hl" ] || fail "R/headless.md came back empty; this check would be vacuous"
+  assert_contains "$hl" 'Nothing wakes you between turns' \
+    "a headless host exits when the turn ends; a background job's notice never arrives"
+  assert_contains "$hl" 'in the foreground' "pending background work must be waited for, not left behind"
+}
+
 test_headless_state_lives_in_marked_comments_on_the_issue() {
   local hl hard
   hl=$(cat "$(references_dir)/headless.md") || fail "R/headless.md missing"

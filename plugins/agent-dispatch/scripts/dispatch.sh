@@ -259,6 +259,10 @@ run_cause() { # rc host log checkout -> CAUSE, CLIERR (0 no pause, 1 the CLI fai
     CAUSE="the $2 CLI exited with code $1" CLIERR=1
   elif [ "$2" = claude ] && grep '"type":"result"' "$3" 2>/dev/null | tail -1 | grep -q '"is_error":true'; then
     CAUSE="the claude CLI reported an error" CLIERR=1
+  elif [ "$2" = claude ] && awk '/"type":"result"/ { r = NR } /"subtype":"task_notification"/ && /"status":"stopped"/ { s = NR }
+      END { exit !(r && s > r) }' "$3" 2>/dev/null; then
+    # claude -p exits when the turn ends and stops whatever the run left running in the background.
+    CAUSE="it ended its turn while background work was still running, so that work was stopped"
   else
     CAUSE="it ended without leaving a state"
   fi

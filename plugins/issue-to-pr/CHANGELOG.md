@@ -5,6 +5,11 @@ All notable changes to the **issue-to-pr** plugin will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [9.5.1] - 2026-09-29
+
+### Fixed
+- Keep a headless run alive until the background work it started finishes, instead of ending the turn and losing it.
+
 ## [9.5.0] - 2026-09-29
 
 ### Added
