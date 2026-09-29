@@ -93,7 +93,8 @@ test_codex_is_asked_once_with_the_marker_and_done_on_a_review_of_the_head() {
 test_codex_answers_decide_its_outcome() {
   local c
   for c in "Codex Review: Didn't find any major issues.|done" \
-    'To use Codex here, create an environment for this repo.|no-review' '+1 reaction|done' 'silence|no-review'; do
+    'To use Codex here, create an environment for this repo.|no-review' '+1 reaction|done' 'silence|no-review' \
+    'Keep your eyes on it, +1 to that.|no-review'; do
     bots_setup
     case "${c%%|*}" in
       '+1 reaction') fx reactions@20 +1 ;;

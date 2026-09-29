@@ -81,12 +81,13 @@ snapshot() {
   seen=$(gh api "repos/{owner}/{repo}/issues/comments/$rid/reactions" \
     --jq '.[] | select(.user.login == "'"$CX"'") | .content' 2>/dev/null) || return 1
   # its other replies (an environment to set up, a quota) are read in triage, not classified here
-  if [ -n "$reviews" ]; then cx="done"; else
-    case "$said|$seen" in
-      *"major issues"* | *'+1'*) cx="done" ;;
-      *eyes*) cx="wait" ;;
-    esac
-  fi
+  # reactions are whole words; a reply's text only counts for its verdict
+  case "$reviews" in ?*) cx="done" ;; esac
+  case "$said" in *"major issues"*) cx="done" ;; esac
+  case " ${seen//$'\n'/ } " in
+    *" +1 "*) cx="done" ;;
+    *" eyes "*) [ -n "$cx" ] || cx="wait" ;;
+  esac
 }
 
 cmd_wait() {
