@@ -13,7 +13,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 - Refuse to merge while a review thread is unresolved or CodeRabbit is still reviewing the latest commit.
-- Hold back an unattended merge when CodeRabbit reviewed the PR before the last push but not after it.
 
 ## [9.4.1] - 2026-09-29
 

@@ -64,8 +64,8 @@ merges on its own, unless the issue already stopped once or the diff touches `hu
   standard and complex runs, asks Codex for a review with `@codex review`. It works out who is
   reviewing from what shows up on the PR, so a repo without bots costs about four minutes. Each
   thread a bot opens is checked like any other review finding: fixed, re-gated and answered with
-  the commit, or answered with the reason it was rejected. The run waits out a CodeRabbit rate
-  limit of 15 minutes or less and asks again; a longer one goes into the summary.
+  the commit, or answered with the reason it was rejected. A CodeRabbit rate limit goes into the
+  summary; asking it again is your call.
 - **Beyond a single issue.** A plain request with no number is drafted into an issue and run.
 - **A careful merge gate.** Merge happens only on your explicit in-session approval, never on
   the turn the PR opens. The merge script refuses a head the gates never ran against, a review

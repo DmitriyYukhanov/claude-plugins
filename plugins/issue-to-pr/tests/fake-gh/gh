@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# A stand-in for gh: answers the calls finish.sh makes, shaped by FAKE_GH_SCENARIO. With
-# FAKE_GH_FIX set it also serves the headless reads (user, issue labels, comments) from files there.
+# A stand-in for gh: answers the calls finish.sh and bots.sh make, shaped by FAKE_GH_SCENARIO.
+# With FAKE_GH_FIX set it serves the other reads from files there; <fixture>@<t> files follow the
+# fake clock in FAKE_NOW.
 set -uo pipefail
 
 if [ -n "${FAKE_GH_LOG:-}" ]; then
@@ -17,8 +18,8 @@ serve() { # fixture [default]: FAKE_GH_FIX/<fixture>, else the default; fail-<fi
 }
 
 serve_at() { # fixture [default]: the newest <fixture>@<t> with t <= the fake clock, else serve
-  local f t best="" bt=-1 now
-  now=$(cat "${FAKE_NOW:-/dev/null}" 2>/dev/null || printf 0)
+  local f t best="" bt=-1 now=0
+  [ -z "${FAKE_NOW:-}" ] || read -r now <"$FAKE_NOW"
   for f in "${FAKE_GH_FIX:-/nonexistent}/$1"@*; do
     [ -f "$f" ] || continue
     t=${f##*@}
@@ -43,8 +44,8 @@ case "${1:-} ${2:-}" in
     ;;
   "pr view")
     case "$*" in
-      *reviewDecision*) # merge: head sha, review decision, base, PR number, url, CodeRabbit state, reviewed
-        tail="https://github.com/o/r/pull/12	${FAKE_GH_CR:-	false}"
+      *reviewDecision*) # merge: head sha, review decision, base, PR number, node id
+        tail="PR_node12"
         case "$scenario" in
           pr-unreadable) exit 1 ;;
           review-changes-requested) printf '%s\tCHANGES_REQUESTED\tmain\t12\t%s\n' "$SHA" "$tail" ;;
@@ -52,9 +53,9 @@ case "${1:-} ${2:-}" in
           *) printf '%s\tAPPROVED\tmain\t12\t%s\n' "$SHA" "$tail" ;;
         esac
         ;;
-      *headRefName*) # bots: head sha, branch, url
+      *headRefName*) # bots: head sha, branch, node id
         [ "$scenario" != pr-unreadable ] || exit 1
-        printf '%s\tfeat/issue-6-x\thttps://github.com/o/r/pull/12\n' "$SHA"
+        printf '%s\tfeat/issue-6-x\tPR_node12\n' "$SHA"
         ;;
       *) # cleanup: PR state
         case "$scenario" in
@@ -86,23 +87,20 @@ case "${1:-} ${2:-}" in
       *) serve_at threads ;;
     esac
     ;;
-  "api repos/"*/status) # bots: CodeRabbit's status on the head as TSV state, description
+  "api repos/"*/status) # CodeRabbit's status on the head as TSV state, description
     serve_at status
     ;;
   "api repos/"*/reactions) # bots: reactions on the Codex request, one content per line
     serve_at reactions
     ;;
-  "api repos/"*/reviews) # bots: ids of Codex reviews on the head
+  "api repos/"*/reviews*) # bots: ids of Codex reviews on the head
     serve_at reviews
     ;;
-  "api repos/"*/comments)
+  "api repos/"*/comments*)
     case "$*" in
-      *"-f body="*) # bots: a posted comment -> its id
-        printf '%s\n' "$*" >>"${FAKE_GH_FIX:-/dev/null}/posted" 2>/dev/null
-        serve posted-id 900
-        ;;
+      *"-f body="*) printf '900\n' ;; # bots: a posted comment -> its id
       *) # headless: TSV id, login, marker, body; bots: TSV id, login, body
-        n=${2%/comments}
+        n=${2%%/comments*}
         serve_at "comments-${n##*/}"
         ;;
     esac

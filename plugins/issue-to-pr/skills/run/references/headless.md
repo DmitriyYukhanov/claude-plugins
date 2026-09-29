@@ -73,9 +73,8 @@ review bots' stops: answer them as Step 7 does. No commit resulted and no open t
 person's → re-run `finish.sh` in the same turn on the owner's same `merge`; a commit → Steps 5–7,
 re-report and park at `review`; a person's open thread → name it in a `state=review` comment and
 park at `review`, since only they resolve it. A
-`bots.sh` stop is never `agent:failed` on its own: report that bot as unchecked. Step 7's
-`bots.sh wait` runs inside the report's turn, before any flip: it waits on reviews of your own
-push, never on a reply.
+`bots.sh` stop is never `agent:failed` on its own. Step 7's `bots.sh wait` runs inside the
+report's turn, before any flip: it waits on reviews of your own push, never on a reply.
 
 A label the repo lacks: `gh label create <name> -f` it once and carry on. A missing label never
 blocks a comment or a stop.
@@ -137,7 +136,7 @@ After the report, decide whether this PR self-merges. All of:
 - the review escalation in `R/judgment.md` never fired (the ratchet);
 - the ledger holds no "Work no reviewer saw" entry (`R/judgment.md`): a simplification cut, a
   verify fix after the last review pass or a fix for a review bot's finding is exactly what this
-  bullet holds back, and `finish.sh --auto` refuses a head CodeRabbit reviewed before but not now;
+  bullet holds back;
 - `S/finish.sh merge <N> --branch <b> --auto <threshold> --tier <tier>` does not stop: it
   re-checks the tier and refuses any diff touching `human_paths` from the config, then merges as
   Step 8 would.

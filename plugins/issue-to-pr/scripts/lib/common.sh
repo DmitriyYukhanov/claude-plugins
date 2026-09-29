@@ -117,17 +117,16 @@ config_line() { # root key -> the value of one top-level frontmatter line, or em
   printf '%s' "$value"
 }
 
-pr_slug() { # PR url -> owner<TAB>name; a GraphQL owner goes in with -f, since -F types an all-digit login
-  local p=${1#*://*/}
-  p=${p%%/pull/*}
-  case "$p" in */*) printf '%s\t%s' "${p%%/*}" "${p#*/}" ;; *) return 1 ;; esac
+cr_status() { # sha -> CodeRabbit's commit status on it as state<TAB>description, empty if none; rc 1 unreadable
+  gh api "repos/{owner}/{repo}/commits/$1/status" \
+    --jq 'first(.statuses[] | select(.context == "CodeRabbit") | "\(.state)\t\(.description // "")") // empty'
 }
 
-open_threads() { # owner name pr -> each unresolved review thread as id<TAB>author<TAB>path<TAB>url; rc 1 unreadable
-  # shellcheck disable=SC2016 # $owner, $name, $n and $endCursor are GraphQL variables
-  gh api graphql --paginate -f owner="$1" -f name="$2" -F n="$3" \
-    -f query='query($owner:String!,$name:String!,$n:Int!,$endCursor:String){repository(owner:$owner,name:$name){pullRequest(number:$n){reviewThreads(first:100,after:$endCursor){pageInfo{hasNextPage endCursor} nodes{id isResolved path comments(first:1){nodes{author{login} url}}}}}}}' \
-    --jq '.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved | not) | [.id, (.comments.nodes[0].author.login // ""), (.path // ""), (.comments.nodes[0].url // "")] | @tsv'
+open_threads() { # PR node id -> each unresolved review thread as id<TAB>author<TAB>path<TAB>url; rc 1 unreadable
+  # shellcheck disable=SC2016 # $id and $endCursor are GraphQL variables
+  gh api graphql --paginate -f id="$1" \
+    -f query='query($id:ID!,$endCursor:String){node(id:$id){... on PullRequest{reviewThreads(first:100,after:$endCursor){pageInfo{hasNextPage endCursor} nodes{id isResolved path comments(first:1){nodes{author{login} url}}}}}}}' \
+    --jq '.data.node.reviewThreads.nodes[] | select(.isResolved | not) | [.id, (.comments.nodes[0].author.login // ""), (.path // ""), (.comments.nodes[0].url // "")] | @tsv'
 }
 
 tier_rank() { # trivial|standard|complex|none -> 1|2|3|0, anything else -> empty
