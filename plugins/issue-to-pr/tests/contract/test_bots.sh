@@ -85,7 +85,7 @@ test_a_review_that_never_ends_times_out_inside_the_budget() {
   ITP_BOTS_SLICE=99999 waits
   assert_rc 0
   assert_key "$OUT" BOT_coderabbit timeout
-  [ "$(clock)" -ge 1200 ] && [ "$(clock)" -lt 1300 ] || fail "budget is 20 minutes, ran to $(clock)"
+  if [ "$(clock)" -lt 1200 ] || [ "$(clock)" -ge 1300 ]; then fail "budget is 20 minutes, ran to $(clock)"; fi
 }
 
 test_a_slice_returns_early_and_the_next_call_keeps_the_budget() {
