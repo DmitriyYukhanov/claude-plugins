@@ -84,16 +84,38 @@ test_skill_grill_reshapes_the_checkpoint_without_adding_a_moment() {
   esac
 }
 
-test_the_second_model_review_names_its_own_target() {
+test_the_second_model_review_only_reports() {
   local row step
   row=$(grep -i 'second-model review' "$(companions_md)")
   [ -n "$row" ] || fail "companions.md lost the Step 6 second-model review row"
-  assert_contains "$row" 'cross-review' "the second-model row must name the capability it prefers"
-  assert_contains "$row" '<CHANGED>'     "the second model must be handed the file list: its own target is a three-dot diff, empty
-    until Step 7 commits, and an empty diff is where it stops to ask the user what to review"
-  assert_contains "$row" '--max-rounds 1'     "one round only, so what it applies lands inside a single pass the ratchet counts"
+  # --fresh skips the resume-thread question, --wait keeps the result in this turn
+  assert_contains "$row" 'codex:rescue --fresh --wait' "the second-model row must name the invocation it prefers"
+  assert_not_contains "$row" 'cross-review' "cross-review applies its own fixes and prompts about a dirty tree; Step 6 lets
+    only the parent apply fixes and has no contact moment for that prompt"
+  assert_contains "$row" 'asked for a read-only review' "without an explicit read-only ask the rescue forwarder runs Codex
+    with --write"
+  assert_contains "$row" 'git diff --name-only <BASE>' "the second model must be handed the changed files"
+  assert_contains "$row" 'git ls-files --others --exclude-standard' "the second model must be handed the untracked files
+    too: Step 6 runs before anything is committed"
+  assert_contains "$row" 'a blocked review, not a clean one' "a failed or backgrounded Codex call returns nothing, which
+    must not read as a clean review"
+  assert_contains "$row" 'git hash-object --stdin' "the tree is already dirty in Step 6, so only a hash of the diff and the
+    untracked files shows whether Codex edited it"
+  assert_contains "$row" 'git ls-files --others --exclude-standard;' "the hash must cover untracked paths, not only their
+    contents, or a rename slips through"
   step=$(skill_step Review)
   assert_contains "$step" 'second' "the spine must say when the second model runs"
+}
+
+test_the_headless_second_opinion_never_prompts() {
+  local row
+  row=$(grep -i 'second opinion' "$(companions_md)")
+  [ -n "$row" ] || fail "companions.md lost the Step 3 second-opinion row"
+  assert_contains "$row" 'codex:rescue --fresh --wait' "headless has nobody to answer the resume-thread question"
+  assert_contains "$row" 'read-only' "without an explicit read-only ask the rescue forwarder runs Codex with --write"
+  assert_contains "$row" 'is no second opinion' "empty output must not read as the second model agreeing"
+  assert_not_contains "$row" 'cross-review' "cross-review hands undecided items and a dirty-tree prompt to a user headless
+    does not have"
 }
 
 test_a_host_builtin_is_never_offered_as_an_install() {
