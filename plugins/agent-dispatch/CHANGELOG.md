@@ -5,6 +5,15 @@ All notable changes to the **agent-dispatch** plugin will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.1.0] - 2026-09-29
+
+### Changed
+- Set up the repo list, labels, tick and scheduler entry after one confirmation instead of printing commands to paste.
+- Ask each repo's auto-merge threshold as its own question, explaining what merges without you and what a merge sets off.
+
+### Added
+- Offer to install the machine-wide PowerShell under the same confirmation when only the Store build is present.
+
 ## [1.0.0] - 2026-09-26
 
 ### Added
