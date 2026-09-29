@@ -1,11 +1,13 @@
-# tg-alerts
+# tg-essentials
 
-Add operational error alerts to any project via a dedicated Telegram bot. Alerts go to a private channel, group, or forum topic, not to end users.
+Telegram toolkit for Claude Code. Error alerts for your projects go out through a bot, and everything you do in Telegram as yourself (chats, exports, groups, posts, checklists) runs through your local Telegram Desktop session.
+
+Renamed from `tg-alerts` in 2.0.0. If you had the old plugin, uninstall `tg-alerts` and install `tg-essentials`. The alerts skill is now `tg-essentials:tg-alerts`, so update any CLAUDE.md or AGENTS.md line that names `tg-alerts:tg-alerts`.
 
 ## Installation
 
 ```bash
-/plugin install tg-alerts@dmitriy-claude-plugins
+/plugin install tg-essentials@dmitriy-claude-plugins
 ```
 
 ## Features
@@ -29,16 +31,17 @@ Reference implementations included for Python async (FastAPI), Python sync (Djan
 Talks to Telegram as you, using the session Telegram Desktop already keeps on disk. You don't log in or scan a QR code.
 
 - Find chats and export their history into one text file per day
-- Create a group, send a post and pin it. Every write waits for your yes first
+- Create a group, send, edit and pin posts, and set the group photo
+- Post a native checklist that members can tick (sending one needs Telegram Premium)
 
-Requires Telegram Desktop and Python 3.12. Run the skill's setup script once; a portable Telegram install also needs `TG_TDATA` pointing at its `tdata` folder.
+Every write waits for your yes first. Requires Telegram Desktop and Python 3.12. Run the skill's setup script once; a portable Telegram install also needs `TG_TDATA` pointing at its `tdata` folder.
 
 ## Usage
 
 ```text
 Add Telegram error alerts to this project
 Export last week of the work chat
-Create a Telegram group with @alice and pin the agenda
+Create a Telegram group with @alice, pin the agenda and a checklist
 ```
 
 ## License

@@ -1,8 +1,0 @@
-{
-  "name": "tg-alerts",
-  "version": "1.1.0",
-  "description": "Telegram tooling: error and alert notifications for any project through a bot, with guided setup and deduplication, plus reading and writing Telegram as yourself from the local Telegram Desktop session",
-  "author": {
-    "name": "Dmitry Yuhanov"
-  }
-}

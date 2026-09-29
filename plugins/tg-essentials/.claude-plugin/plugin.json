@@ -1,0 +1,8 @@
+{
+  "name": "tg-essentials",
+  "version": "2.0.0",
+  "description": "Telegram toolkit: error and alert notifications for any project through a bot, plus reading and writing Telegram as yourself from the local Telegram Desktop session (chats, exports, groups, posts, checklists)",
+  "author": {
+    "name": "Dmitry Yuhanov"
+  }
+}

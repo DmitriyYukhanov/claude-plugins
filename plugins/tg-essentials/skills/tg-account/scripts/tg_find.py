@@ -3,9 +3,10 @@
 Usage: tg_find.py [keyword ...]      (no keywords = accounts only)
 """
 import asyncio, sys
+from telethon import errors
 from tgsess import accounts, client_for
 
-KW = [k.lower() for k in sys.argv[1:]]
+KW = [k.lower().lstrip("@") for k in sys.argv[1:]]
 
 
 async def main():
@@ -19,9 +20,9 @@ async def main():
             async for d in c.iter_dialogs():
                 e = d.entity
                 user = getattr(e, "username", None)
-                if any(k in f"{d.name} {user}".lower() for k in KW):
+                if any(k in f"{d.name} {user or ''}".lower() for k in KW):
                     print(f"  {d.id}  {d.name!r}  {'@' + user if user else ''}{'  forum' if getattr(e, 'forum', False) else ''}")
-        except ValueError as ex:  # Telegram's MSGID_DECREASE_RETRY outlasted Telethon's 6 retries
+        except errors.RPCError as ex:  # e.g. MSGID_DECREASE_RETRY outlasting Telethon's retries
             print(f"  dialogs unavailable right now: {ex}; retry later")
         finally:
             await c.disconnect()

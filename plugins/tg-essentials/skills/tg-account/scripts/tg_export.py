@@ -14,8 +14,7 @@ and carry on. Each step can skip up to 7 messages; the skip count is printed at 
 """
 import asyncio, collections, datetime as dt, os, sys
 from telethon import errors
-from telethon.tl.types import User
-from tgsess import open_chat
+from tgsess import name, open_chat
 
 if len(sys.argv) not in (4, 5):
     sys.exit(__doc__)
@@ -23,14 +22,6 @@ CHAT, SINCE, OUT = sys.argv[1:4]
 ACC = sys.argv[4] if len(sys.argv) == 5 else None
 since = dt.datetime.fromisoformat(SINCE).astimezone()
 os.makedirs(OUT, exist_ok=True)
-
-
-def name(s):
-    if s is None:
-        return "?"
-    if isinstance(s, User):
-        return " ".join(x for x in (s.first_name, s.last_name) if x) or s.username or "?"
-    return getattr(s, "title", None) or "?"
 
 
 async def main():
@@ -42,9 +33,7 @@ async def main():
     while not done:
         try:
             batch = await c.get_messages(ent, limit=100, offset_id=offset)
-        except (errors.RPCError, ValueError) as ex:
-            if isinstance(ex, errors.RPCError) and "MSGID_DECREASE" not in str(ex) and "internal issues" not in str(ex):
-                raise
+        except errors.MsgidDecreaseRetryError:  # its str() carries no error code, match the class
             if not offset:
                 offset = (await c.get_messages(ent, limit=1))[0].id + 1
             offset -= 7
