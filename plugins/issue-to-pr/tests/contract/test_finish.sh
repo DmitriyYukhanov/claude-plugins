@@ -507,7 +507,67 @@ test_attended_merge_reads_the_labels_and_nothing_else() {
   assert_rc 0
   assert_key "$OUT" MERGED true
   assert_eq 1 "$(grep -c '^gh issue view' "$FAKE_GH_LOG")" "attended reads the labels once"
-  assert_gh_not_called "gh api" "an attended merge read more than the labels"
+  assert_gh_not_called "gh api repos" "an attended merge read the comments"
+  assert_gh_not_called "gh api user" "an attended merge looked up the owner"
+}
+
+threads_setup() { # thread rows -> merge_setup happy with those unresolved threads
+  merge_setup happy
+  export FAKE_GH_FIX="$TEST_TMPDIR/fix"
+  mkdir -p "$FAKE_GH_FIX"
+  printf '%s\n' "$1" >"$FAKE_GH_FIX/threads"
+}
+
+test_merge_refuses_unresolved_review_threads() {
+  threads_setup $'T1\tcoderabbitai\ta.sh\thttps://github.com/o/r/pull/12#discussion_r7'
+  run_script finish.sh merge 6 --branch feat/issue-6-x
+  assert_rc 2
+  assert_key "$OUT" STOP_REASON review-threads-open
+  assert_key "$OUT" THREADS_OPEN 1
+  assert_contains "$ERR" "discussion_r7"
+  assert_gh_not_called "pr merge" "merged over an unanswered finding"
+}
+
+test_merge_refuses_when_the_threads_cannot_be_read() {
+  threads_setup ""
+  : >"$FAKE_GH_FIX/fail-threads"
+  run_script finish.sh merge 6 --branch feat/issue-6-x
+  assert_rc 2
+  assert_key "$OUT" STOP_REASON threads-unprovable
+  assert_gh_not_called "pr merge"
+}
+
+test_merge_waits_for_a_coderabbit_review_in_progress_or_not_yet_started() {
+  local cr
+  merge_setup happy
+  for cr in $'PENDING\ttrue' $'\ttrue'; do
+    FAKE_GH_CR=$cr run_script finish.sh merge 6 --branch feat/issue-6-x
+    assert_rc 2
+    assert_key "$OUT" STOP_REASON bots-pending
+    assert_gh_not_called "pr merge" "merged while CodeRabbit was still on its way: $cr"
+  done
+}
+
+test_a_rate_limited_or_skipped_coderabbit_never_blocks_an_attended_merge() {
+  local cr
+  merge_setup happy
+  for cr in $'SUCCESS\ttrue' $'SUCCESS\tfalse' $'\tfalse'; do
+    FAKE_GH_CR=$cr run_script finish.sh merge 6 --branch feat/issue-6-x
+    assert_rc 0
+    assert_key "$OUT" MERGED true
+  done
+}
+
+test_auto_merge_refuses_a_head_coderabbit_reviewed_before_but_not_now() {
+  headless_setup
+  printf 'success\tReview rate limited\n' >"$FAKE_GH_FIX/status"
+  FAKE_GH_CR=$'SUCCESS\ttrue' run_auto
+  assert_headless_stop auto-bots-unreviewed "a fix nobody reviewed merged unattended"
+  assert_contains "$ERR" "on the issue"
+  printf 'success\tReview completed\n' >"$FAKE_GH_FIX/status"
+  FAKE_GH_CR=$'SUCCESS\ttrue' run_auto
+  assert_rc 0
+  assert_key "$OUT" MERGED true
 }
 
 test_headless_auto_merge_waits_once_the_run_has_stopped() {
@@ -671,4 +731,24 @@ test_headless_merge_fails_closed_when_github_cannot_be_read() {
   run_plain # the control: the same threads, all readable, merge on the Russian word
   assert_rc 0
   assert_key "$OUT" MERGED true
+}
+
+test_a_finished_bots_wait_lets_a_stuck_coderabbit_status_through() {
+  merge_setup happy
+  mkdir -p "$(run_dir_of "$REPO" feat/issue-6-x)"
+  printf '%s 0 0 0 - 0 timeout\n' "$SHA_OK" >"$(run_dir_of "$REPO" feat/issue-6-x)/bots"
+  FAKE_GH_CR=$'PENDING\ttrue' run_script finish.sh merge 6 --branch feat/issue-6-x
+  assert_rc 0
+  assert_key "$OUT" BOTS_WAITED coderabbit=timeout
+  printf '%s 0 0 0 - 0 none\n' "$SHA_OK" >"$(run_dir_of "$REPO" feat/issue-6-x)/bots"
+  FAKE_GH_CR=$'PENDING\ttrue' run_script finish.sh merge 6 --branch feat/issue-6-x
+  assert_rc 2
+  assert_key "$OUT" STOP_REASON bots-pending
+  FAKE_GH_CR=$'\ttrue' run_script finish.sh merge 6 --branch feat/issue-6-x
+  assert_rc 0 # a finished wait saw no status on this head: CodeRabbit is not coming, not stuck
+  assert_key "$OUT" BOTS_WAITED coderabbit=none
+  printf 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb 0 0 0 - 0 timeout\n' >"$(run_dir_of "$REPO" feat/issue-6-x)/bots"
+  FAKE_GH_CR=$'PENDING\ttrue' run_script finish.sh merge 6 --branch feat/issue-6-x
+  assert_rc 2
+  assert_key "$OUT" STOP_REASON bots-pending
 }

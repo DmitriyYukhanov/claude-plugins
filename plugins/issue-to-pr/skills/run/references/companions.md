@@ -34,5 +34,6 @@ flow; the surviving code made simpler without behaviour change; the built change
 happy path.
 
 The `codex-collaboration` and `codex` plugins orchestrate Codex from Claude Code; installing them
-in Codex does not supply a second model. Use the inline fallbacks for their rows there. Deep research is optional
+in Codex does not supply a second model. Use the inline fallbacks for their rows there. The Codex
+review bot on the PR (Step 7) is not the second-model review either. Deep research is optional
 user-supplied context, never a prerequisite or a command the pipeline assumes it can start.

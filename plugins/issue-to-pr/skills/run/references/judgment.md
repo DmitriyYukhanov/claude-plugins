@@ -79,6 +79,7 @@ search available excuses the lookup, never the entry; say in the `rationale` tha
 unchecked and what you assumed instead.
 
 **Work no reviewer saw.** Any change after the last review needs this entry, including final-pass
-fixes, simplification cuts and fixes from runtime verification. Passing gates does not mean a
+fixes, simplification cuts, fixes from runtime verification and fixes for a review bot's
+findings. Passing gates does not mean a
 reviewer saw that change. The `rationale` names the files and the unreviewed changes. File it
 whenever it applies, unless a later review covered those changes.

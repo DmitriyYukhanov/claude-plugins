@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# A stand-in for sleep: advances the clock in the FAKE_NOW file instead of waiting.
+set -uo pipefail
+now=$(cat "$FAKE_NOW")
+printf '%s\n' "$((now + ${1:-0}))" >"$FAKE_NOW"

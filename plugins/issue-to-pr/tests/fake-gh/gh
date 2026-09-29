@@ -16,6 +16,17 @@ serve() { # fixture [default]: FAKE_GH_FIX/<fixture>, else the default; fail-<fi
   if [ -f "$FAKE_GH_FIX/$1" ]; then cat "$FAKE_GH_FIX/$1"; else printf '%s' "${2-}"; fi
 }
 
+serve_at() { # fixture [default]: the newest <fixture>@<t> with t <= the fake clock, else serve
+  local f t best="" bt=-1 now
+  now=$(cat "${FAKE_NOW:-/dev/null}" 2>/dev/null || printf 0)
+  for f in "${FAKE_GH_FIX:-/nonexistent}/$1"@*; do
+    [ -f "$f" ] || continue
+    t=${f##*@}
+    if [ "$t" -le "${now:-0}" ] && [ "$t" -gt "$bt" ]; then best=$f bt=$t; fi
+  done
+  if [ -n "$best" ]; then cat "$best"; else serve "$@"; fi
+}
+
 case "${1:-} ${2:-}" in
   "repo view")
     case "$scenario" in
@@ -32,13 +43,18 @@ case "${1:-} ${2:-}" in
     ;;
   "pr view")
     case "$*" in
-      *reviewDecision*) # merge: head sha, review decision, base, PR number
+      *reviewDecision*) # merge: head sha, review decision, base, PR number, url, CodeRabbit state, reviewed
+        tail="https://github.com/o/r/pull/12	${FAKE_GH_CR:-	false}"
         case "$scenario" in
           pr-unreadable) exit 1 ;;
-          review-changes-requested) printf '%s\tCHANGES_REQUESTED\tmain\t12\n' "$SHA" ;;
-          stacked-base) printf '%s\t\tfeat/issue-5-parent\t12\n' "$SHA" ;;
-          *) printf '%s\tAPPROVED\tmain\t12\n' "$SHA" ;;
+          review-changes-requested) printf '%s\tCHANGES_REQUESTED\tmain\t12\t%s\n' "$SHA" "$tail" ;;
+          stacked-base) printf '%s\t\tfeat/issue-5-parent\t12\t%s\n' "$SHA" "$tail" ;;
+          *) printf '%s\tAPPROVED\tmain\t12\t%s\n' "$SHA" "$tail" ;;
         esac
+        ;;
+      *headRefName*) # bots: head sha, branch, url
+        [ "$scenario" != pr-unreadable ] || exit 1
+        printf '%s\tfeat/issue-6-x\thttps://github.com/o/r/pull/12\n' "$SHA"
         ;;
       *) # cleanup: PR state
         case "$scenario" in
@@ -63,9 +79,33 @@ case "${1:-} ${2:-}" in
   "issue view") # headless: the issue's label names
     serve "labels-${3:-}"
     ;;
-  "api repos/"*/comments) # headless: a thread's comments as TSV id, login, marker, body
-    n=${2%/comments}
-    serve "comments-${n##*/}"
+  "api graphql") # bots and merge: review threads as TSV, or a reply / resolve mutation
+    case "$*" in
+      *addPullRequestReviewThreadReply*) serve reply "https://github.com/o/r/pull/12#discussion_r1" ;;
+      *resolveReviewThread*) serve resolve "true" ;;
+      *) serve_at threads ;;
+    esac
+    ;;
+  "api repos/"*/status) # bots: CodeRabbit's status on the head as TSV state, description
+    serve_at status
+    ;;
+  "api repos/"*/reactions) # bots: reactions on the Codex request, one content per line
+    serve_at reactions
+    ;;
+  "api repos/"*/reviews) # bots: ids of Codex reviews on the head
+    serve_at reviews
+    ;;
+  "api repos/"*/comments)
+    case "$*" in
+      *"-f body="*) # bots: a posted comment -> its id
+        printf '%s\n' "$*" >>"${FAKE_GH_FIX:-/dev/null}/posted" 2>/dev/null
+        serve posted-id 900
+        ;;
+      *) # headless: TSV id, login, marker, body; bots: TSV id, login, body
+        n=${2%/comments}
+        serve_at "comments-${n##*/}"
+        ;;
+    esac
     ;;
   *) exit 0 ;;
 esac

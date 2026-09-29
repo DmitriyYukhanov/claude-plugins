@@ -60,10 +60,17 @@ merges on its own, unless the issue already stopped once or the diff touches `hu
   (typecheck + tests, plus visual checks for UI work), and a code-review loop that runs
   until clean; the review level escalates automatically when passes keep finding real bugs.
   Once the diff settles, a last pass builds the change and drives it at its own surface.
+- **Review bots.** After the PR opens, the run waits up to 20 minutes for CodeRabbit and, on
+  standard and complex runs, asks Codex for a review with `@codex review`. It works out who is
+  reviewing from what shows up on the PR, so a repo without bots costs about four minutes. Each
+  thread a bot opens is checked like any other review finding: fixed, re-gated and answered with
+  the commit, or answered with the reason it was rejected. The run waits out a CodeRabbit rate
+  limit of 15 minutes or less and asks again; a longer one goes into the summary.
 - **Beyond a single issue.** A plain request with no number is drafted into an issue and run.
 - **A careful merge gate.** Merge happens only on your explicit in-session approval, never on
-  the turn the PR opens. The merge script refuses a head the gates never ran against and a review
-  requesting changes, and passes `--match-head-commit`, so a commit landing after the diff you
+  the turn the PR opens. The merge script refuses a head the gates never ran against, a review
+  requesting changes, an unresolved review thread from anyone and a CodeRabbit review still in
+  progress, and passes `--match-head-commit`, so a commit landing after the diff you
   were shown stops the merge rather than shipping unseen. If GitHub refuses the merge, its own
   message is reported and the run says what to do next.
 - **Cleanup and a safety net.** Once the PR is merged it deletes the branch, tears down the
@@ -101,6 +108,18 @@ checkout, never in the worktree, so tearing the worktree down can never trip ove
 
 Being ignored, the directory is disposable to `git clean -x`. Nothing breaks permanently: the
 commands get worked out again, and the next merge asks for one more gate run before it lands.
+
+### Review bots (optional)
+
+The plugin can't see which GitHub apps a repo has installed, so there is nothing to configure
+here. Two settings on the apps' side make the wait worth it:
+
+- CodeRabbit's free plan only summarizes PRs on private repositories and reviews code on public
+  ones, so install it on public repositories only (GitHub → Settings → Applications → CodeRabbit
+  → Configure → Only select repositories).
+- In Codex settings, turn on Code review for the repositories you want and leave Automatic
+  reviews off. The run asks for a review itself on standard and complex tiers, so trivial changes
+  don't spend the quota.
 
 ### Companion skills (optional)
 

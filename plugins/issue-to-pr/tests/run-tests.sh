@@ -18,7 +18,7 @@ if command -v "$SHELLCHECK_BIN" >/dev/null 2>&1; then
   printf '== shellcheck ==\n'
   mapfile -t sh_files < <(
     find "$PLUGIN_DIR/scripts" "$PLUGIN_DIR/tests" -name '*.sh' -type f
-    printf '%s\n' "$FAKE_GH_DIR/gh"
+    printf '%s\n' "$FAKE_GH_DIR/gh" "$HERE/fake-clock/sleep" "$HERE/fake-clock/date"
   )
   if "$SHELLCHECK_BIN" -x -e SC1091 "${sh_files[@]}"; then
     printf '%sshellcheck clean (%d files)%s\n' "$grn" "${#sh_files[@]}" "$rst"

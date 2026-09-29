@@ -5,6 +5,16 @@ All notable changes to the **issue-to-pr** plugin will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [9.5.0] - 2026-09-29
+
+### Added
+- Wait for the PR's review bots before the report, and answer every thread they open with a fix or a reason.
+- Ask Codex for a review of standard and complex changes.
+
+### Changed
+- Refuse to merge while a review thread is unresolved or CodeRabbit is still reviewing the latest commit.
+- Hold back an unattended merge when CodeRabbit reviewed the PR before the last push but not after it.
+
 ## [9.4.1] - 2026-09-29
 
 ### Fixed

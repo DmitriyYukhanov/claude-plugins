@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# A stand-in for date: +%s reads the FAKE_NOW file; anything else goes to the real date.
+set -uo pipefail
+if [ "${1:-}" = +%s ]; then
+  cat "$FAKE_NOW"
+else
+  PATH=${PATH#"$FAKE_CLOCK_DIR":} exec date "$@"
+fi

@@ -38,16 +38,31 @@ assert_numeric_issue "$issue" finish
 root=$(repo_root)
 [ -n "$root" ] || degrade not-a-git-repo "finish: not inside a git repository"
 
+bots_waited() { # -> how a bots.sh wait on this head ended for CodeRabbit, when that clears the gate
+  local h f
+  read -r h _ _ _ _ _ f <"$(branch_dir "$root" "$branch")/bots" 2>/dev/null || return 0
+  [ "$h" = "$head_sha" ] || return 0
+  # it ran out its budget on a status that never moved, or saw none at all on a head it never read
+  case "$f:$cr_state" in timeout:* | none:) printf '%s' "$f" ;; esac
+  return 0
+}
+
 cmd_merge() {
-  local pr head_sha decision base_ref pr_number receipt push_out merge_out default_ref base_rev globs pathspecs changed hit
+  local waited pr head_sha decision base_ref pr_number pr_url cr_state cr_desc="" cr_reviewed owner name threads receipt push_out merge_out default_ref base_rev globs pathspecs changed hit
   # reviewDecision alone is null on a base branch that does not require review, however many
-  # reviews a PR has, so the reviews themselves decide and the field only confirms them
-  pr=$(gh pr view "$branch" --json headRefOid,reviewDecision,latestReviews,baseRefName,number \
-    --jq '"\(.headRefOid)\t\(if .reviewDecision == "CHANGES_REQUESTED" or any(.latestReviews[]?; .state == "CHANGES_REQUESTED") then "CHANGES_REQUESTED" else .reviewDecision // "" end)\t\(.baseRefName)\t\(.number)"' 2>/dev/null) || pr=""
+  # reviews a PR has, so the reviews themselves decide and the field only confirms them.
+  # CodeRabbit is the one review bot that reports on the head as a status. The rollup leaves its
+  # text out, so the --auto check reads that from the status itself.
+  pr=$(gh pr view "$branch" --json headRefOid,reviewDecision,latestReviews,baseRefName,number,url,statusCheckRollup \
+    --jq '"\(.headRefOid)\t\(if .reviewDecision == "CHANGES_REQUESTED" or any(.latestReviews[]?; .state == "CHANGES_REQUESTED") then "CHANGES_REQUESTED" else .reviewDecision // "" end)\t\(.baseRefName)\t\(.number)\t\(.url)\t\(first(.statusCheckRollup[]? | select((.context // .name) == "CodeRabbit") | .state // .status // "") // "")\t\(any(.latestReviews[]?; .author.login == "coderabbitai"))"' 2>/dev/null) || pr=""
+  # cut, not read: a tab is IFS whitespace, so read would fold an empty field into the next
   head_sha=$(printf '%s' "$pr" | cut -f1)
   decision=$(printf '%s' "$pr" | cut -f2)
   base_ref=$(printf '%s' "$pr" | cut -f3)
   pr_number=$(printf '%s' "$pr" | cut -f4)
+  pr_url=$(printf '%s' "$pr" | cut -f5)
+  cr_state=$(printf '%s' "$pr" | cut -f6)
+  cr_reviewed=$(printf '%s' "$pr" | cut -f7)
   case "$head_sha" in '' | null)
     stop pr-unreadable "issue-to-pr: could not read the PR for $branch. Check it exists and gh is authenticated, then hand back." ;;
   esac
@@ -62,11 +77,44 @@ cmd_merge() {
   esac
   [ "$decision" != CHANGES_REQUESTED ] ||
     stop review-blocked "issue-to-pr: $branch has a review requesting changes. Address it, push, re-run the gates, and re-approve."
+  # a status still running, or none yet on a head pushed after CodeRabbit reviewed this PR, is a
+  # review on its way; rate limited, skipped, paused and completed all report success. A bots.sh
+  # wait that already ran to its end on this head is the way past a status that never moves.
+  case "$cr_state" in
+    PENDING | EXPECTED | QUEUED | IN_PROGRESS | WAITING | REQUESTED | '')
+      if [ -n "$cr_state" ] || [ "$cr_reviewed" = true ]; then
+        waited=$(bots_waited)
+        [ -n "$waited" ] ||
+          stop bots-pending "issue-to-pr: CodeRabbit has not finished a review of ${head_sha:0:12}. Run S/bots.sh wait $pr_number to its end, triage what it posts as run/SKILL.md Step 7 says, then re-run the merge."
+        emit BOTS_WAITED "coderabbit=$waited"
+      fi ;;
+  esac
+  # ponytail: a thread opened between this read and the merge seconds later slips through; GitHub's
+  # "require conversation resolution" branch rule closes that gap where a plan offers it
+  IFS=$'\t' read -r owner name < <(pr_slug "$pr_url")
+  if [ -z "$owner" ] || [ -z "$name" ] || ! threads=$(open_threads "$owner" "$name" "$pr_number" 2>/dev/null); then
+    stop threads-unprovable "issue-to-pr: could not read the review threads of PR #$pr_number, so none can be shown answered. Check gh is authenticated, then re-run."
+  fi
+  if [ -n "$threads" ]; then
+    emit THREADS_OPEN "$(printf '%s\n' "$threads" | grep -c .)"
+    printf '%s\n' "$threads" | cut -f2,4 >&2 # author, url: the next move differs for a person
+    stop review-threads-open "issue-to-pr: PR #$pr_number has unresolved review threads (above). Answer the bots' threads as run/SKILL.md Step 7 says (S/bots.sh reply); a person's thread is theirs to resolve, so report it and wait. A fix commit is a new head: repeat Steps 5-7 and re-approve."
+  fi
   headless_guard "$pr_number"
 
   if [ -n "$auto" ]; then
     [ "$(tier_rank "$tier")" -le "$(tier_rank "$auto")" ] ||
       stop auto-tier "issue-to-pr: a $tier run does not merge unattended under an --auto-merge $auto threshold. $WAIT_FOR_MERGE"
+    # a fix pushed after CodeRabbit's review that it never reviewed (rate limited, skipped) is
+    # work no reviewer saw
+    if [ "$cr_reviewed" = true ]; then
+      cr_desc=$(gh api "repos/$owner/$name/commits/$head_sha/status" \
+        --jq '.statuses[] | select(.context == "CodeRabbit") | "\(.state)\t\(.description // "")"' 2>/dev/null | head -1 | cut -f2)
+    fi
+    case "$cr_reviewed:$cr_desc" in
+      true:'Review completed'* | false:*) : ;;
+      *) stop auto-bots-unreviewed "issue-to-pr: CodeRabbit reviewed this PR but not ${head_sha:0:12} (${cr_desc:-no status}). $WAIT_FOR_MERGE" ;;
+    esac
     if git rev-parse --verify -q "origin/$base_ref^{commit}" >/dev/null; then base_rev="origin/$base_ref"
     elif git rev-parse --verify -q "$base_ref^{commit}" >/dev/null; then base_rev=$base_ref
     else stop auto-unprovable "issue-to-pr: neither origin/$base_ref nor $base_ref resolves here, so the human-path check cannot read the diff. Fetch the base and re-run."
