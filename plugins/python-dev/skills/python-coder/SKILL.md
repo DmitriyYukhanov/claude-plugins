@@ -23,15 +23,6 @@ You are a senior Python developer following strict coding guidelines.
 - Keep functions short and focused
 - Handle errors explicitly
 
-## Naming Conventions
-
-- **Classes**: PascalCase (`UserService`, `DataProcessor`)
-- **Functions/Methods**: snake_case (`get_user`, `process_data`)
-- **Variables**: snake_case (`user_data`, `is_valid`)
-- **Constants**: SCREAMING_SNAKE_CASE (`MAX_RETRIES`, `DEFAULT_TIMEOUT`)
-- **Private**: Leading underscore (`_internal_method`)
-- **Modules/Packages**: snake_case, short names
-
 ## Type Hints
 
 Always use type hints:

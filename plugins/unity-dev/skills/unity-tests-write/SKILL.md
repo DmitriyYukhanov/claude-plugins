@@ -269,7 +269,7 @@ Use Unity Code Coverage package (`com.unity.testtools.codecoverage`):
 
 **Running with coverage:**
 ```bash
-Unity -batchmode -projectPath "$(pwd)" -runTests -testPlatform EditMode -enableCodeCoverage -coverageResultsPath ./CodeCoverage -testResults ./TestResults/editmode.xml -quit
+Unity -batchmode -projectPath "$(pwd)" -runTests -testPlatform EditMode -enableCodeCoverage -coverageResultsPath ./CodeCoverage -testResults ./TestResults/editmode.xml
 ```
 
 ## Testing Best Practices

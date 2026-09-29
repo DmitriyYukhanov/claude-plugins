@@ -94,6 +94,8 @@ private IEnumerator WaitAndDo()
 ```
 
 ### 5. Inspector Fields
+Renaming a serialized field drops its saved Inspector values; `FormerlySerializedAs` keeps them.
+
 **Before:**
 ```csharp
 public float speed = 5f;
@@ -102,10 +104,12 @@ public int maxHealth = 100;
 
 **After:**
 ```csharp
-[field: SerializeField]
+using UnityEngine.Serialization;
+
+[field: SerializeField, FormerlySerializedAs("speed")]
 public float Speed { get; private set; } = 5f;
 
-[field: SerializeField]
+[field: SerializeField, FormerlySerializedAs("maxHealth")]
 public int MaxHealth { get; private set; } = 100;
 ```
 
@@ -154,18 +158,10 @@ When simplifying, maintain:
 
 ### Phase 2: General Code Simplification
 
-After applying Unity-specific patterns, spawn the `code-simplifier` agent to apply general simplifications:
-
-```text
-Use the Agent tool with subagent_type="code-simplifier:code-simplifier" to run general code simplification on the same files.
-```
-
-This ensures Unity patterns are applied first, then general cleanup follows.
-
-**Fallback**: If the `code-simplifier` plugin is not installed, apply general simplifications directly: remove dead code, simplify conditionals, extract well-named variables, and reduce nesting.
+Then apply general simplifications to the same files yourself: remove dead code, simplify conditionals, extract well-named variables, and reduce nesting.
 
 ### Phase 3: Report
 
 - List Unity-specific changes made
-- List general simplifications from code-simplifier
+- List general simplifications made
 - Confirm all functionality preserved

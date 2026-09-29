@@ -5,6 +5,13 @@ All notable changes to the **unity-dev** plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.8.0] - 2026-09-29
+
+### Changed
+- Reviewer and simplifier run the general pass themselves instead of calling agents they cannot reach; the reviewer reports only issues the code shows
+- Keep Inspector data when the simplifier converts serialized fields to properties
+- Stop passing `-quit` with `-runTests`, which could exit Unity before the tests ran
+
 ## [1.7.5] - 2026-09-15
 
 ### Fixed
