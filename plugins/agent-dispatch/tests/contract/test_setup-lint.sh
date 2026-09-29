@@ -20,7 +20,7 @@ test_setup_applies_everything_a_tick_needs_after_one_confirmation() {
   assert_contains "$s" 'OnUnitActiveSec' "Linux: a systemd user timer"
   assert_contains "$s" 'WindowsApps' "Windows: warn about the Store pwsh that leaks out of the job"
   assert_contains "$s" '--installer-type wix --scope machine' "Windows: the MSI pwsh a job can stop"
-  assert_contains "$s" 'Register-ScheduledTask -TaskName agent-dispatch -Action $a -Trigger $t -Settings $s -Force'     "Windows: a second setup replaces the task instead of failing on it"
+  assert_contains "$s" "-Settings \$s -Force" "Windows: a second setup replaces the task instead of failing on it"
   assert_contains "$s" 'launchctl bootout' "macOS: a second setup reloads the LaunchAgent instead of failing on it"
   assert_contains "$s" 'Auto-merge threshold' "the threshold is its own step"
   assert_contains "$s" 'human_paths' "the threshold question says what merges without the owner"

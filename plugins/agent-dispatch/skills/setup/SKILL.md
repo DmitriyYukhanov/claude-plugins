@@ -29,16 +29,18 @@ setup again once it is fixed.
    ```
 
    Missing is fine: step 5 creates it. For each existing line: the path is a git checkout
-   (`git -C <path> rev-parse --show-toplevel` prints that path) and `gh repo view --json
-   nameWithOwner` in it names a GitHub repo. A line that fails is a blocker: one bad line stops
+   (`git -C <path> rev-parse --show-toplevel` prints that path; `C:\x` and `C:/x` are the same
+   one, so compare them as directories, not strings) and `gh repo view --json nameWithOwner` in
+   it names a GitHub repo. A line that fails is a blocker: one bad line stops
    every tick, for every repo. Setup never edits an existing line.
 3. `agent-dispatch` itself, on the host you are running in now: `tick.sh` refuses to run at all
    when it cannot tell which install is active, so exactly one has to be true here. In Claude
    Code, `~/.claude/plugins/installed_plugins.json` must register `agent-dispatch` in exactly
    one scope (project or user), not both. In Codex, exactly one version may be cached under
    `~/.codex/plugins/cache/*/agent-dispatch/`, and its `[plugins."agent-dispatch@…"]` section in
-   `~/.codex/config.toml` must say `enabled = true`. Two hits, or a disabled plugin, in either place is a blocker: tell the
-   owner to uninstall the extra copy, or enable the plugin, so one install is active per host.
+   `~/.codex/config.toml` must say `enabled = true`. Two hits, or a disabled plugin, in either
+   place is a blocker: tell the owner to uninstall the extra copy, or enable the plugin, so one
+   install is active per host.
 4. Windows only: `command -v pwsh`. A path under `WindowsApps` is the Store build: a Store `pwsh`
    started inside a run survives the job object that lets a tick stop the run, and Codex runs its
    commands through `pwsh`. Not a blocker: unless the machine PATH
@@ -106,12 +108,19 @@ the exact command or file content with every `<...>` filled in (below), and each
 2. The five labels for every repo in the list, existing lines included.
 3. The lines to append to `repos.conf`, one per new repo, each with its threshold.
 4. The `tick.sh` copy.
-5. The scheduler entry for this OS: *unchanged* when the registered task, plist or unit files
-   already hold exactly this content, and then it is not run.
+5. The scheduler entry for this OS. It is *unchanged*, and not run, only when it is both in place
+   and live: on Windows `Get-ScheduledTask agent-dispatch` exists, its `State` is not `Disabled`,
+   and its action runs this `$bash`, `$tick` and `<host>`; on macOS the plist holds exactly this
+   content and `launchctl print gui/$(id -u)/agent-dispatch` finds the job; on Linux the unit
+   files hold exactly this content and `systemctl --user is-enabled agent-dispatch.timer` and
+   `is-active` both succeed.
+   On macOS, replacing a loaded job while `~/.agent-dispatch/lock/` exists stops the run in
+   progress: the bootout below ends the tick, and the next tick stops its run and marks the issue
+   failed. Say so on this item.
 
-Then ask once: **Apply all of this?** A reply that corrects an item (another host, which step 4
-then checks, another threshold, or leaving out the `winget` install) updates the summary and asks
-again. `no` changes nothing. `yes` runs the items in that order. The labels come before
+Then ask once: **Apply all of this?** A reply that corrects an item (another host, which the Hosts
+step then checks, another threshold, or leaving out the `winget` install) updates the summary and
+asks again. `no` changes nothing. `yes` runs the items in that order. The labels come before
 `repos.conf` because a listed repo is dispatched on the next tick, and a run cannot label an issue
 with a label the repo lacks. The scheduler goes last because it fires a tick at once, and a tick
 with no `repos.conf` dies. Stop at the first failure and roll nothing back: every item is safe to
@@ -120,8 +129,7 @@ run twice, so running setup again is the recovery.
 Give `winget` the longest timeout the host allows: it waits on the owner's UAC click. Judge it by
 the machine PATH, not its exit code (a reboot request or an already installed package exits
 nonzero too): read the PATH again with the `[Environment]` call from check 4; it must list
-`PowerShell\7`. This shell's own PATH was read before the install and proves nothing. Shells
-already open still find the Store build; new ones, the scheduled tick included, find the MSI one.
+`PowerShell\7`. This shell's own PATH was read before the install and proves nothing.
 
 **`repos.conf`**: create `~/.agent-dispatch/` if missing and append the new lines, adding a newline
 first when the file does not end with one; a line glued onto the one before it is a malformed line.
