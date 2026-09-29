@@ -5,6 +5,11 @@ All notable changes to the **issue-to-pr** plugin will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [9.4.1] - 2026-09-29
+
+### Fixed
+- Keep the second-model review report-only: it lists findings for the run to apply, makes no edits and asks you nothing mid-run.
+
 ## [9.4.0] - 2026-09-25
 
 ### Added
