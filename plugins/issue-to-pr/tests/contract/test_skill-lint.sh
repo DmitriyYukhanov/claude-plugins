@@ -101,6 +101,8 @@ test_the_second_model_review_only_reports() {
     must not read as a clean review"
   assert_contains "$row" 'git hash-object --stdin' "the tree is already dirty in Step 6, so only a hash of the diff and the
     untracked files shows whether Codex edited it"
+  assert_contains "$row" 'git ls-files --others --exclude-standard;' "the hash must cover untracked paths, not only their
+    contents, or a rename slips through"
   step=$(skill_step Review)
   assert_contains "$step" 'second' "the spine must say when the second model runs"
 }
