@@ -1,23 +1,26 @@
 ---
 name: setup
 description: >-
-  Set up agent-dispatch on this machine: check what a tick needs, then print the repo list,
-  labels, saved search and scheduler entry for the owner to install. Use when the user wants
-  GitHub labels to start issue-to-pr runs on their machine, or asks why the dispatcher is not
-  picking issues up. Prints commands; never runs one that changes anything.
+  Set up agent-dispatch on this machine: check what a tick needs, ask each repo's auto-merge
+  threshold, then show one summary of the repo list, labels, tick copy and scheduler entry and,
+  once the owner confirms, apply all of it. Use when the user wants GitHub labels to start
+  issue-to-pr runs on their machine, or asks why the dispatcher is not picking issues up.
 ---
 
 # setup: label an issue, get a run
 
-**Never run a command here that changes the machine or GitHub.** Read, check, print; the owner
-runs what you print. Resolve `S/` to `../../scripts/` relative to this `SKILL.md`, as an
-absolute path.
+**Change nothing until the owner confirms the one summary in step 5; then apply all of it.** The
+checks and questions before it only read. Resolve `S/` to `../../scripts/` relative to this
+`SKILL.md`, as an absolute path.
 
 ## 1. Checks
 
+Any blocker below stops setup here: show its fix, say nothing changed, and have the owner run
+setup again once it is fixed.
+
 1. Bash, git and `gh`: run the `issue-to-pr:setup` checks (select that skill). Its result stands;
    do not repeat it here.
-2. `~/.agent-dispatch/repos.conf`. Missing → print a sample and say where it goes:
+2. `~/.agent-dispatch/repos.conf`, one repo per line:
 
    ```
    # <main checkout, absolute path> | claude|codex | trivial|standard|complex|none
@@ -25,33 +28,105 @@ absolute path.
    C:\Users\you\code\my-app | codex | standard
    ```
 
-   The third field is the `--auto-merge` threshold: work at or under it merges without asking.
-   For each line: the path is a git checkout (`git -C <path> rev-parse --show-toplevel` prints
-   that path) and `gh repo view --json nameWithOwner` in it names a GitHub repo.
+   Missing is fine: step 5 creates it. For each existing line: the path is a git checkout
+   (`git -C <path> rev-parse --show-toplevel` prints that path) and `gh repo view --json
+   nameWithOwner` in it names a GitHub repo. A line that fails is a blocker: one bad line stops
+   every tick, for every repo. Setup never edits an existing line.
 3. `agent-dispatch` itself, on the host you are running in now: `tick.sh` refuses to run at all
    when it cannot tell which install is active, so exactly one has to be true here. In Claude
    Code, `~/.claude/plugins/installed_plugins.json` must register `agent-dispatch` in exactly
    one scope (project or user), not both. In Codex, exactly one version may be cached under
-   `~/.codex/plugins/cache/*/agent-dispatch/`. Two hits in either place is a blocker: tell the
-   owner to uninstall the extra copy and keep exactly one install per host.
-4. For every host `repos.conf` names:
-   - `claude`: `claude -p "Reply with ok." < /dev/null` prints ok (logged in); `claude plugin list`
-     shows issue-to-pr at 9.4.0 or newer.
-   - `codex`: `codex login status` says logged in; the only directory under
-     `~/.codex/plugins/cache/*/issue-to-pr/` is 9.4.0 or newer.
-   A logged-out host or an older issue-to-pr is a blocker: print the fix (`/login`,
-   `codex login`, `/plugin update issue-to-pr`, `codex plugin marketplace upgrade`).
-5. Windows only: `command -v pwsh`. A path under `WindowsApps` is the Store build, whose child
-   processes escape the job object that lets a tick stop a run, and Codex runs its commands
-   through `pwsh`. Warn and print `winget install Microsoft.PowerShell`. Also resolve
+   `~/.codex/plugins/cache/*/agent-dispatch/`, and its `[plugins."agent-dispatch@…"]` section in
+   `~/.codex/config.toml` must say `enabled = true`. Two hits, or a disabled plugin, in either place is a blocker: tell the
+   owner to uninstall the extra copy, or enable the plugin, so one install is active per host.
+4. Windows only: `command -v pwsh`. A path under `WindowsApps` is the Store build: a Store `pwsh`
+   started inside a run survives the job object that lets a tick stop the run, and Codex runs its
+   commands through `pwsh`. Not a blocker: unless the machine PATH
+   (`[Environment]::GetEnvironmentVariable('Path','Machine')`) already lists
+   `PowerShell\7`, step 5 offers the machine-wide MSI build:
+   `winget install --id Microsoft.PowerShell -e --source winget --installer-type wix --scope machine
+   --accept-source-agreements --accept-package-agreements` (the last two answer the prompts a
+   first `winget` run shows, which nobody can answer here).
+   The Store package can stay: the machine PATH comes before the user PATH that holds
+   `WindowsApps`, so once it lists the MSI build, that build wins. Also resolve
    `bash.exe`: run `git --exec-path`, which prints `<git root>/mingw64/libexec/git-core` from the
    real install even when `git` on PATH is a scoop shim; drop the last three path parts and add
    `bin/bash.exe`. That is what fills `<bash.exe path>` below. Do not guess
    `$env:ProgramFiles\Git\bin\bash.exe`; that path only holds for a machine-wide install.
 
-## 2. What to print
+## 2. Repos
 
-**Labels**, once per repo:
+Ask which repos a label should dispatch: their main checkouts, as absolute paths. Offer the
+current repo's main checkout (the first `worktree` line of `git worktree list --porcelain`, not a
+linked worktree, which a finished run deletes) if it names a GitHub repo. Check each path as in
+check 2; a repo that `repos.conf` already lists (same `nameWithOwner`) keeps its line and is not
+asked about again. The host for a new line is the one you are running in now.
+
+## 3. Auto-merge threshold
+
+One plain question per new repo, with no default: the third field of its `repos.conf` line, the
+`--auto-merge` value every run in that repo gets. A repo with no answer gets no line, so nothing is
+dispatched for it. Say what the answer means:
+
+- Each run sorts itself into a tier: `trivial` is a short copy or config change on one path,
+  `complex` is new behavior, several checklist items or paths, or a `design`, `ux` or `breaking`
+  label, and `standard` is everything else.
+- A PR merges without the owner only when all of these hold: its tier is at or under the
+  threshold (`trivial` < `standard` < `complex`; `none` never merges alone), the run asked the
+  owner nothing, the issue never stopped on an earlier run, the reviews came back clean, and the
+  diff touches nothing under `human_paths` in the repo's `.claude/issue-to-pr/config.md`.
+  Everything else waits at `agent:review` for the owner's `merge` reply.
+- A self-merge lands on the base branch like any merge. Where a push there publishes a release or
+  deploys, a self-merge is a release; a headless run also runs the config's `after_merge`, usually
+  a deploy, after it merges.
+
+Read that checkout's `.claude/issue-to-pr/config.md` and name what its `human_paths` and
+`after_merge` say for this repo, or that it sets neither.
+
+## 4. Hosts
+
+For every host the finished list names (existing lines and new ones):
+
+- `claude`: `claude -p "Reply with ok." < /dev/null` prints ok (logged in); `claude plugin list`
+  shows issue-to-pr at 9.4.0 or newer.
+- `codex`: `codex login status` says logged in; the only directory under
+  `~/.codex/plugins/cache/*/issue-to-pr/` is 9.4.0 or newer.
+
+A logged-out host or an older issue-to-pr is a blocker, as in step 1: show the fix (`/login`,
+`codex login`, `/plugin update issue-to-pr`, `codex plugin marketplace upgrade`) and stop.
+
+## 5. Confirm and apply
+
+Show one summary of everything setup is about to change, in the order it will run, each item as
+the exact command or file content with every `<...>` filled in (below), and each marked *new*,
+*replaces* or *unchanged*:
+
+1. Windows, Store `pwsh` only: the `winget` command from check 4. It shows a UAC prompt the owner
+   has to accept.
+2. The five labels for every repo in the list, existing lines included.
+3. The lines to append to `repos.conf`, one per new repo, each with its threshold.
+4. The `tick.sh` copy.
+5. The scheduler entry for this OS: *unchanged* when the registered task, plist or unit files
+   already hold exactly this content, and then it is not run.
+
+Then ask once: **Apply all of this?** A reply that corrects an item (another host, which step 4
+then checks, another threshold, or leaving out the `winget` install) updates the summary and asks
+again. `no` changes nothing. `yes` runs the items in that order. The labels come before
+`repos.conf` because a listed repo is dispatched on the next tick, and a run cannot label an issue
+with a label the repo lacks. The scheduler goes last because it fires a tick at once, and a tick
+with no `repos.conf` dies. Stop at the first failure and roll nothing back: every item is safe to
+run twice, so running setup again is the recovery.
+
+Give `winget` the longest timeout the host allows: it waits on the owner's UAC click. Judge it by
+the machine PATH, not its exit code (a reboot request or an already installed package exits
+nonzero too): read the PATH again with the `[Environment]` call from check 4; it must list
+`PowerShell\7`. This shell's own PATH was read before the install and proves nothing. Shells
+already open still find the Store build; new ones, the scheduled tick included, find the MSI one.
+
+**`repos.conf`**: create `~/.agent-dispatch/` if missing and append the new lines, adding a newline
+first when the file does not end with one; a line glued onto the one before it is a malformed line.
+
+**Labels**, once per repo (`-f` updates a label that already exists):
 
 ```
 gh label create agent -R <owner/repo> -f -c 1d76db -d "Queued for an agent run"
@@ -61,12 +136,7 @@ gh label create agent:review -R <owner/repo> -f -c 0e8a16 -d "A PR waits for you
 gh label create agent:failed -R <owner/repo> -f -c b60205 -d "The run failed; see the last comment"
 ```
 
-**Saved search**, to bookmark on GitHub web or mobile (GitHub does not notify you of your own
-comments, and every comment here is yours):
-`is:issue label:agent:waiting,agent:review,agent:failed repo:<owner/repo>` (one `repo:` per line
-of `repos.conf`).
-
-**The tick.** Copy the shim once; it finds the current install on every call:
+**The tick.** Copy the shim; it finds the current install on every call:
 
 ```
 mkdir -p ~/.agent-dispatch && cp "S/tick.sh" ~/.agent-dispatch/tick.sh
@@ -77,13 +147,14 @@ host's install record.
 
 **Scheduler**, for the current OS only. Every `<...>` placeholder below (`<host>`, `<home>`,
 `<bash.exe path>`, the PATH list) stands for a real value on this machine; fill each one in before
-you print it. launchd, systemd and the Windows script all read a literal `<...>` as text, not
+you show it. launchd, systemd and the Windows script all read a literal `<...>` as text, not
 something they resolve for you, and a literal `<...>` left in the plist is invalid XML that
 `launchctl bootstrap` will refuse.
 
-- Windows, in PowerShell (Git for Windows' `bash.exe`, resolved in check 5 above; a bare `bash` is
+- Windows, in PowerShell (Git for Windows' `bash.exe`, resolved in check 4 above; a bare `bash` is
   the WSL launcher). Wrapping bash in `conhost.exe --headless` is what keeps the scheduled run
-  from flashing a console window open every three minutes:
+  from flashing a console window open every three minutes; `-Force` replaces the task a
+  previous setup registered:
 
   ```powershell
   $bash = "<bash.exe path>"
@@ -92,7 +163,7 @@ something they resolve for you, and a literal `<...>` left in the plist is inval
   $t = New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes 3)
   $s = New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -ExecutionTimeLimit ([TimeSpan]::Zero) `
     -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
-  Register-ScheduledTask -TaskName agent-dispatch -Action $a -Trigger $t -Settings $s
+  Register-ScheduledTask -TaskName agent-dispatch -Action $a -Trigger $t -Settings $s -Force
   ```
 
   It runs only while you are logged on, which is what lets it use your CLI logins. Run a tick now
@@ -117,9 +188,12 @@ something they resolve for you, and a literal `<...>` left in the plist is inval
   </dict></plist>
   ```
 
-  Load it with `launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/agent-dispatch.plist`;
-  run a tick now with `launchctl kickstart gui/$(id -u)/agent-dispatch`. launchd never starts a
-  second copy while one runs.
+  Load it with `launchctl bootout gui/$(id -u)/agent-dispatch 2>/dev/null; launchctl bootstrap
+  gui/$(id -u) ~/Library/LaunchAgents/agent-dispatch.plist`. The bootout unloads what a previous
+  setup loaded, since bootstrap refuses a loaded job; its error when nothing was loaded is
+  expected. A bootstrap that fails with `5: Input/output error` ran before the unload finished:
+  wait a second and retry it once. Run a tick now with `launchctl kickstart
+  gui/$(id -u)/agent-dispatch`. launchd never starts a second copy while one runs.
 - Linux: two files under `~/.config/systemd/user/`:
 
   ```ini
@@ -146,10 +220,14 @@ Find the PATH list with `command -v gh`, `command -v claude` and `command -v cod
 machine. Run a tick by hand only through the scheduler, as above: it is what keeps two ticks from
 overlapping.
 
-## 3. Report
+## 6. Report
 
-One block: checks passed and failed, then the printed pieces in the order to apply them (config,
-labels, tick.sh, scheduler, saved search). Close with how it behaves: label an issue `agent`;
+One block: the checks, then each summary item as applied, failed (with its error) or not reached;
+after `no`, one line saying nothing changed. Then one line per repo, `<owner/repo> | <host> |
+<threshold>`, and the saved search to bookmark on GitHub web or mobile, since GitHub does not
+notify you of your own comments and every comment here is yours:
+`is:issue label:agent:waiting,agent:review,agent:failed repo:<owner/repo>` (one `repo:` per line
+of `repos.conf`). Close with how it behaves: label an issue `agent`;
 the tick log is `~/.agent-dispatch/logs/tick.log`, each run's log sits next to it; a CLI error
 creates `~/.agent-dispatch/paused`, and dispatching resumes once the owner deletes that file.
 Disabling or uninstalling the plugin does not stop the scheduled tick: to stop dispatching, delete

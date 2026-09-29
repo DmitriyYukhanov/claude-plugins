@@ -76,8 +76,8 @@ issue or its PR carry the run forward.
 - Works on Windows (Task Scheduler), macOS (a LaunchAgent) and Linux (a systemd user timer).
 - A hung run is stopped after four hours and marked failed; a logged-out or rate-limited CLI
   pauses dispatching until you clear it.
-- `/agent-dispatch:setup` checks the machine and prints the repo list, labels and scheduler entry;
-  it installs nothing itself.
+- `/agent-dispatch:setup` checks the machine, asks for each repo's auto-merge threshold and, after
+  one confirmation, sets up the repo list, labels and scheduler entry.
 
 [View documentation](./plugins/agent-dispatch/README.md)
 

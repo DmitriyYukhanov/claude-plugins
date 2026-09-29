@@ -33,8 +33,9 @@ prints a saved search to watch instead.
 
 or, in Codex, `codex plugin add agent-dispatch@dmitriy-claude-plugins`. It needs
 [issue-to-pr](../issue-to-pr/README.md) 9.4.0 or newer in every host your repos use. Then run
-`/agent-dispatch:setup`: it checks the machine and prints the repo list, labels, saved search and
-scheduler entry to install. It installs nothing itself.
+`/agent-dispatch:setup`. It checks the machine, asks for each repo's auto-merge threshold and
+shows everything it is about to change. Once you confirm, it writes the repo list, creates the
+labels, copies the tick script and registers the scheduler entry.
 
 ## `~/.agent-dispatch/`
 
@@ -50,8 +51,10 @@ scheduler entry to install. It installs nothing itself.
 ## Limits
 
 One run at a time, on one machine. A run is stopped after four hours. On Windows, install
-PowerShell with `winget install Microsoft.PowerShell` rather than from the Store: processes the
-Store build starts cannot be stopped with the rest of the run. If Windows policy blocks the job
+PowerShell with `winget install --id Microsoft.PowerShell -e --source winget --installer-type wix
+--scope machine` rather than from the Store: processes the Store build starts cannot be stopped
+with the rest of the run. Setup offers to run it for you; the Store package can stay once the
+machine PATH lists this build first. If Windows policy blocks the job
 object the launcher needs to hold a run, no run starts at all, and the tick reports it as a
 failure. On macOS and Linux a process that detaches into its own session escapes the stop; none
 of the tested CLIs does. The check for edits runs when the tick picks the issue, so an edit that
