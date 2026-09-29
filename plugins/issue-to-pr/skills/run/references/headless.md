@@ -68,7 +68,13 @@ Step 7's several-matches stop): a `state=failed` comment naming the reason, flip
 says re-approve, re-report and park at `review`. `push-rejected` (the branch moved under you) goes
 the same way: fetch, look at what landed, and run the moved-head row of the Re-entry table. A stop
 that names no move you can make alone, one that does not clear on its single retry, or an exit 4
-after one fix-and-re-run, is `agent:failed`.
+after one fix-and-re-run, is `agent:failed`. `review-threads-open` and `bots-pending` are the
+review bots' stops: answer them as Step 7 does. No commit resulted and no open thread is a
+person's → re-run `finish.sh` in the same turn on the owner's same `merge`; a commit → Steps 5–7,
+re-report and park at `review`; a person's open thread → name it in a `state=review` comment and
+park at `review`, since only they resolve it. A
+`bots.sh` stop is never `agent:failed` on its own. Step 7's `bots.sh wait` runs inside the
+report's turn, before any flip: it waits on reviews of your own push, never on a reply.
 
 A label the repo lacks: `gh label create <name> -f` it once and carry on. A missing label never
 blocks a comment or a stop.
@@ -128,8 +134,9 @@ After the report, decide whether this PR self-merges. All of:
 - nothing in this run reached the owner, and the issue carries no earlier owner state comment
   (`finish.sh --auto` refuses otherwise);
 - the review escalation in `R/judgment.md` never fired (the ratchet);
-- the ledger holds no "Work no reviewer saw" entry (`R/judgment.md`): a simplification cut or a
-  verify fix after the last review pass is exactly what this bullet holds back;
+- the ledger holds no "Work no reviewer saw" entry (`R/judgment.md`): a simplification cut, a
+  verify fix after the last review pass or a fix for a review bot's finding is exactly what this
+  bullet holds back;
 - `S/finish.sh merge <N> --branch <b> --auto <threshold> --tier <tier>` does not stop: it
   re-checks the tier and refuses any diff touching `human_paths` from the config, then merges as
   Step 8 would.

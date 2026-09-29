@@ -507,7 +507,46 @@ test_attended_merge_reads_the_labels_and_nothing_else() {
   assert_rc 0
   assert_key "$OUT" MERGED true
   assert_eq 1 "$(grep -c '^gh issue view' "$FAKE_GH_LOG")" "attended reads the labels once"
-  assert_gh_not_called "gh api" "an attended merge read more than the labels"
+  assert_gh_not_called "/comments" "an attended merge read the comments"
+  assert_gh_not_called "gh api user" "an attended merge looked up the owner"
+}
+
+threads_setup() { # thread rows -> merge_setup happy with those unresolved threads
+  merge_setup happy
+  export FAKE_GH_FIX="$TEST_TMPDIR/fix"
+  mkdir -p "$FAKE_GH_FIX"
+  printf '%s\n' "$1" >"$FAKE_GH_FIX/threads"
+}
+
+test_merge_refuses_unresolved_review_threads() {
+  threads_setup $'T1\tcoderabbitai\ta.sh\thttps://github.com/o/r/pull/12#discussion_r7'
+  run_script finish.sh merge 6 --branch feat/issue-6-x
+  assert_rc 2
+  assert_key "$OUT" STOP_REASON review-threads-open
+  assert_contains "$ERR" "discussion_r7"
+  assert_gh_not_called "pr merge" "merged over an unanswered finding"
+}
+
+test_merge_refuses_when_the_threads_cannot_be_read() {
+  threads_setup ""
+  : >"$FAKE_GH_FIX/fail-threads"
+  run_script finish.sh merge 6 --branch feat/issue-6-x
+  assert_rc 2
+  assert_key "$OUT" STOP_REASON threads-unprovable
+  assert_gh_not_called "pr merge"
+}
+
+test_merge_waits_for_a_coderabbit_review_in_progress_and_nothing_else() {
+  threads_setup ""
+  printf 'pending\tReview in progress\n' >"$FAKE_GH_FIX/status"
+  run_plain
+  assert_rc 2
+  assert_key "$OUT" STOP_REASON bots-pending
+  assert_gh_not_called "pr merge" "merged while CodeRabbit was still reviewing"
+  printf 'success\tReview rate limited\n' >"$FAKE_GH_FIX/status"
+  run_plain
+  assert_rc 0
+  assert_key "$OUT" MERGED true
 }
 
 test_headless_auto_merge_waits_once_the_run_has_stopped() {

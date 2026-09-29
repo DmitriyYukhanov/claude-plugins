@@ -117,6 +117,18 @@ config_line() { # root key -> the value of one top-level frontmatter line, or em
   printf '%s' "$value"
 }
 
+cr_status() { # sha -> CodeRabbit's commit status on it as state<TAB>description, empty if none; rc 1 unreadable
+  gh api "repos/{owner}/{repo}/commits/$1/status" \
+    --jq 'first(.statuses[] | select(.context == "CodeRabbit") | "\(.state)\t\(.description // "")") // empty'
+}
+
+open_threads() { # PR node id -> each unresolved review thread as id<TAB>author<TAB>path<TAB>url; rc 1 unreadable
+  # shellcheck disable=SC2016 # $id and $endCursor are GraphQL variables
+  gh api graphql --paginate -f id="$1" \
+    -f query='query($id:ID!,$endCursor:String){node(id:$id){... on PullRequest{reviewThreads(first:100,after:$endCursor){pageInfo{hasNextPage endCursor} nodes{id isResolved path comments(first:1){nodes{author{login} url}}}}}}}' \
+    --jq '.data.node.reviewThreads.nodes[] | select(.isResolved | not) | [.id, (.comments.nodes[0].author.login // ""), (.path // ""), (.comments.nodes[0].url // "")] | @tsv'
+}
+
 tier_rank() { # trivial|standard|complex|none -> 1|2|3|0, anything else -> empty
   case "$1" in trivial) printf 1 ;; standard) printf 2 ;; complex) printf 3 ;; none) printf 0 ;; *) printf '' ;; esac
 }

@@ -39,15 +39,17 @@ root=$(repo_root)
 [ -n "$root" ] || degrade not-a-git-repo "finish: not inside a git repository"
 
 cmd_merge() {
-  local pr head_sha decision base_ref pr_number receipt push_out merge_out default_ref base_rev globs pathspecs changed hit
+  local pr head_sha decision base_ref pr_number pr_id cr threads receipt push_out merge_out default_ref base_rev globs pathspecs changed hit
   # reviewDecision alone is null on a base branch that does not require review, however many
   # reviews a PR has, so the reviews themselves decide and the field only confirms them
-  pr=$(gh pr view "$branch" --json headRefOid,reviewDecision,latestReviews,baseRefName,number \
-    --jq '"\(.headRefOid)\t\(if .reviewDecision == "CHANGES_REQUESTED" or any(.latestReviews[]?; .state == "CHANGES_REQUESTED") then "CHANGES_REQUESTED" else .reviewDecision // "" end)\t\(.baseRefName)\t\(.number)"' 2>/dev/null) || pr=""
+  pr=$(gh pr view "$branch" --json headRefOid,reviewDecision,latestReviews,baseRefName,number,id \
+    --jq '"\(.headRefOid)\t\(if .reviewDecision == "CHANGES_REQUESTED" or any(.latestReviews[]?; .state == "CHANGES_REQUESTED") then "CHANGES_REQUESTED" else .reviewDecision // "" end)\t\(.baseRefName)\t\(.number)\t\(.id)"' 2>/dev/null) || pr=""
+  # cut, not read: a tab is IFS whitespace, so read would fold an empty field into the next
   head_sha=$(printf '%s' "$pr" | cut -f1)
   decision=$(printf '%s' "$pr" | cut -f2)
   base_ref=$(printf '%s' "$pr" | cut -f3)
   pr_number=$(printf '%s' "$pr" | cut -f4)
+  pr_id=$(printf '%s' "$pr" | cut -f5)
   case "$head_sha" in '' | null)
     stop pr-unreadable "issue-to-pr: could not read the PR for $branch. Check it exists and gh is authenticated, then hand back." ;;
   esac
@@ -62,6 +64,20 @@ cmd_merge() {
   esac
   [ "$decision" != CHANGES_REQUESTED ] ||
     stop review-blocked "issue-to-pr: $branch has a review requesting changes. Address it, push, re-run the gates, and re-approve."
+  # the review bots' findings: a CodeRabbit review still running on the head (a limit, skip or
+  # pause reports success), then every unresolved thread. A status that never moves is the
+  # livelock hand-back. ponytail: a thread opened between this read and the merge seconds later
+  # slips through; GitHub's "require conversation resolution" rule closes that where a plan has it
+  if ! cr=$(cr_status "$head_sha" 2>/dev/null) || ! threads=$(open_threads "$pr_id" 2>/dev/null); then
+    stop threads-unprovable "issue-to-pr: could not read the reviews of PR #$pr_number, so none can be shown answered. Check gh is authenticated, then re-run."
+  fi
+  case "$cr" in pending*)
+    stop bots-pending "issue-to-pr: CodeRabbit is still reviewing ${head_sha:0:12}. Run S/bots.sh wait $pr_number, triage what it posts as run/SKILL.md Step 7 says, then re-run the merge." ;;
+  esac
+  if [ -n "$threads" ]; then
+    printf '%s\n' "$threads" | cut -f2,4 >&2 # author, url: the next move differs for a person
+    stop review-threads-open "issue-to-pr: PR #$pr_number has unresolved review threads (above). Answer the bots' threads as run/SKILL.md Step 7 says (S/bots.sh reply); a person's thread is theirs to resolve, so report it and wait. A fix commit is a new head: repeat Steps 5-7 and re-approve."
+  fi
   headless_guard "$pr_number"
 
   if [ -n "$auto" ]; then
