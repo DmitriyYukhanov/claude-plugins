@@ -96,13 +96,13 @@
       "homepage": "https://github.com/DmitriyYukhanov/claude-plugins"
     },
     {
-      "name": "tg-alerts",
-      "description": "Add Telegram error/alert notifications to any project — guides through bot setup, chat ID discovery, and framework integration with deduplication and graceful failure",
-      "version": "1.0.1",
+      "name": "tg-essentials",
+      "description": "Telegram toolkit: error and alert notifications for any project through a bot, plus reading and writing Telegram as yourself from the local Telegram Desktop session (chats, exports, groups, posts, checklists)",
+      "version": "2.0.0",
       "author": {
         "name": "Dmitry Yuhanov"
       },
-      "source": "./plugins/tg-alerts",
+      "source": "./plugins/tg-essentials",
       "category": "operations",
       "homepage": "https://github.com/DmitriyYukhanov/claude-plugins"
     },
