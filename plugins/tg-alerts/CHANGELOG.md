@@ -5,6 +5,11 @@ All notable changes to the **tg-alerts** plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.1.0] - 2026-09-29
+
+### Added
+- `tg-account` skill: read and write Telegram as yourself through the local Telegram Desktop session to find chats, export history to text files, create groups, and send and pin messages
+
 ## [1.0.1] - 2026-07-13
 
 ### Added
