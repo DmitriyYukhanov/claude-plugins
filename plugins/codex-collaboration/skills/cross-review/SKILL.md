@@ -478,7 +478,7 @@ Both skills require Codex — neither falls back to Claude-only mode. Use cross-
 
 - **Do NOT run Claude agents to completion before launching Codex.** Both must start simultaneously. Launch Codex first, then spawn Claude agents in the same turn.
 
-- **Do NOT forget to retrieve Codex background job output before triage.** After a `/codex:rescue --background` dispatch, run `${CLAUDE_PLUGIN_ROOT}/scripts/cross-review/wait-for-codex.{sh,ps1}` — terminal phases are `done` / `failed` / `cancelled` (NOT `completed`). The Monitor tool watches log lines, not phase transitions; it cannot replace the helper script.
+- **Do NOT forget to retrieve Codex background job output before triage.** After a `/codex:rescue --background` dispatch, run `${CLAUDE_PLUGIN_ROOT}/scripts/cross-review/wait-for-codex.{sh,ps1}` — terminal phases are `done` / `failed` / `cancelled` (NOT `completed`). See "Polling Efficiency" in prerequisites.md.
 
 - **Do NOT cancel a task after tool calls go quiet** — it may be generating its response, up to the 15-minute limit. See "Response-Generation Awareness" in prerequisites.md.
 

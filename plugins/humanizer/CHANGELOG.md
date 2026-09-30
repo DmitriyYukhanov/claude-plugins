@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [1.3.1] - 2026-09-29
 
 ### Changed
-- Drop the dated freshness note from the Russian hard-ban list
+- Refresh the Russian hard bans as AI-text markers change, with no fixed as-of date
 
 ## [1.3.0] - 2026-08-14
 

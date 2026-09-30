@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [1.3.0] - 2026-09-29
 
 ### Changed
-- Reviewer runs the general code review itself instead of calling an agent it cannot reach, and reports only issues the code shows
+- Reviewer covers general code quality in the same pass and reports only issues the code shows
 
 ## [1.2.3] - 2026-08-28
 

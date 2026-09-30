@@ -8,8 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [1.3.0] - 2026-09-29
 
 ### Changed
-- Reviewer runs the general code review itself instead of calling an agent it cannot reach, and reports only issues the code shows
-- Drop the naming-convention recap that PEP 8 already covers
+- Reviewer covers general code quality in the same pass and reports only issues the code shows
+- Shorter coding guide without a PEP 8 naming recap
 
 ## [1.2.3] - 2026-08-28
 

@@ -278,7 +278,7 @@ If no companion script is found, the codex plugin is not installed — report an
 
 Excessive status polling wastes conversation context (20-30 bash commands observed in real sessions). Follow these rules:
 
-1. **Wait on a `/codex:rescue --background` job with the wait-for-codex helper** (see `cross-review/internals.md#codex-monitoring`); you get one notification when the job ends. The helper gives up 15 minutes after it starts, not after 15 minutes of silence: on exit 2, check `status`, and if the log still shows new activity, run it again. Monitor fits only the `codex exec` output file of Direct CLI Fallback
+1. **Wait on a `/codex:rescue --background` job with the wait-for-codex helper**: `CODEX_COMPANION="$COMPANION" ${CLAUDE_PLUGIN_ROOT}/scripts/cross-review/wait-for-codex.sh <job-id>` (PowerShell: `$env:CODEX_COMPANION` and `wait-for-codex.ps1 -JobId <job-id>`), Bash tool with `run_in_background: true`; you get one notification when the job ends. Passing `CODEX_COMPANION` keeps the helper on the same companion path. The helper gives up 15 minutes after it starts, not after 15 minutes of silence: on exit 2, check `status`, and if the log still shows new activity, run it again. Monitor fits only the `codex exec` output file of Direct CLI Fallback
 2. **One manual health check** at 60 seconds post-dispatch (Task Health Verification)
 3. **One manual check** if the helper reports an unexpected state
 4. **Do NOT poll in a loop** with repeated bash commands — this is the single largest source of context waste in observed sessions
