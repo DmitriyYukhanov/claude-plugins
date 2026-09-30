@@ -30,14 +30,14 @@ If detection fails, ask the user to set `UNITY_EDITOR_PATH` environment variable
 Construct the Unity CLI command with batchmode defaults:
 
 ```bash
-"$UNITY_PATH" -batchmode -projectPath "<project-root>" <caller-flags> -logFile - -quit
+"$UNITY_PATH" -batchmode -projectPath "<project-root>" <caller-flags> -logFile - [-quit]
 ```
 
 **Defaults (always include unless caller overrides):**
 - `-batchmode` — no GUI
 - `-projectPath` — the detected project root
 - `-logFile -` — stream log to stdout (use a file path if caller needs to parse logs separately)
-- `-quit` — exit after execution
+- `-quit` — exit after execution. Omit it with `-runTests`: the test runner exits on its own, and with `-quit` Unity can exit before the tests run
 
 **Caller provides:** the purpose-specific flags (e.g., `-runTests`, `-buildTarget`, `-executeMethod`).
 

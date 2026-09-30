@@ -8,22 +8,6 @@ A Claude Code plugin for Python development with architecture design, coding gui
 /plugin install python-dev@dmitriy-claude-plugins
 ```
 
-## Dependencies
-
-This plugin delegates to standard Claude Code plugins for enhanced functionality:
-
-| Agent | Delegates To | Purpose |
-|-------|--------------|---------|
-| `python-reviewer` | `feature-dev:code-reviewer` | General code quality, logic, and bug detection |
-
-**Optional plugins** (install from the official marketplace). Each agent falls back to reviewing directly when they are absent:
-
-```bash
-/plugin install feature-dev
-```
-
-The Python agents apply domain-specific patterns first, then delegate to general-purpose agents for comprehensive coverage.
-
 ## Features
 
 ### Command: `/python-dev`
@@ -44,7 +28,7 @@ Orchestrates a complete Python development workflow:
 
 ### Agents (Autonomous Tasks)
 
-- **python-reviewer** - Python-specific review, then chains to `feature-dev:code-reviewer`
+- **python-reviewer** - Python-specific review, then a general code review
 
 ## Usage
 

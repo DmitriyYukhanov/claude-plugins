@@ -31,7 +31,7 @@ Terminal phases: `done` (success), `failed`, `cancelled`. `completed` is NOT a p
 
 ## Codex monitoring
 
-After dispatching a Codex task in the background, the parent (Claude or a subagent) is NOT auto-notified when the task reaches a terminal phase. Always run the wait-for-codex helper:
+After dispatching a `/codex:rescue --background` task, the parent (Claude or a subagent) is NOT auto-notified when the task reaches a terminal phase. Always run the wait-for-codex helper:
 
 - Bash 4+: `${CLAUDE_PLUGIN_ROOT}/scripts/cross-review/wait-for-codex.sh <job-id>`
 - PowerShell: `${CLAUDE_PLUGIN_ROOT}/scripts/cross-review/wait-for-codex.ps1 -JobId <job-id>`

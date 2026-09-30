@@ -46,7 +46,7 @@ On success, proceed to Step 2.
 
 After `/codex:setup` succeeds, verify the Codex broker can actually complete work (not just accept connections). `/codex:setup --json` already reports whether the CLI is installed and auth is valid; the liveness step dispatches a trivial task to confirm end-to-end dispatch works.
 
-Invoke `/codex:rescue --fresh` via the Skill tool with a minimal prompt such as `Reply with OK`. Cap the wait at **90 seconds** for this probe specifically — the 15-min response-generation threshold does not apply to a liveness probe (if it can't echo "OK" in 90s it's dead). If the task dispatches but hangs past 90 seconds or returns empty output, the runtime's connection is likely dead (WebSocket TTL expired — see "WebSocket Connection Limit" in prerequisites.md). If the Skill tool itself errors (e.g., permission denial, `disable-model-invocation`), that is NOT a dead runtime — see the "Skill-gate Rejection" and "Skill-tool Fallback" paths in prerequisites.md. Dead-runtime recovery:
+Invoke `/codex:rescue --fresh` via the Skill tool with a minimal prompt such as `Reply with OK`. Cap the wait at **90 seconds** for this probe specifically — the 15-min response-generation threshold does not apply to a liveness probe (if it can't echo "OK" in 90s it's dead). If the task dispatches but hangs past 90 seconds or returns empty output, the runtime's connection is likely dead (WebSocket TTL expired — see "WebSocket Connection Limit" in prerequisites.md). If the Skill tool itself errors (e.g., permission denial), that is NOT a dead runtime — see "Skill-gate Rejection" in Step 4 and "Diagnostic Escalation" in prerequisites.md. Dead-runtime recovery:
 
 1. Ask the user to close all Codex instances and restart the Codex app/CLI
 2. Re-run `/codex:setup` — the companion will establish a fresh connection
@@ -65,11 +65,11 @@ The collaborative loop requires BOTH collaborators. If Codex fails at any point 
 
 ### Hang Detection
 
-Codex tasks can legitimately run for 30+ minutes on complex analyses. Do NOT use a hard timeout. Use `/codex:status` (Skill tool) to assess health — **never PID-based checks on Windows** (see "Task Health Verification" in `${CLAUDE_PLUGIN_ROOT}/skills/shared/prerequisites.md`).
+Codex tasks can legitimately run for 30+ minutes on complex analyses. Do NOT use a hard timeout. Use companion `status` to assess health — **never PID-based checks on Windows** (see "Task Health Verification" in `${CLAUDE_PLUGIN_ROOT}/skills/shared/prerequisites.md`).
 
 **Tier 1 — Task health check (within 60 seconds of dispatch):**
 
-After dispatching a Codex task, verify it is making progress within 60 seconds using `/codex:status` (Skill tool). If status reports the task as `failed` or the runtime pipe is gone, follow the Auto-Retry Protocol in prerequisites.md.
+After dispatching a Codex task, verify it is making progress within 60 seconds with companion `status`. If status reports the task as `failed` or the runtime pipe is gone, follow the Auto-Retry Protocol in prerequisites.md.
 
 **Tier 2 — Starting-stuck detection (5-minute threshold):**
 
@@ -77,11 +77,11 @@ If the task phase stays `starting` for >5 minutes without advancing to `running`
 
 **Tier 3 — Response-generation awareness (critical):**
 
-After tool calls go quiet, Codex is composing its response. Max wait: **15 minutes** of silence (reduced from prior guidance — session data shows silence >10 min is almost always a dead task, not slow generation). After 15 minutes, escalate to Direct CLI Fallback. See "Response-Generation Awareness" in prerequisites.md.
+After tool calls go quiet, Codex is composing its response. Max wait: **15 minutes** of silence; a task silent that long is almost always dead, not generating. After 15 minutes, escalate to Direct CLI Fallback. See "Response-Generation Awareness" in prerequisites.md.
 
 **When a genuine failure is detected:**
 
-1. Cancel the stalled task via `/codex:cancel` or the companion
+1. Cancel the stalled task with `node "$COMPANION" cancel <job-id>`
 2. Run Diagnostic Escalation from prerequisites.md — check for connection errors before blindly retrying
 3. If diagnostics reveal a connection issue → report to user with specific remediation, do NOT retry
 4. If no connection issue → re-run `/codex:setup` and retry (max 2 companion retries)
@@ -109,7 +109,7 @@ If no target files provided:
 
 1. Detect base branch: check for `main`, then `master`, then `git remote show origin` default
 2. Run `git diff <base>...HEAD --name-only` to find changed files
-3. If zero files in diff: ask the user what to work on (this is the ONLY case where clarification is allowed)
+3. If zero files in diff: ask the user what to work on
 
 ### Classify Artifact Type
 
@@ -189,7 +189,7 @@ Send Claude's numbered findings to Codex for per-finding validation. Codex indep
 
 User denial ≠ runtime failure. Retrying the Skill tool without user input would be a permission bypass attempt.
 
-**Monitor the task using the Hang Detection procedure from Step 1.** Verify task health within 60 seconds, watch for starting-stuck at 5 minutes. Remember: after tool calls go quiet, Codex is likely generating its response (10-30 minutes) — do NOT cancel. Use the Monitor tool to stream events from the task rather than looped status polling; only re-check status on Monitor timeout, an unexpected event, or immediately before retrieving results.
+**Monitor the task using the Hang Detection procedure from Step 1.** Verify task health within 60 seconds, watch for starting-stuck at 5 minutes. Remember: after tool calls go quiet, Codex is likely generating its response — do NOT cancel before the 15-minute limit. Follow "Polling Efficiency" in prerequisites.md rather than looped status polling.
 
 ### Compose the Validation Prompt
 
@@ -297,7 +297,7 @@ After Claude implements fixes, Codex reviews the resulting changes.
 
 ### For Code Artifacts
 
-Invoke `/codex:review --base <ref>` via the Skill tool, where `<ref>` is the commit or ref before Step 5's changes. This uses the codex plugin's native review capability.
+Run companion `review --base <ref> --model $ASTRA` in background Bash (see "Companion Script" in prerequisites.md), where `<ref>` is the commit or ref before Step 5's changes. This uses the codex plugin's native review capability.
 
 ### For Non-Code Artifacts
 
@@ -309,7 +309,7 @@ Invoke `/codex:rescue --fresh` via the Skill tool with a review prompt. Compose 
 
 ### Skill-gate Rejection in Review Phase
 
-The same rule as Step 4 applies to Step 6: if the user denies `/codex:review` or `/codex:rescue` at the permission prompt, no job was dispatched — do NOT run the Auto-Retry Protocol. Instead:
+The same rule as Step 4 applies to Step 6: if the user denies `/codex:rescue` at the permission prompt, no job was dispatched — do NOT run the Auto-Retry Protocol. Instead:
 
 1. Report that Codex review of the applied fixes is required to close the round
 2. Offer Direct CLI Fallback (`codex exec` with the diff and verdict contract inlined) as an alternative
@@ -428,13 +428,13 @@ Findings remaining: Z
 
 - **Do NOT skip Step 4.5.** The re-evaluation gate is what distinguishes this from a simple "send to Codex and trust the result" workflow. Claude's independent review of Codex's decisions catches validation errors.
 
-- **Do NOT poll Codex status in a loop.** Use the Monitor tool to stream events from the running task — it emits events on state changes without burning context. One manual `/codex:status` check at 60 seconds after dispatch is fine; after that, let Monitor drive. Repeated bash status polls every few seconds or minutes waste context for no value.
+- **Do NOT poll Codex status in a loop.** See "Polling Efficiency" in prerequisites.md.
 
 - **Do NOT use hard timeouts for Codex tasks.** Complex validations legitimately take 15-30 minutes. A hard timeout would kill healthy tasks. Use the Hang Detection procedure from Step 1.
 
 - **Do NOT cancel a task after tool calls go quiet** — it may be generating its response. But do NOT wait more than **15 minutes** of silence either — escalate to Direct CLI Fallback. See "Response-Generation Awareness" in prerequisites.md.
 
-- **Do NOT use PID-based liveness checks on Windows** — use `/codex:status` (Skill tool). See "Task Health Verification" in prerequisites.md.
+- **Do NOT use PID-based liveness checks on Windows** — use companion `status`. See "Task Health Verification" in prerequisites.md.
 
 - **Do NOT reuse stale preflight state for Codex dispatch.** The runtime endpoint (named pipe) can change between Step 1 preflight and Steps 4/6 dispatch. Always re-run `/codex:setup` immediately before dispatching Codex. A 5-second setup call prevents 10+ minutes of debugging zombie tasks.
 

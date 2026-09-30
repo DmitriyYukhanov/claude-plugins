@@ -5,6 +5,13 @@ All notable changes to the **codex-collaboration** plugin will be documented in 
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.13.0] - 2026-09-29
+
+### Fixed
+- Run Codex review, status, result and cancel through the companion script, since the Skill tool cannot invoke those commands
+- Use one 15-minute silence limit and the wait-for-codex helper instead of conflicting timeouts and Monitor advice
+- Count cross-review rounds once per round
+
 ## [1.12.0] - 2026-09-23
 
 ### Changed

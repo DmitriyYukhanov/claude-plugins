@@ -70,7 +70,6 @@ Before finishing, verify all of these:
 
 - Read [references/spec-bundle-blueprint.md](references/spec-bundle-blueprint.md) for the canonical bundle structure and section-by-section expectations.
 - Read [references/quality-gates.md](references/quality-gates.md) before finalizing any bundle that should be handed to a coding agent.
-- Read [references/live2reels-source-map.md](references/live2reels-source-map.md) when you want a worked example distilled from the source bundle used to create this skill.
 
 ## Templates
 

@@ -31,4 +31,4 @@ Brief overall assessment (2-3 sentences)
 - Parse findings as list items matching `[severity] [category] file:line`
 - If output doesn't match format, treat as `CHANGES_REQUESTED` with full output as a single finding (defensive — don't lose review content)
 
-Aligns with codex plugin's `review-output.schema.json` for `/codex:review`. Provides markdown format for `/codex:rescue` responses.
+Aligns with codex plugin's `review-output.schema.json` for the companion `review`. Provides markdown format for `/codex:rescue` responses.

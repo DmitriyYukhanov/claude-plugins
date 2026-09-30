@@ -8,24 +8,6 @@ A Claude Code plugin for Unity C# development with architecture design, coding g
 /plugin install unity-dev@dmitriy-claude-plugins
 ```
 
-## Dependencies
-
-This plugin delegates to standard Claude Code plugins for enhanced functionality:
-
-| Agent | Delegates To | Purpose |
-|-------|--------------|---------|
-| `unity-reviewer` | `feature-dev:code-reviewer` | General code quality, logic, and bug detection |
-| `unity-simplifier` | `code-simplifier:code-simplifier` | General code cleanup after Unity-specific patterns |
-
-**Optional plugins** (install from the official marketplace). Each agent falls back to working directly when they are absent: `unity-reviewer` reviews, `unity-simplifier` simplifies.
-
-```bash
-/plugin install feature-dev
-/plugin install code-simplifier
-```
-
-The Unity agents apply domain-specific patterns first, then delegate to general-purpose agents for comprehensive coverage.
-
 ## Features
 
 ### Skill: `/unity-dev`
@@ -54,8 +36,8 @@ CLI execution layer used by the other skills: builds, tests, method execution, a
 
 ### Agents (Autonomous Tasks)
 
-- **unity-reviewer** - Unity-specific review, then chains to `feature-dev:code-reviewer`
-- **unity-simplifier** - Unity patterns, then chains to `code-simplifier:code-simplifier`
+- **unity-reviewer** - Unity-specific review, then a general code review
+- **unity-simplifier** - Unity patterns, then general cleanup
 - **unity-test-runner** - Runs Unity tests via CLI batchmode (used by `/unity-tests-run`)
 
 ## Usage

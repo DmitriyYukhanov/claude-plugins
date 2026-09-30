@@ -58,7 +58,7 @@ If no target files provided:
 
 1. Detect base branch: check for `main`, then `master`, then `git remote show origin` default
 2. Run `git diff <base>...HEAD --name-only` to find changed files
-3. If zero files in diff: ask the user what to review (this is the ONLY case where clarification is allowed)
+3. If zero files in diff: ask the user what to review
 
 ### Classify Artifact Type
 
@@ -87,7 +87,7 @@ BASE_BRANCH = <detected>
 
 ## Step 3: Parallel Review
 
-**CRITICAL: Launch Claude agents and Codex simultaneously. Do NOT wait for one before starting the other.** Both review independently; cross-validation happens in Step 5.
+**Launch Claude agents and Codex in the same turn; do not wait for one before starting the other.** Both review independently; cross-validation happens in Step 5.
 
 ### Claude Side (Background Agents)
 
@@ -124,8 +124,8 @@ Launch Codex **in the same turn** as Claude agents. Do not wait for Claude.
 **Pre-dispatch: fresh setup.** Before dispatching, re-invoke `/codex:setup` to verify the runtime is alive. Read the "Fresh Setup Before Dispatch" section in `${CLAUDE_PLUGIN_ROOT}/skills/shared/prerequisites.md`. Do NOT reuse the preflight result from Step 1 — the runtime endpoint may have changed. After setup confirms success, proceed immediately to dispatch in the same turn — do not stop or summarize setup status mid-workflow.
 
 **For code artifacts:**
-- Invoke `/codex:review --base <ref> --background` via the Skill tool
-- `/codex:review` reviews the entire branch diff, not specific files -- this is by design
+- Run companion `review --base <ref> --model $ASTRA` in background Bash (see "Companion Script" in `prerequisites.md`)
+- The companion `review` reviews the entire branch diff, not specific files -- this is by design
 - Do NOT combine `--base` with a prompt -- they are mutually exclusive in Codex CLI
 
 **For non-code artifacts:**
@@ -135,15 +135,15 @@ Launch Codex **in the same turn** as Claude agents. Do not wait for Claude.
 - Include `${CLAUDE_PLUGIN_ROOT}/skills/shared/verdict-format.md` as `<structured_output_contract>`
 - Non-code prompts can be scoped to specific files by including them in the prompt
 
-**Post-dispatch: health check.** Within 60 seconds of dispatch, verify the task is making progress using `/codex:status` (Skill tool) — see "Task Health Verification" in `${CLAUDE_PLUGIN_ROOT}/skills/shared/prerequisites.md`. **Do NOT use PID-based checks on Windows** — the CLI launcher exits immediately while the actual work happens in the runtime server.
+**Post-dispatch: health check.** Within 60 seconds of dispatch, verify the task is making progress with companion `status` — see "Task Health Verification" in `${CLAUDE_PLUGIN_ROOT}/skills/shared/prerequisites.md`. **Do NOT use PID-based checks on Windows** — the CLI launcher exits immediately while the actual work happens in the runtime server.
 
-**Poll and retrieve.** Codex background jobs do not auto-notify. After dispatch:
+**Poll and retrieve (rescue path).** A `/codex:rescue --background` job does not auto-notify. After dispatch:
 
 1. One health check at 60 s (`progressPreview` non-empty, `elapsed` advancing).
 2. Run `${CLAUDE_PLUGIN_ROOT}/scripts/cross-review/wait-for-codex.{sh,ps1} <job-id>` via the Bash tool with `run_in_background: true`. Helper exits 0 on `done`, 1 on `failed`/`cancelled`, 2 on 15-min timeout. Read `internals.md#codex-monitoring` for invocation details.
 3. Subagent gap: when `/codex:rescue --background` runs inside an Agent tool call, the subagent's completion notification reflects only the dispatch — always run wait-for-codex yourself.
 4. Starting-stuck (>5 min in `starting` with no log entries) → Diagnostic Escalation in `prerequisites.md`.
-5. Retrieve via `/codex:result <job-id>` once wait-for-codex exits 0. If `/codex:result` or `/codex:status` errors, see the "Retrieving Codex Output" section below.
+5. Retrieve via `node "$COMPANION" result <job-id>` once wait-for-codex exits 0.
 
 ### Codex Job Failure Handling
 
@@ -156,7 +156,7 @@ If Codex background job fails (auth expired, CLI error, timeout, dead task):
 
 ### Skill-gate Rejection (Distinct from Runtime Failure)
 
-If the user denies the `/codex:rescue` or `/codex:review` Skill invocation at the permission prompt, no job was dispatched — the Auto-Retry Protocol does NOT apply (retrying against the same permission prompt is futile and looks like a bypass attempt). Instead:
+If the user denies the `/codex:rescue` Skill invocation at the permission prompt, no job was dispatched — the Auto-Retry Protocol does NOT apply (retrying against the same permission prompt is futile and looks like a bypass attempt). Instead:
 
 1. Report to the user that Codex review is required for cross-review (both models needed)
 2. Offer Direct CLI Fallback (`codex exec`) as an alternative that doesn't route through the Skill gate
@@ -167,12 +167,6 @@ User denial ≠ runtime failure. Treat them as two distinct paths.
 **Both models are required for the initial review.** The entire value of cross-review is independent perspectives from two different models. Claude reviewing its own output provides no cross-validation signal.
 
 **Exception — cross-validation (Step 5) can degrade gracefully.** If the initial review (Step 3) succeeded from both models but Codex fails during cross-validation, the skill MAY continue with partial cross-validation (see Step 5 for details). The initial review already provides independent perspectives; cross-validation adds rigor but its failure doesn't void the initial findings.
-
-### Retrieving Codex Output
-
-- Retrieve output via `/codex:result` (Skill tool) when complete
-- If `/codex:result` fails with `disable-model-invocation` error, fall back to the companion script — but resolve its path at runtime (it lives in the **codex** plugin's cache, not codex-collaboration's). See the "Skill-tool Fallback" section in `prerequisites.md` for the cross-platform discovery commands. Do NOT use `${CLAUDE_PLUGIN_ROOT}/../codex/scripts/...` — that assumes a sibling layout that is wrong when the two plugins come from different marketplaces.
-- If `/codex:status` fails via Skill tool, apply the same fallback approach
 
 ### Fast-Path: Zero Findings
 
@@ -376,7 +370,7 @@ Auto-fixable items apply at the end of the resolution pipeline, before Step 7 pr
 7. **Partial-apply failure.** First failure stops the pass. Read `internals.md#partial-apply-state` for the state machine; surface the prompt and resolve. (`revert` operates on the pass journal — earlier rounds' fixes are NOT touched.)
 8. **No commits.** Working-tree only.
 
-**Round bookkeeping.** Increment `ROUND` at the end of each round, BEFORE the next parallel-review dispatch (the existing `Increment \`ROUND\`` instruction in this Step moves there). Combined with `ROUND = 1` init in Step 2, the progress message "Round N complete" always emits a non-zero N.
+**Round bookkeeping.** Increment `ROUND` once per round, at the end of the round, right before the next parallel-review dispatch. With `ROUND = 1` from Step 2, the progress message "Round N complete" never shows 0.
 
 **Progress message.** After auto-apply, emit one line per the branch table. Read `internals.md#progress-update-branch-table` for the conditions and exact wording. Suppress when X = Y = 0 (Step 9 stable-round handles it).
 
@@ -409,12 +403,12 @@ Search available skills for the best match based on artifact type:
 After fixes are applied, go back to Step 3 (Parallel Review) with these adjustments:
 
 - **Claude side:** Scope agents to only changed files from this round (use `git diff` to identify delta)
-- **Codex side for code:** `/codex:review` reviews the full branch diff (branch-scoped) -- it will see all branch changes, not just this round's fixes
+- **Codex side for code:** the companion `review` reviews the full branch diff (branch-scoped) -- it will see all branch changes, not just this round's fixes
 - **Codex side for non-code:** `/codex:rescue --fresh` prompt can be scoped to specific changed files
 
-Increment `ROUND` and repeat until exit conditions are met.
+Repeat until exit conditions are met.
 
-**File scoping constraint:** `/codex:review` and `/codex:adversarial-review` are branch-scoped. Codex will review all branch changes in re-reviews, not just the current round's files. Previously-fixed issues should not reappear, but Codex may surface new findings in unchanged code.
+**File scoping constraint:** the companion `review` and `adversarial-review` are branch-scoped. Codex will review all branch changes in re-reviews, not just the current round's files. Previously-fixed issues should not reappear, but Codex may surface new findings in unchanged code.
 
 ## Step 9: Exit and Summary
 
@@ -482,30 +476,30 @@ Both skills require Codex — neither falls back to Claude-only mode. Use cross-
 
 - **Do NOT resolve disagreements by opinion.** Never silently pick one model's view over the other. Disagreements must be resolved by **evidence** (cross-validation + research) or escalated to the user. "Claude thinks X" is not evidence — documentation, code inspection, and API references are.
 
-- **Do NOT run Claude agents to completion before launching Codex.** Both must start simultaneously. Launch Codex first (Skill tool), then spawn Claude agents in the same turn.
+- **Do NOT run Claude agents to completion before launching Codex.** Both must start simultaneously. Launch Codex first, then spawn Claude agents in the same turn.
 
-- **Do NOT forget to retrieve Codex background job output before triage.** Run `${CLAUDE_PLUGIN_ROOT}/scripts/cross-review/wait-for-codex.{sh,ps1}` after dispatch — terminal phases are `done` / `failed` / `cancelled` (NOT `completed`). The Monitor tool watches log lines, not phase transitions; it cannot replace the helper script.
+- **Do NOT forget to retrieve Codex background job output before triage.** After a `/codex:rescue --background` dispatch, run `${CLAUDE_PLUGIN_ROOT}/scripts/cross-review/wait-for-codex.{sh,ps1}` — terminal phases are `done` / `failed` / `cancelled` (NOT `completed`). See "Polling Efficiency" in prerequisites.md.
 
-- **Do NOT cancel a task after tool calls go quiet** — it is generating its response (10-30 min). See "Response-Generation Awareness" in prerequisites.md.
+- **Do NOT cancel a task after tool calls go quiet** — it may be generating its response, up to the 15-minute limit. See "Response-Generation Awareness" in prerequisites.md.
 
-- **Do NOT use PID-based liveness checks on Windows** — use `/codex:status` (Skill tool). See "Task Health Verification" in prerequisites.md.
+- **Do NOT use PID-based liveness checks on Windows** — use companion `status`. See "Task Health Verification" in prerequisites.md.
 
 - **Do NOT proceed with Claude-only findings if Codex fails during initial review (Step 3).** Both models are required for the initial review. Try Direct CLI Fallback before stopping. For cross-validation (Step 5), graceful degradation with code-level verification is acceptable.
 
 - **Do NOT skip triage and apply both reviews directly.** The two reviews may contain contradictions. Triage reconciles them and identifies disagreements.
 
-- **Do NOT combine `--base` with a prompt in `/codex:review`.** They are mutually exclusive in Codex CLI. Use `--base` alone for code review; use `/codex:rescue` with a prompt for non-code.
+- **Do NOT combine `--base` with a prompt in the companion `review`.** They are mutually exclusive in Codex CLI. Use `--base` alone for code review; use `/codex:rescue` with a prompt for non-code.
 
 - **Do NOT review same issues each round.** Focus on deltas/changed files for Claude agents. Codex code review is branch-scoped by design but previously-fixed issues should not reappear.
 
 - **Do NOT block on auto-fixable items.** Apply them at the end of the resolution pipeline (after Step 6). User involvement is limited to needs-decision items, the one-time-per-delta dirty-tree gate, and the partial-apply failure prompt.
 
-- **Do NOT use `/codex:adversarial-review` for this workflow.** It produces independent findings without cross-mapping. Use `/codex:review` for code and `/codex:rescue` with structured prompts for non-code.
+- **Do NOT use `/codex:adversarial-review` for this workflow.** It produces independent findings without cross-mapping. Use the companion `review` for code and `/codex:rescue` with structured prompts for non-code.
 
 - **Do NOT escalate disagreements to the user before cross-validation and research.** The usage pattern is: triage → cross-validate → research evidence → only then ask the user. Premature escalation wastes the user's time on questions that documentation can answer.
 
 - **Do NOT reuse stale preflight state for Codex dispatch.** The runtime endpoint (named pipe) can change between Step 1 preflight and Step 3 dispatch. Always re-run `/codex:setup` immediately before dispatching Codex. A 5-second setup call prevents 10+ minutes of debugging zombie tasks.
 
-- **Do NOT wait 30+ minutes for a silent task hoping it's "generating."** The flat threshold is 15 minutes of no new tool calls — past that, escalate to Direct CLI Fallback immediately. Session data shows tasks silent for 10-15 minutes are almost always dead, not generating.
+- **Do NOT wait 30+ minutes for a silent task hoping it's "generating."** The flat threshold is 15 minutes of no new tool calls — past that, escalate to Direct CLI Fallback immediately. Tasks silent that long are almost always dead, not generating.
 
 - **Do NOT give up when companion retries fail.** Always try Direct CLI Fallback (`codex exec`) before stopping. The companion has a known reliability issue on Windows (pipe crashes, no response timeout). Direct CLI creates fresh connections and consistently succeeds when the companion doesn't.
