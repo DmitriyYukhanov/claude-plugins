@@ -207,15 +207,6 @@ test_attended_steps_read_as_in_the_previous_release() {
     "Step 3 no longer closes on it being the only mid-run question"
 }
 
-test_a_headless_turn_never_ends_on_background_work() {
-  local hl
-  hl=$(cat "$(references_dir)/headless.md") || fail "R/headless.md missing"
-  [ -n "$hl" ] || fail "R/headless.md came back empty; this check would be vacuous"
-  assert_contains "$hl" 'Nothing wakes you between turns' \
-    "a headless host exits when the turn ends; a background job's notice never arrives"
-  assert_contains "$hl" 'in the foreground' "pending background work must be waited for, not left behind"
-}
-
 test_headless_state_lives_in_marked_comments_on_the_issue() {
   local hl hard
   hl=$(cat "$(references_dir)/headless.md") || fail "R/headless.md missing"
@@ -228,6 +219,9 @@ test_headless_state_lives_in_marked_comments_on_the_issue() {
     "a run starts with one label edit, the same one the dispatcher makes"
   assert_contains "$hl" 'Post the state comment first' \
     "the label must move after the comment, or a dispatcher reads an old cursor"
+  assert_contains "$hl" 'Nothing wakes you between turns' \
+    "a headless host exits when the turn ends; a background job's notice never arrives"
+  assert_contains "$hl" 'in the foreground' "pending background work must be waited for, not left behind"
   assert_contains "$hl" 're-read both threads' "the run must look for a late reply before it parks"
   assert_not_contains "$hl" 'next prompt' "the reply no longer arrives as a prompt: every run starts fresh from GitHub"
   assert_not_contains "$hl" 'comment on the PR' "state comments live on the issue, never on the PR"
