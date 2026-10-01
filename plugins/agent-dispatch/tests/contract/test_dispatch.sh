@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # Contract tests for dispatch.sh. Fixtures: a fake gh serving files from $FIX, fake claude and
 # codex acting out FAKE_CLI_MODE, and a test clock (date, sleep) so four hours pass in seconds.
-# shellcheck disable=SC2034,SC2088,SC2153
+# shellcheck disable=SC2016,SC2034,SC2088,SC2153
 # SC2034: OUT/ERR/RC are read by assert_rc() in the sourced assert.sh, a file shellcheck does not
 # follow from here. SC2088: the log path assertion shows a literal `~`, on purpose. SC2153: a
 # sourced dispatch.sh's own $LOCK, misread as a typo of another test's unrelated local $lock.
+# SC2016: notify hook bodies and nested "$BASH" -c scripts expand when they run, not here.
 
 setup_env() { # [host] -> HOME, $FIX, PATH with the fakes, one configured repo octo/widgets
   export HOME="$TEST_TMPDIR/home" FIX="$TEST_TMPDIR/fix"
@@ -369,6 +370,7 @@ test_the_deadline_stops_the_run_and_fails_it() {
   local leader child start
   setup_env
   trap kill_stray_run EXIT
+  notify_hook
   open_issue 4 agent
   export FAKE_CLI_MODE=hang FAKE_SLEEP_STEP=3600 FAKE_SLEEP_REAL=1
   start=$SECONDS
@@ -379,6 +381,7 @@ test_the_deadline_stops_the_run_and_fails_it() {
   assert_rc 0
   assert_key "$OUT" OUTCOME agent:failed
   assert_contains "$(cat "$FIX/posted-4")" "4-hour deadline"
+  assert_contains "$(cat "$FIX/notified")" "[failed][octo/widgets][4][it ran past the 4-hour deadline.]"
   [ -e "$HOME/.agent-dispatch/paused" ] && fail "a deadline is not a CLI error"
   read -r leader child <"$FIX/hang.pids" || fail "the fake run never started"
   assert_dead "$child" "the run's gate"
@@ -583,6 +586,7 @@ test_an_unreadable_edit_history_is_skipped() {
 # it is still above them, would be picked again every tick; it fails instead.
 test_a_reply_run_that_parks_without_reading_the_reply_fails() {
   setup_env
+  notify_hook
   open_issue 7 agent:waiting
   comment 7 100 octo
   comment 7 101 octo '<!-- issue-to-pr state=waiting issue-read=100 -->'
@@ -594,6 +598,7 @@ test_a_reply_run_that_parks_without_reading_the_reply_fails() {
   assert_key "$OUT" OUTCOME agent:failed
   assert_contains "$(cat "$FIX/posted-7" 2>/dev/null)" "parked again without reading your reply"
   assert_contains "$(cat "$FIX/posted-7")" '<!-- issue-to-pr state=failed -->'
+  assert_eq "[failed][octo/widgets][7][the run parked again without reading your reply.]" "$(cat "$FIX/notified")"
   assert_eq "agent:failed" "$(cat "$FIX/labels-7")"
   [ -e "$HOME/.agent-dispatch/paused" ] && fail "an unread reply is not a CLI error"
   return 0
@@ -820,4 +825,138 @@ test_an_unread_reply_fails_without_pausing_even_when_the_cli_errored() {
   assert_not_contains "$(cat "$FIX/posted-7")" "logged out"
   [ -e "$HOME/.agent-dispatch/paused" ] && fail "an unread reply is not a CLI error, whatever the exit code"
   return 0
+}
+
+notify_hook() { # [body] -> ~/.agent-dispatch/notify.sh: records its arguments as [a][b]..., then runs body
+  printf '%s\n%s\n' 'printf "[%s]" "$@" >>"$FIX/notified"; echo >>"$FIX/notified"' "${1:-}" \
+    >"$HOME/.agent-dispatch/notify.sh"
+}
+
+test_a_parked_run_tells_the_owner() {
+  setup_env
+  notify_hook
+  open_issue 4 agent
+  export FAKE_CLI_MODE=flip:agent:review
+  dispatch
+  assert_rc 0
+  assert_key "$OUT" OUTCOME agent:review
+  assert_key "$OUT" NOTIFY sent
+  assert_eq "[review][octo/widgets][4][]" "$(cat "$FIX/notified")"
+}
+
+test_a_cli_error_tells_the_owner_the_cause_and_the_pause() {
+  setup_env
+  notify_hook
+  open_issue 4 agent
+  export FAKE_CLI_MODE=exit:1
+  dispatch
+  assert_key "$OUT" OUTCOME agent:failed
+  assert_contains "$(cat "$FIX/notified")" "[failed][octo/widgets][4][the claude CLI exited with code 1."
+  assert_contains "$(cat "$FIX/notified")" "paused until you delete ~/.agent-dispatch/paused"
+}
+
+test_a_recovered_dead_tick_tells_the_owner() {
+  setup_env
+  notify_hook
+  open_issue 4 agent:running
+  dead_tick_lock
+  : >"$FIX/issues"
+  dispatch
+  assert_key "$OUT" RECOVERED "octo/widgets#4"
+  assert_contains "$(cat "$FIX/notified")" "[failed][octo/widgets][4][the dispatcher stopped before the run finished"
+}
+
+test_a_merged_run_and_a_missing_hook_stay_silent() {
+  setup_env
+  notify_hook
+  open_issue 4 agent
+  export FAKE_CLI_MODE=flip:
+  dispatch
+  assert_key "$OUT" TICK "done"
+  [ -e "$FIX/notified" ] && fail "a closed issue needs no notification"
+  rm -f "$HOME/.agent-dispatch/notify.sh"
+  open_issue 5 agent
+  export FAKE_CLI_MODE=flip:agent:review
+  dispatch
+  assert_key "$OUT" OUTCOME agent:review
+  assert_not_contains "$OUT" "NOTIFY=" "no hook, nothing to report"
+}
+
+test_a_failing_hook_never_changes_the_ticks_result() {
+  setup_env
+  notify_hook 'printf "OUTCOME=bogus\nTICK=bogus\n"; exit 3'
+  open_issue 4 agent
+  export FAKE_CLI_MODE=flip:agent:waiting
+  dispatch
+  assert_rc 0
+  assert_key "$OUT" OUTCOME agent:waiting
+  assert_key "$OUT" NOTIFY failed
+  assert_key "$OUT" NOTIFY_RC 3
+  assert_not_contains "$OUT" "bogus" "the hook's output must stay out of the KEY=value lines"
+  assert_eq "TICK=done" "$(printf '%s\n' "$OUT" | tail -1)"
+  [ -d "$HOME/.agent-dispatch/lock" ] && fail "the lock outlived the tick"
+  return 0
+}
+
+test_a_hanging_hook_is_stopped_with_its_children() {
+  local child
+  setup_env
+  # The child stands in for a curl with no timeout: left alive, it would hold the scheduler's slot.
+  # 0.5 s a fake second leaves the Windows launcher time to start before the cap.
+  notify_hook '"$REAL_SLEEP" 120 & printf "%s\n" "$!" >"$FIX/hook-child"; wait'
+  open_issue 4 agent
+  export FAKE_CLI_MODE=flip:agent:review FAKE_SLEEP_REAL=0.5
+  dispatch
+  assert_rc 0
+  assert_key "$OUT" NOTIFY timeout
+  assert_key "$OUT" TICK "done"
+  read -r child <"$FIX/hook-child" || fail "the hook never started its child"
+  assert_dead "$child" "the hook's child"
+  [ -d "$HOME/.agent-dispatch/.notify" ] && fail "the stopped hook's directory was kept"
+  return 0
+}
+
+test_a_hook_that_exits_leaves_no_child_behind() {
+  local child
+  setup_env
+  notify_hook '"$REAL_SLEEP" 120 & printf "%s\n" "$!" >"$FIX/hook-child"'
+  open_issue 4 agent
+  export FAKE_CLI_MODE=flip:agent:review
+  dispatch
+  assert_key "$OUT" NOTIFY sent
+  read -r child <"$FIX/hook-child" || fail "the hook never started its child"
+  assert_dead "$child" "the finished hook's child"
+}
+
+test_recovery_stops_a_hook_the_dead_tick_left_running() {
+  local hook
+  setup_env
+  open_issue 4 agent:running
+  (
+    # shellcheck source=../../scripts/dispatch.sh
+    source "$AD_SCRIPTS/dispatch.sh"
+    mkdir -p "$AD_HOME/.notify"
+    printf 'printf "%%s\\n" "$$" >"%s"\nexec "%s" 120\n' "$FIX/hook-pid" "$REAL_SLEEP" >"$AD_HOME/.notify/run.sh"
+    launch "$AD_HOME/.notify"
+  )
+  wait_for "$FIX/hook-pid"
+  read -r hook <"$FIX/hook-pid"
+  dead_tick_lock
+  : >"$FIX/issues"
+  dispatch
+  assert_key "$OUT" RECOVERED "octo/widgets#4"
+  assert_dead "$hook" "the dead tick's hook"
+  [ -d "$HOME/.agent-dispatch/.notify" ] && fail "the stopped hook's record would be signalled again"
+  return 0
+}
+
+test_a_parked_state_is_found_behind_a_requeued_agent_label() {
+  setup_env
+  notify_hook
+  # The owner labelled it `agent` again as the run parked, and gh lists that label first.
+  printf 'agent\nagent:review\n' >"$FIX/labels-4"
+  OUT=$("$BASH" -c 'source "$1/dispatch.sh"; reconcile octo/widgets 4 unused "" 0' _ "$AD_SCRIPTS" \
+    2>"$TEST_TMPDIR/.err")
+  assert_key "$OUT" OUTCOME agent
+  assert_eq "[review][octo/widgets][4][]" "$(cat "$FIX/notified")"
 }

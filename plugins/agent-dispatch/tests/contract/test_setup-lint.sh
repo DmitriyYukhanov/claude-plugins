@@ -25,6 +25,8 @@ test_setup_applies_everything_a_tick_needs_after_one_confirmation() {
   assert_contains "$s" 'Auto-merge threshold' "the threshold is its own step"
   assert_contains "$s" 'human_paths' "the threshold question says what merges without the owner"
   assert_contains "$s" 'Apply all of this?' "one confirmation before anything changes"
+  assert_contains "$s" '.agent-dispatch/notify.sh' "setup must show the optional notification hook"
+  assert_contains "$s" 'Do not run the hook unless' "setup must not send an unsolicited test message"
   assert_not_contains "$s" 'Never run' "setup applies now; the old print-only rule is gone"
 }
 

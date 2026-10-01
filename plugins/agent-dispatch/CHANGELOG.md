@@ -5,6 +5,11 @@ All notable changes to the **agent-dispatch** plugin will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.2.0] - 2026-10-01
+
+### Added
+- Tell you through your own command when a run asks a question, waits for your merge, or fails, since GitHub never notifies you of your own activity.
+
 ## [1.1.1] - 2026-09-29
 
 ### Fixed

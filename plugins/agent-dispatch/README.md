@@ -22,8 +22,10 @@ its log on your machine; the log itself never leaves it.
 Only you count: an `agent` label someone else applied, or a comment someone else wrote, starts
 nothing. The same goes for edits: if someone else changes the title or body after you label the
 issue `agent`, it waits until you label it `agent` again, even if a run has parked it since.
-Everything is posted from your own GitHub account, so GitHub will not notify you about it; setup
-prints a saved search to watch instead.
+Everything is posted from your own GitHub account, so GitHub will not notify you about it. When a
+run asks you something, waits for your `merge`, or fails, the tick runs `~/.agent-dispatch/notify.sh`
+if it exists. You choose where that script sends the message. Setup shows an example for ntfy and
+a command to test it.
 
 ## Install
 
@@ -35,13 +37,20 @@ or, in Codex, `codex plugin add agent-dispatch@dmitriy-claude-plugins`. It needs
 [issue-to-pr](../issue-to-pr/README.md) 9.4.0 or newer in every host your repos use. Then run
 `/agent-dispatch:setup`. It checks the machine, asks for each repo's auto-merge threshold and
 shows everything it is about to change. Once you confirm, it writes the repo list, creates the
-labels, copies the tick script and registers the scheduler entry.
+labels, copies the tick script and registers the scheduler entry. It also checks the optional
+notification hook and shows how to configure it.
 
 ## `~/.agent-dispatch/`
 
 - `repos.conf`: one repo per line, `<main checkout path> | claude|codex | trivial|standard|complex|none`.
   The last field is the `--auto-merge` threshold.
-- `logs/`: `tick.log`, and one log per run.
+- `logs/`: `tick.log`, `notify.log`, and one log per run.
+- `notify.sh`: optional, and yours to write. The tick runs it with bash as
+  `notify.sh <waiting|review|failed> <owner/repo> <issue> <detail>`, where `<detail>` is the cause
+  when the dispatcher itself marked the run failed (with a note if it also paused dispatching) and
+  empty otherwise. After 30 seconds it is stopped along with anything it started. It never changes
+  the tick's result. Its output goes to `logs/notify.log`. A failed send is not retried, and a tick
+  that dies mid-send may send the same message again.
 - `paused`: created when a CLI errors out (usually logged out or out of allowance). No run starts
   until you delete it. Create it yourself to stop dispatching: disabling or uninstalling the plugin
   leaves the scheduled tick running.

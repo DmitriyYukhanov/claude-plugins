@@ -3,8 +3,9 @@
 # run started, however deep, including Git Bash grandchildren whose parent already exited
 # (taskkill /T misses those). Only two paths come in: PowerShell 5.1 mangles quoted arguments.
 # Before bash starts, this process writes its own pid to `run` next to the script (the tick's
-# lock), so the tick can stop the run from the moment the CLI can exist. The pid goes to run.tmp
-# first and is renamed into place, so a reader sees no file or the whole number, never half of it.
+# lock, or the notify hook's own directory), so the tick can stop the run from the moment the CLI
+# can exist. The pid goes to run.tmp first and is renamed into place, so a reader sees no file or
+# the whole number, never half of it.
 # ErrorActionPreference=Stop makes every failure before bash runs terminating, a bash.exe that
 # cannot start included (the call throws): nothing can fall through to running bash outside the
 # job object. All of them exit 96, which the tick reads as "the launcher could not start the run";
