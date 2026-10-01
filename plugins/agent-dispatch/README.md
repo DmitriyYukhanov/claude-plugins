@@ -50,7 +50,8 @@ notification hook and shows how to configure it.
   when the dispatcher itself marked the run failed (with a note if it also paused dispatching) and
   empty otherwise. After 30 seconds it is stopped along with anything it started. It never changes
   the tick's result. Its output goes to `logs/notify.log`. A failed send is not retried, and a tick
-  that dies mid-send may send the same message again.
+  that dies mid-send may send the same message again. If recovery cannot identify or stop a
+  launcher, it keeps the process record and skips new notifications until cleanup succeeds.
 - `paused`: created when a CLI errors out (usually logged out or out of allowance). No run starts
   until you delete it. Create it yourself to stop dispatching: disabling or uninstalling the plugin
   leaves the scheduled tick running.

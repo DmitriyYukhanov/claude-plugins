@@ -243,6 +243,7 @@ launch() { # [dir, default $LOCK] runs dir/run.sh -> RUN_PID (to wait on); the i
     set +m
     printf '%s\n' "$RUN_PID" >"$d/run"
   fi
+  printf '%s\n' "$RUN_PID" >"$d/pid"
 }
 
 run_id() { trim "$(cat "$LOCK/run" 2>/dev/null)"; }
@@ -302,7 +303,7 @@ notify() { # waiting|review|failed repo issue detail -> NOTIFY=sent|failed|timeo
   [ -f "$hook" ] || return 0
   # Launched the way a run is, so a stop takes curl and the like with it: a child left behind would
   # hold the scheduler's single tick slot.
-  rm -rf "$d"
+  if ! stop_hook; then say "NOTIFY=failed"; return 0; fi
   mkdir -p "$d" "$AD_HOME/logs"
   {
     for a in "$BASH" "$hook" "$@"; do
@@ -322,7 +323,7 @@ notify() { # waiting|review|failed repo issue detail -> NOTIFY=sent|failed|timeo
   done
   wait "$RUN_PID"
   rc=$?
-  if on_windows; then rm -rf "$d"; else stop_hook; fi # its job took the rest; a group needs a kill
+  stop_hook # its launcher has exited; also stop any children it left behind
   if [ "$rc" -eq 0 ]; then
     say "NOTIFY=sent"
   else
@@ -332,14 +333,25 @@ notify() { # waiting|review|failed repo issue detail -> NOTIFY=sent|failed|timeo
   return 0
 }
 
-stop_hook() { # a hook still recorded in ~/.agent-dispatch/.notify/run: stop it and all it started,
-  # now, and drop the record, so a later recovery never signals a reused id
-  local id
-  id=$(trim "$(cat "$AD_HOME/.notify/run" 2>/dev/null)")
+stop_hook() { # stop the hook before reusing its directory, including a Windows launcher still starting
+  local d="$AD_HOME/.notify" id pid
+  [ -d "$d" ] || return 0
+  pid=$(trim "$(cat "$d/pid" 2>/dev/null)")
+  id=$(trim "$(cat "$d/run" 2>/dev/null)")
   if [ -n "$id" ]; then
     if on_windows; then stop_run "$id"; else kill -KILL -- "-$id" 2>/dev/null; fi
+    gone "$id" || return 1
+  elif [ -n "$pid" ]; then
+    # Bash knows this process before job.ps1 publishes its Windows PID. Never wait on a failed kill.
+    kill -KILL "$pid" 2>/dev/null || { kill -0 "$pid" 2>/dev/null && return 1; }
+    wait "$pid" 2>/dev/null # reaps our child; recovery is not its parent and returns immediately
+    kill -0 "$pid" 2>/dev/null && return 1
+  elif [ -e "$d/launched" ]; then
+    # A crash between spawn and PID publication leaves an unresolved launcher. Its directory
+    # must survive: a late startup could otherwise overwrite the next hook's process record.
+    return 1
   fi
-  rm -rf "$AD_HOME/.notify"
+  rm -rf "$d"
 }
 
 # shellcheck disable=SC2016,SC2088 # the backticks are Markdown; the tilde is shown, not expanded

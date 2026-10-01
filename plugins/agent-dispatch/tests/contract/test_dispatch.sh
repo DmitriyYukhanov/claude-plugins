@@ -950,6 +950,36 @@ test_recovery_stops_a_hook_the_dead_tick_left_running() {
   return 0
 }
 
+test_recovery_stops_a_hook_launcher_before_its_windows_pid_is_written() {
+  on_windows_host || { printf 'job.ps1 only runs on Windows; skipped\n'; return 0; }
+  local pending d
+  setup_env
+  trap kill_stray_run EXIT
+  # shellcheck source=../../scripts/dispatch.sh
+  source "$AD_SCRIPTS/dispatch.sh"
+  HERE="$TEST_TMPDIR/launcher"
+  mkdir -p "$HERE" "$AD_HOME/.notify"
+  # Delay the real launcher before it publishes its Windows PID. The stopped tick must not
+  # leave it able to start a hook after recovery reuses the notification directory.
+  {
+    printf '[IO.File]::WriteAllText("%s", "started")\n' "$(cygpath -w "$FIX/starting")"
+    printf 'while (!(Test-Path -LiteralPath "%s")) { Start-Sleep -Milliseconds 20 }\n' \
+      "$(cygpath -w "$FIX/release-launcher")"
+    cat "$AD_SCRIPTS/job.ps1"
+  } >"$HERE/job.ps1"
+  d="$AD_HOME/.notify"
+  printf 'exec %q 120\n' "$REAL_SLEEP" >"$d/run.sh"
+  launch "$d"
+  pending=$RUN_PID
+  printf '%s\n' "$pending" >"$FIX/hang.pids"
+  wait_for "$FIX/starting"
+  [ ! -e "$d/run" ] || fail "the test launcher did not pause before PID publication"
+  stop_hook
+  assert_dead "$pending" "the hook launcher awaiting PID publication"
+  [ -d "$d" ] && fail "the stopped launcher kept its directory"
+  return 0
+}
+
 test_a_parked_state_is_found_behind_a_requeued_agent_label() {
   setup_env
   notify_hook
@@ -959,4 +989,19 @@ test_a_parked_state_is_found_behind_a_requeued_agent_label() {
     2>"$TEST_TMPDIR/.err")
   assert_key "$OUT" OUTCOME agent
   assert_eq "[review][octo/widgets][4][]" "$(cat "$FIX/notified")"
+}
+
+test_a_hook_with_no_published_pid_keeps_its_directory() {
+  setup_env
+  notify_hook
+  # shellcheck source=../../scripts/dispatch.sh
+  source "$AD_SCRIPTS/dispatch.sh"
+  mkdir -p "$AD_HOME/.notify"
+  : >"$AD_HOME/.notify/launched"
+  printf 'original hook\n' >"$AD_HOME/.notify/run.sh"
+  OUT=$(notify review octo/widgets 4 '')
+  assert_key "$OUT" NOTIFY failed
+  assert_eq 'original hook' "$(cat "$AD_HOME/.notify/run.sh")"
+  [ -e "$FIX/notified" ] && fail "started another hook before the old launcher was resolved"
+  return 0
 }
