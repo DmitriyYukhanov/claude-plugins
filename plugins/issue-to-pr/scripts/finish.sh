@@ -205,6 +205,7 @@ remove_worktree() { # path -> REMOVED, LEFTOVER; stops on a dirty tree, never fo
   local wt=$1 status
   REMOVED=false
   LEFTOVER=""
+  [ "$wt" != "$root" ] || { REMOVED=true; return 0; } # in-place cleanup keeps the main checkout
   if [ ! -e "$wt" ]; then
     git -C "$root" worktree prune 2>/dev/null
     REMOVED=true

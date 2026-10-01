@@ -247,9 +247,17 @@ test_cleanup_in_place_deletes_the_checked_out_branch() {
   git -C "$repo" switch -qc feat/issue-6-x main
   git -C "$repo" push -q -u origin feat/issue-6-x 2>/dev/null || true
   use_fake_gh pr-merged
+  run_script finish.sh cleanup 6 --branch feat/issue-6-x --keep-branch
+  assert_rc 0
+  assert_key "$OUT" REMOVED true
+  assert_not_contains "$OUT" "LEFTOVER_DIR="
+  assert_eq feat/issue-6-x "$(git -C "$repo" symbolic-ref --quiet --short HEAD)"
   run_script finish.sh cleanup 6 --branch feat/issue-6-x
   assert_rc 0
+  assert_key "$OUT" REMOVED true
+  assert_not_contains "$OUT" "LEFTOVER_DIR="
   assert_key "$OUT" DELETED_LOCAL true
+  [ -d "$repo/.git" ] || fail "in-place cleanup removed the main checkout"
 }
 
 test_a_traversing_issue_token_deletes_nothing() {
