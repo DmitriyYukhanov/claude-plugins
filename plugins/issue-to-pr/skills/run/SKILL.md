@@ -188,8 +188,8 @@ locks it on Windows). Smoke first if `smoke_cmd` is set: pull the merged base an
 `S/gates.sh smoke '<smoke_cmd>'`. Red → on a fresh branch cut from the refreshed base, revert
 the merged PR's `merge_commit_sha` after squash, that commit with `-m 1` after merge, or
 `git revert --no-edit <first-replayed>^..<merge_commit_sha>` after rebase. Verify the replayed
-range against the PR's changes, excluding unrelated base commits. An uncertain range or revert
-conflict is a stop: preserve the worktree and report recovery needed. Otherwise open a **draft**
+range against the PR's changes, excluding unrelated base commits. If recovery fails or the range is
+uncertain, stop: preserve the worktree and report recovery needed. Otherwise open a **draft**
 PR, never merge it, and report it loudly. Then `S/finish.sh cleanup <N> --branch <branch>`: it refuses
 unless the PR is merged and no open PR is based on the branch, removes the worktree (never forced:
 anything dirty in it is a stop), deletes the local and remote branch and the run's state. Report
