@@ -5,6 +5,11 @@ All notable changes to the **agent-dispatch** plugin will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.1.1] - 2026-09-29
+
+### Fixed
+- Say in the failure comment when a run ended its turn with background work still running, instead of the generic cause.
+
 ## [1.1.0] - 2026-09-29
 
 ### Changed

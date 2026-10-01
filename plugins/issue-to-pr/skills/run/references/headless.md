@@ -59,6 +59,13 @@ comment may link to it). Post the state comment first, then flip:
 every flip out of `agent:running`** and do not poll GitHub: an owner reply starts a fresh run
 (Re-entry).
 
+**Nothing wakes you between turns.** A headless host exits when your turn ends and stops whatever
+you left running, so a background job's completion notice never reaches you. Never end a turn,
+a flip included, while work you started is still pending: a background shell, a subagent, a
+Codex job. Wait for it in the foreground instead, one bounded tool call after another, until it
+finishes or fails. A second-model review still out after the 30 minutes Step 6 budgets at most is no second
+opinion: say so in the ledger and go on.
+
 After Step 9, and after `after_merge` when there is one, remove `agent:running`: a closed issue
 carries no `agent:*` label, except `agent:failed` on a run that ended there.
 
