@@ -105,6 +105,8 @@ test_the_second_model_review_only_reports() {
     contents, or a rename slips through"
   step=$(skill_step Review)
   assert_contains "$step" 'second' "the spine must say when the second model runs"
+  assert_contains "$step" "On \`complex\`" "the second-model review must retain its complex-tier trigger"
+  assert_contains "$step" 'R/companions.md' "the second-model review must retain its host capability guidance"
 }
 
 test_the_headless_second_opinion_never_prompts() {

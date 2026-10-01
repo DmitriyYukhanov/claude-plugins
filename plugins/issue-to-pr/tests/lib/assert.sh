@@ -117,7 +117,7 @@ init_repo() {
 }
 
 run_dir_of() { # root branch -> the one directory a run owns
-  printf '%s/.claude/issue-to-pr/branch-%s' "$1" "$(printf '%s' "$2" | sed 's/-/--/g; s|/|-|g')"
+  printf '%s/.claude/issue-to-pr/run-%s' "$1" "$(printf '%s' "$2" | sed 's/-/--/g; s|/|-s|g')"
 }
 
 receipt_file() { printf '%s/receipt.json' "$(run_dir_of "$1" "$2")"; }

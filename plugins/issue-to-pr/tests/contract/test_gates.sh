@@ -63,7 +63,7 @@ test_gates_refuse_a_detached_head() {
   git -C "$REPO" checkout -q --detach
   run_script gates.sh test true
   assert_rc 4
-  [ ! -e "$(run_dir_of "$REPO" HEAD)" ] || fail "a detached checkout wrote branch-HEAD/, which no merge looks under"
+  [ ! -e "$(run_dir_of "$REPO" HEAD)" ] || fail "a detached checkout wrote run-HEAD/, which no merge looks under"
 }
 
 gates_worktree() { # name -> cwd moves into a worktree of REPO on feat/issue-6-x, set as WT

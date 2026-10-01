@@ -38,6 +38,14 @@ test_common_state_dir_ignores_itself_and_keeps_a_hand_edited_rule() {
 
 test_common_branch_dir_never_gives_two_branches_one_directory() {
   source "$ITP_SCRIPTS/lib/common.sh"
-  [ "$(branch_dir /r fix/a/b)" != "$(branch_dir /r fix/a-b)" ] ||
-    fail "two branch names resolved to one run directory, which cleanup rm -rf's"
+  local legacy="$TEST_TMPDIR/.claude/issue-to-pr/branch-a-sb/receipt.json"
+  mkdir -p "${legacy%/*}"
+  printf 'legacy\n' >"$legacy"
+  receipt_write "$TEST_TMPDIR" a/-b first test
+  receipt_write "$TEST_TMPDIR" a-/b second test
+  assert_eq first "$(json_str_field "$(receipt_path "$TEST_TMPDIR" a/-b)" head_sha)" \
+    "another branch overwrote the receipt, and cleanup would delete its state"
+  assert_eq second "$(json_str_field "$(receipt_path "$TEST_TMPDIR" a-/b)" head_sha)"
+  receipt_write "$TEST_TMPDIR" a/b third test
+  assert_eq legacy "$(cat "$legacy")" "new state must not overwrite another branch's legacy receipt"
 }

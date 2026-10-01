@@ -163,6 +163,8 @@ dirty, flip, end the turn. Cleanup alone needs no pull, so a dirty main checkout
 
 Step 9 red smoke: open the draft revert PR and clean up as Step 9 does, then a `state=failed`
 comment naming the revert PR, flip to `agent:failed`, end the turn. `after_merge` does not run.
+If identifying, reverting or opening that PR fails, preserve the worktree and post
+`state=failed step=9 pr=<pr>` naming the blocker, flip to `agent:failed`, end the turn.
 
 If the config has `after_merge`, run its value as your next instruction, with these rules on
 top of whatever skill it names:

@@ -53,15 +53,15 @@ step reads exactly as below. `--auto-merge` does nothing without `--headless`.
 
 ## Steps
 
-**0. Resolve.** Turn the request
+**0. Resolve.** In the main checkout, run `gh auth status` first (no auth → stop). Turn the request
 into an issue. Free text with no issue number → draft one that
 restates the request and nothing more, `gh issue create`, and immediately report
 `Drafted issue #<N>: <title>`. Ambiguous
 scope → ONE batched question BEFORE creating it, recording checkpoint use in the ledger as
 `R/judgment.md` describes (`--grill` opens that same checkpoint with the scope question).
 Then work out the ground the run stands on, **in
-the main checkout**, never a worktree, following `R/configuration.md`: `gh auth status` (no auth →
-stop), then the repo, the config, `<BASE>` and `<START_POINT>`, the gate commands, and the issue
+the main checkout**, never a worktree, following `R/configuration.md`: the repo, the config,
+`<BASE>` and `<START_POINT>`, the gate commands, and the issue
 you claim. Carry those values with you: the worktree has no copy of the config.
 
 **1. Worktree.** Pick `TIER` against `R/judgment.md`: `standard` unless the issue's signals say
@@ -74,7 +74,7 @@ reuse another task's tree. Permission denied → use the in-place `git switch -c
 <START_POINT>` fallback only when the main checkout is clean and not owned by another task;
 otherwise stop and report the conflict. `cd` into the tree: all the work
 happens there, one task per tree, never two. Install deps: work the command out from that tree's
-manifests as a **literal** (Step 5's rule) and run it as `S/gates.sh install "<install_cmd>"`.
+manifests as a **literal** (Step 5's rule) and run it as `S/gates.sh install '<install_cmd>'`.
 Board-mode (the config named one): move the card to *in progress* with the chain in `R/board.md`.
 
 **2. Design** (tier routes it). Unknowns first, on `complex`: a research subagent handed an
@@ -105,8 +105,9 @@ the worktree**, the tree the gates run in, from its manifests and CI workflow �
 (`npm test`, `bash tests/run-tests.sh`), never a string assembled from repository filenames,
 because `gates.sh` runs it through `bash -c`. Unresolvable ⇒ use the checkpoint or hard stop in
 `R/judgment.md`. Then
-`S/gates.sh typecheck "<typecheck_cmd>" test "<test_cmd>"` (+ `visual "<visual_cmd>"` for UI):
-each command is one double-quoted argument with the value substituted in. It stops at the first
+`S/gates.sh typecheck '<typecheck_cmd>' test '<test_cmd>'` (+ `visual '<visual_cmd>'` for UI):
+substitute each literal command, enclosing it in single quotes and escaping any `'` as `'\''`
+so it reaches `bash -c` unchanged. It stops at the first
 red gate and prints that gate's last 40 lines; never judge a gate from an ad-hoc command, only this
 one surfaces the real failure. Red ⇒ STOP and fix.
 
@@ -183,10 +184,13 @@ for that head. A stale receipt requires this same cycle, not just another test r
 ## Step 9 — Cleanup (after a successful merge)
 
 Only after Step 8 merges. **`cd` into the main checkout first** (a shell whose cwd is the worktree
-locks it on Windows). Smoke first if `smoke_cmd` is set: pull the base and run
-`S/gates.sh smoke "<smoke_cmd>"`. Red → on a fresh branch cut from the refreshed base, `git revert`
-what landed (one commit after a squash, `-m 1` after a merge commit), open a **draft** PR, never
-merge it, and report it loudly. Then `S/finish.sh cleanup <N> --branch <branch>`: it refuses
+locks it on Windows). Smoke first if `smoke_cmd` is set: pull the merged base and run
+`S/gates.sh smoke '<smoke_cmd>'`. Red → on a fresh branch cut from the refreshed base, revert
+the merged PR's `merge_commit_sha` after squash, that commit with `-m 1` after merge, or
+`git revert --no-edit <first-replayed>^..<merge_commit_sha>` after rebase. Verify the replayed
+range against the PR's changes, excluding unrelated base commits. An uncertain range or revert
+conflict is a stop: preserve the worktree and report recovery needed. Otherwise open a **draft**
+PR, never merge it, and report it loudly. Then `S/finish.sh cleanup <N> --branch <branch>`: it refuses
 unless the PR is merged and no open PR is based on the branch, removes the worktree (never forced:
 anything dirty in it is a stop), deletes the local and remote branch and the run's state. Report
 from its keys: a `LEFTOVER_DIR` is a locked directory to remove by hand once the lock clears,

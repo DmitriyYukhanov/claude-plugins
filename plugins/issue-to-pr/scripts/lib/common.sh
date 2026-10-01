@@ -70,9 +70,8 @@ ensure_state_dir() { # creates it with a .gitignore whose first rule is *, never
 }
 
 branch_dir() { # root branch -> the directory one run owns (receipt, gate logs)
-  # a dash doubles before a slash collapses, so no two branch names share a directory;
-  # cleanup rm -rf's this path
-  printf '%s/branch-%s' "$(state_dir "$1")" "$(printf '%s' "$2" | sed 's/-/--/g; s|/|-|g')"
+  # -- and -s encode dash and slash; run- keeps old branch-* state out of cleanup.
+  printf '%s/run-%s' "$(state_dir "$1")" "$(printf '%s' "$2" | sed 's/-/--/g; s|/|-s|g')"
 }
 
 receipt_path() { printf '%s/receipt.json' "$(branch_dir "$1" "$2")"; }
