@@ -14,6 +14,7 @@ LOCK="$AD_HOME/lock"
 DEADLINE_SECONDS=14400 # a hang guard: a trivial run takes minutes, a complex one a few hours at most
 POLL_SECONDS=20
 GRACE_SECONDS=10
+NOTIFY_SECONDS=30 # the owner's hook sends one message; past this it is stopped
 RUN_LABELS="agent,agent:waiting,agent:review,agent:failed"
 OWNER= # Ruling R2: recover() may reconcile before main sets this; reconcile resolves it itself.
 PICK_WHY='' PICK_IREAD='' PICK_PREAD='' # a reply pick's cursors; empty when recover() reconciles
@@ -225,24 +226,24 @@ write_run_script() { # path host issue tier log -> $LOCK/run.sh
   } >"$LOCK/run.sh"
 }
 
-launch() { # runs $LOCK/run.sh -> RUN_PID (to wait on); the id that stops the run goes to $LOCK/run
-  : >"$LOCK/launched"
+launch() { # [dir, default $LOCK] runs dir/run.sh -> RUN_PID (to wait on); the id that stops it goes to dir/run
+  local d=${1:-$LOCK}
+  : >"$d/launched"
   if on_windows; then
     # job.ps1 holds the run in a job object: stopping it stops every process the run started,
     # Git Bash grandchildren and orphans included, which taskkill //T misses. It writes its own
-    # Windows pid to $LOCK/run before it starts bash.
+    # Windows pid to dir/run before it starts bash.
     powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w "$HERE/job.ps1")" \
-      "$(cygpath -w "$BASH")" "$(cygpath -w "$LOCK/run.sh")" </dev/null >/dev/null 2>&1 &
+      "$(cygpath -w "$BASH")" "$(cygpath -w "$d/run.sh")" </dev/null >/dev/null 2>&1 &
     RUN_PID=$!
-    say "LAUNCHER=job"
   else
     set -m
-    "$BASH" "$LOCK/run.sh" </dev/null >/dev/null 2>&1 &
+    "$BASH" "$d/run.sh" </dev/null >/dev/null 2>&1 &
     RUN_PID=$!
     set +m
-    printf '%s\n' "$RUN_PID" >"$LOCK/run"
-    say "LAUNCHER=group"
+    printf '%s\n' "$RUN_PID" >"$d/run"
   fi
+  printf '%s\n' "$RUN_PID" >"$d/pid"
 }
 
 run_id() { trim "$(cat "$LOCK/run" 2>/dev/null)"; }
@@ -294,9 +295,68 @@ gone() { # run-id -> rc 0 once nothing of the run is left; rc 1 while it lives o
   return 1
 }
 
+# ponytail: best effort, no retry and no record of what was sent; a tick that dies before it drops
+# the lock has its hook stopped and notifies again from recover().
+notify() { # waiting|review|failed repo issue detail -> NOTIFY=sent|failed|timeout; runs the owner's
+  # ~/.agent-dispatch/notify.sh when there is one, and never changes the tick's own result
+  local hook="$AD_HOME/notify.sh" d="$AD_HOME/.notify" waited=0 a rc
+  [ -f "$hook" ] || return 0
+  # Launched the way a run is, so a stop takes curl and the like with it: a child left behind would
+  # hold the scheduler's single tick slot.
+  if ! stop_hook; then say "NOTIFY=failed"; return 0; fi
+  mkdir -p "$d" "$AD_HOME/logs"
+  {
+    for a in "$BASH" "$hook" "$@"; do
+      if [ -n "$a" ]; then printf '%q ' "$a"; else printf "'' "; fi # an old bash's %q may drop ''
+    done
+    printf '</dev/null >>%q 2>&1\n' "$AD_HOME/logs/notify.log"
+  } >"$d/run.sh"
+  launch "$d"
+  while kill -0 "$RUN_PID" 2>/dev/null; do
+    if [ "$waited" -ge "$NOTIFY_SECONDS" ]; then
+      stop_hook
+      say "NOTIFY=timeout"
+      return 0
+    fi
+    sleep 1
+    waited=$((waited + 1))
+  done
+  wait "$RUN_PID"
+  rc=$?
+  stop_hook # its launcher has exited; also stop any children it left behind
+  if [ "$rc" -eq 0 ]; then
+    say "NOTIFY=sent"
+  else
+    say "NOTIFY=failed"
+    say "NOTIFY_RC=$rc" # 96 on Windows: the launcher, not the hook
+  fi
+  return 0
+}
+
+stop_hook() { # stop the hook before reusing its directory, including a Windows launcher still starting
+  local d="$AD_HOME/.notify" id pid
+  [ -d "$d" ] || return 0
+  pid=$(trim "$(cat "$d/pid" 2>/dev/null)")
+  id=$(trim "$(cat "$d/run" 2>/dev/null)")
+  if [ -n "$id" ]; then
+    if on_windows; then stop_run "$id"; else kill -KILL -- "-$id" 2>/dev/null; fi
+    gone "$id" || return 1
+  elif [ -n "$pid" ]; then
+    # Bash knows this process before job.ps1 publishes its Windows PID. Never wait on a failed kill.
+    kill -KILL "$pid" 2>/dev/null || { kill -0 "$pid" 2>/dev/null && return 1; }
+    wait "$pid" 2>/dev/null # reaps our child; recovery is not its parent and returns immediately
+    kill -0 "$pid" 2>/dev/null && return 1
+  elif [ -e "$d/launched" ]; then
+    # A crash between spawn and PID publication leaves an unresolved launcher. Its directory
+    # must survive: a late startup could otherwise overwrite the next hook's process record.
+    return 1
+  fi
+  rm -rf "$d"
+}
+
 # shellcheck disable=SC2016,SC2088 # the backticks are Markdown; the tilde is shown, not expanded
-reconcile() { # repo issue cause log cli-error(0|1 CLI|2 launcher) -> OUTCOME [PAUSED]; rc 1 when GitHub failed
-  local labels body="$AD_HOME/.comment.md" shown=$4 comments prmark='' cause=$3 from=agent:running clierr=$5 why=''
+reconcile() { # repo issue cause log cli-error(0|1 CLI|2 launcher) -> OUTCOME [PAUSED] [NOTIFY]; rc 1 when GitHub failed
+  local labels body="$AD_HOME/.comment.md" shown=$4 comments prmark='' cause=$3 from=agent:running clierr=$5 why='' state
   if [ -z "$OWNER" ]; then # Ruling R2: recover() may call us before main() resolves OWNER
     OWNER=$(gh api user --jq .login 2>/dev/null | tr -d '\r')
     [ -n "$OWNER" ] || return 1
@@ -310,6 +370,8 @@ reconcile() { # repo issue cause log cli-error(0|1 CLI|2 launcher) -> OUTCOME [P
     if [ -z "$from" ] || [ "$PICK_WHY" != reply ] || ! owner_replied "$1" "$2" ||
       [ "$M_IREAD" != "$PICK_IREAD" ] || [ "$M_PREAD" != "$PICK_PREAD" ]; then
       say "OUTCOME=$(printf '%s\n' "$labels" | grep '^agent' | head -1)"
+      state=$(printf '%s\n' "$labels" | grep -x -E 'agent:(waiting|review|failed)' | head -1)
+      [ -z "$state" ] || notify "${state#agent:}" "$1" "$2" ''
       return 0
     fi
     cause="the run parked again without reading your reply" clierr=0 # whatever the CLI exited with
@@ -337,6 +399,7 @@ reconcile() { # repo issue cause log cli-error(0|1 CLI|2 launcher) -> OUTCOME [P
   gh issue comment "$2" -R "$1" --body-file "$body" >/dev/null 2>&1 || return 1
   gh issue edit "$2" -R "$1" --add-label agent:failed --remove-label "$from" >/dev/null 2>&1 || return 1
   say "OUTCOME=agent:failed"
+  notify failed "$1" "$2" "$cause.${why:+ Dispatching is paused until you delete ~/.agent-dispatch/paused.}"
 }
 
 recover() { # a lock at tick start: a live tick (busy), or a dead one's run to stop and reconcile
@@ -350,6 +413,7 @@ recover() { # a lock at tick start: a live tick (busy), or a dead one's run to s
   repo=$(cat "$LOCK/repo" 2>/dev/null)
   n=$(cat "$LOCK/issue" 2>/dev/null)
   run=$(run_id)
+  stop_hook # a notification the dead tick left in flight
   if [ -n "$run" ]; then
     stop_run "$run"
     gone "$run" || die recover "the run of a dead tick ($repo#$n, id $run) is still alive; the next tick retries"
@@ -390,6 +454,7 @@ run_issue() { # the picked issue: lock, flip, launch, wait, reconcile
   write_run_script "$path" "$host" "$n" "$tier" "$log"
   deadline=$(($(now) + DEADLINE_SECONDS))
   launch
+  if on_windows; then say "LAUNCHER=job"; else say "LAUNCHER=group"; fi
   while kill -0 "$RUN_PID" 2>/dev/null; do
     if [ "$(now)" -ge "$deadline" ]; then
       stop_run "$(run_id)"

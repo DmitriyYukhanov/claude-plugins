@@ -2,8 +2,8 @@
 name: setup
 description: >-
   Set up agent-dispatch on this machine: check what a tick needs, ask each repo's auto-merge
-  threshold, then show one summary of the repo list, labels, tick copy and scheduler entry and,
-  once the owner confirms, apply all of it. Use when the user wants GitHub labels to start
+  threshold, check the optional notification hook, then show one summary of the repo list, labels,
+  tick copy and scheduler entry. Apply it once the owner confirms. Use when the user wants GitHub labels to start
   issue-to-pr runs on their machine, or asks why the dispatcher is not picking issues up.
 ---
 
@@ -55,6 +55,10 @@ setup again once it is fixed.
    real install even when `git` on PATH is a scoop shim; drop the last three path parts and add
    `bin/bash.exe`. That is what fills `<bash.exe path>` below. Do not guess
    `$env:ProgramFiles\Git\bin\bash.exe`; that path only holds for a machine-wide install.
+
+5. `~/.agent-dispatch/notify.sh`. Missing is not a blocker: say that runs cannot notify the owner
+   until the hook exists, and show the example below. If present, keep it and show only its test
+   command. Do not run the hook unless the owner expressly asks for a test: it sends a real message.
 
 ## 2. Repos
 
@@ -144,6 +148,31 @@ gh label create agent:review -R <owner/repo> -f -c 0e8a16 -d "A PR waits for you
 gh label create agent:failed -R <owner/repo> -f -c b60205 -d "The run failed; see the last comment"
 ```
 
+**Notifications.** Every comment and label a run makes is the owner's own, and GitHub does not
+notify you of your own activity. So when an issue the tick ran stops at `agent:waiting`,
+`agent:review` or `agent:failed`, the tick runs `~/.agent-dispatch/notify.sh` if it exists:
+`bash notify.sh <waiting|review|failed> <owner/repo> <issue> <detail>`. `<detail>` is the cause
+when the dispatcher itself marked the run failed (plus a sentence when dispatching paused), empty
+otherwise. The hook gets 30 seconds, then it is stopped with everything it started; its output
+goes to `~/.agent-dispatch/logs/notify.log`; it runs under the scheduler's PATH, not a login
+shell. The plugin ships no channel. Show this example for the ntfy phone app (subscribe to the
+same topic there; anyone who knows the topic can read it, so make it long and random, and on a
+private repo remember the repo names go to that server):
+
+```bash
+# ~/.agent-dispatch/notify.sh
+case "$1" in
+  waiting) what='has a question for you' ;;
+  review) what='has a PR waiting for your merge' ;;
+  *) what='failed' ;;
+esac
+curl -fsS -m 10 -H "Title: $2#$3 $what" -H "Click: https://github.com/$2/issues/$3" \
+  -d "${4:-Open the issue for details.}" "https://ntfy.sh/<your-topic>" >/dev/null
+```
+
+Any command works in its place (a Telegram bot, a desktop notification, mail); keep a time limit
+on network calls. The owner tests it with `bash ~/.agent-dispatch/notify.sh review <owner/repo> 1 ''`.
+
 **The tick.** Copy the shim; it finds the current install on every call:
 
 ```
@@ -231,8 +260,9 @@ overlapping.
 ## 6. Report
 
 One block: the checks, then each summary item as applied, failed (with its error) or not reached;
-after `no`, one line saying nothing changed. Then one line per repo, `<owner/repo> | <host> |
-<threshold>`, and the saved search to bookmark on GitHub web or mobile, since GitHub does not
+after `no`, one line saying nothing changed. Say whether the notification hook exists; if it is
+missing, explain that the owner will receive no notifications until they configure it. Then one
+line per repo, `<owner/repo> | <host> | <threshold>`, and the saved search to bookmark on GitHub web or mobile, since GitHub does not
 notify you of your own comments and every comment here is yours:
 `is:issue label:agent:waiting,agent:review,agent:failed repo:<owner/repo>` (one `repo:` per line
 of `repos.conf`). Close with how it behaves: label an issue `agent`;
