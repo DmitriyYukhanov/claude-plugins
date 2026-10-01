@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 - Remove the correct worktree when PR and issue numbers differ.
+- Preserve worktrees and branches when cleanup cannot read worktree registrations.
 - Review uncommitted changes during the pre-commit security check.
 
 ## [9.5.1] - 2026-09-29

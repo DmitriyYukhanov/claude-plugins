@@ -197,6 +197,39 @@ test_cleanup_refuses_a_dirty_worktree() {
   branch_survives || fail "the branch of a dirty worktree was deleted"
 }
 
+test_cleanup_stops_when_worktree_listing_fails() {
+  cleanup_setup pr-merged
+  write_receipt "$REPO" feat/issue-6-x "$SHA_OK"
+  local attempt
+  git() {
+    case "$*" in
+      *"worktree list --porcelain")
+        local count=0
+        [ ! -f "$TEST_TMPDIR/list-count" ] || read -r count <"$TEST_TMPDIR/list-count"
+        count=$((count + 1))
+        printf '%s\n' "$count" >"$TEST_TMPDIR/list-count"
+        [ "$count" != "$FAIL_LIST_AT" ] || return 1 ;;
+      *"worktree remove "*) [ "$FAIL_LIST_AT" != 3 ] || return 1 ;;
+    esac
+    command git "$@"
+  }
+  export -f git
+  for attempt in 2 3; do
+    export FAIL_LIST_AT=$attempt
+    rm -f "$TEST_TMPDIR/list-count"
+    if [ "$attempt" = 2 ]; then git -C "$WT" switch -qc another-task
+    else git -C "$WT" switch -q feat/issue-6-x; fi
+    run_script finish.sh cleanup 6 --branch feat/issue-6-x
+    assert_rc 2
+    assert_key "$OUT" STOP_REASON worktree-list-failed
+    [ -f "$WT/work.txt" ] || fail "an unreadable worktree list allowed removal"
+    branch_survives || fail "an unreadable worktree list allowed local branch deletion"
+    git -C "$REPO" ls-remote --exit-code --heads origin feat/issue-6-x >/dev/null 2>&1 ||
+      fail "an unreadable worktree list allowed remote branch deletion"
+    [ -f "$(receipt_file "$REPO" feat/issue-6-x)" ] || fail "an unreadable list deleted run state"
+  done
+}
+
 test_cleanup_refuses_a_worktree_on_another_branch_or_detached_head() {
   local mode
   cleanup_setup pr-merged

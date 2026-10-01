@@ -195,14 +195,14 @@ headless_guard() { # pr-number: returns on an attended merge or the owner's word
 
 registered_wt() { # the registered worktree on --branch, else the one ending in /issue-<N>, else empty
   local list by_branch
-  list=$(git -C "$root" worktree list --porcelain 2>/dev/null) || return 0
+  list=$(git -C "$root" worktree list --porcelain 2>/dev/null) || return 1
   by_branch=$(printf '%s\n' "$list" | awk -v b="refs/heads/$branch" '/^worktree /{p=substr($0,10)} $1=="branch" && $2==b {print p; exit}')
   if [ -n "$by_branch" ]; then printf '%s\n' "$by_branch"; return 0; fi
-  printf '%s\n' "$list" | sed -n 's/^worktree //p' | grep -E "/issue-$issue\$" | head -1
+  printf '%s\n' "$list" | sed -n 's/^worktree //p' | grep -E "/issue-$issue\$" | head -1 || true
 }
 
 remove_worktree() { # path -> REMOVED, LEFTOVER; stops on a dirty tree, never forces
-  local wt=$1 status
+  local wt=$1 status registered
   REMOVED=false
   LEFTOVER=""
   [ "$wt" != "$root" ] || { REMOVED=true; return 0; } # in-place cleanup keeps the main checkout
@@ -215,7 +215,8 @@ remove_worktree() { # path -> REMOVED, LEFTOVER; stops on a dirty tree, never fo
     REMOVED=true
     return 0
   fi
-  if [ -z "$(registered_wt)" ]; then
+  registered=$(registered_wt) || stop worktree-list-failed "could not list registered worktrees - refusing cleanup"
+  if [ -z "$registered" ]; then
     git -C "$root" worktree prune 2>/dev/null
     LEFTOVER=$wt
     return 0
@@ -238,7 +239,7 @@ cmd_cleanup() {
     [ -z "$dependents" ] || stop base-of-open-pr "$branch is the base of open PR(s) $dependents - retarget or merge them before deleting it"
   fi
 
-  wt_path=$(registered_wt)
+  wt_path=$(registered_wt) || stop worktree-list-failed "could not list registered worktrees - refusing cleanup"
   if [ -n "$wt_path" ] && [ -e "$wt_path" ]; then
     wt_branch=$(git -C "$wt_path" symbolic-ref --quiet --short HEAD 2>/dev/null || printf '')
     [ "$wt_branch" = "$branch" ] ||
