@@ -5,6 +5,14 @@ All notable changes to the **issue-to-pr** plugin will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [9.5.3] - 2026-10-01
+
+### Fixed
+- Preserve quotes and substitutions in configured gate commands.
+- Keep branch state separate, including across upgrades.
+- Revert all landed commits after a failed smoke check following a rebase merge.
+- Check authentication before creating an issue.
+
 ## [9.5.2] - 2026-10-01
 
 ### Fixed

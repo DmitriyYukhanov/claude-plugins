@@ -38,6 +38,8 @@ test_common_state_dir_ignores_itself_and_keeps_a_hand_edited_rule() {
 
 test_common_branch_dir_never_gives_two_branches_one_directory() {
   source "$ITP_SCRIPTS/lib/common.sh"
-  [ "$(branch_dir /r fix/a/b)" != "$(branch_dir /r fix/a-b)" ] ||
-    fail "two branch names resolved to one run directory, which cleanup rm -rf's"
+  [ "$(branch_dir /r a/-b)" != "$(branch_dir /r a-/b)" ] ||
+    fail "two branch names share run state, which cleanup would delete"
+  [ "$(branch_dir /r a/b)" != /r/.claude/issue-to-pr/branch-a-sb ] ||
+    fail "new state overlaps another branch's legacy directory"
 }
