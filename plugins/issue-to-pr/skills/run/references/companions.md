@@ -27,8 +27,11 @@ actually be performed, report it as blocked, never passed.
 | Second opinion (Step 3 ladder, `--headless` only) | `codex:rescue --fresh --wait` asked for a read-only answer, no edits, handed the issue, the options and the repo precedent, asked which option and why; empty output or a background-job notice is no second opinion | Two rungs only; the ledger says no second model weighed in. |
 
 Step 6's four checks get no row. In Claude Code they are `code-review`, `/security-review`,
-`simplify` and `run` — the skill that builds the change and drives it; there is no `verify`
-command to call. Elsewhere, perform the check directly: a read-only reviewer over the diff, its
+`simplify` and `run` (the skill that builds the change and drives it); there is no `verify`
+command to call. Before Step 7's commit, include `git diff <BASE>` and untracked files in the
+security check: `/security-review` reads the committed range and can miss working-tree changes.
+Perform that check inline when needed and report its scope. Elsewhere, perform the check directly:
+a read-only reviewer over the diff, its
 callers and its tests; the trust boundaries, authorization and secret exposure of the changed
 flow; the surviving code made simpler without behaviour change; the built change driven past its
 happy path.

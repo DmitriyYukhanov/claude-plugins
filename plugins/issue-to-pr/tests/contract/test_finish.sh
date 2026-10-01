@@ -142,6 +142,30 @@ test_cleanup_removes_the_tree_both_branches_and_the_run_dir() {
   [ ! -e "$(run_dir_of "$REPO" feat/issue-6-x)" ] || fail "the run directory survived cleanup"
 }
 
+# A PR number must not hide the worktree checked out on --branch.
+test_cleanup_finds_the_tree_by_branch_when_the_number_is_wrong() {
+  cleanup_setup pr-merged
+  run_script finish.sh cleanup 999 --branch feat/issue-6-x
+  assert_rc 0
+  assert_key "$OUT" REMOVED true
+  assert_key "$OUT" DELETED_LOCAL true
+  [ ! -d "$WT" ] || fail "the worktree on --branch survived a cleanup keyed on the wrong number"
+  ! branch_survives || fail "the local branch survived cleanup"
+}
+
+test_cleanup_prefers_the_branch_to_an_unrelated_numbered_tree() {
+  cleanup_setup pr-merged
+  local other="$TEST_TMPDIR/repo-worktrees/issue-999"
+  git -C "$REPO" worktree add "$other" -b another-task main >/dev/null 2>&1
+  run_script finish.sh cleanup 999 --branch feat/issue-6-x
+  assert_rc 0
+  [ ! -d "$WT" ] || fail "the requested worktree survived cleanup"
+  ! branch_survives || fail "the requested branch survived cleanup"
+  [ -d "$other" ] || fail "cleanup removed the unrelated worktree"
+  git -C "$other" symbolic-ref --quiet --short HEAD | grep -qx another-task ||
+    fail "cleanup changed the unrelated worktree's branch"
+}
+
 test_cleanup_refuses_an_unmerged_pr() {
   cleanup_setup pr-open
   run_script finish.sh cleanup 6 --branch feat/issue-6-x
@@ -171,6 +195,39 @@ test_cleanup_refuses_a_dirty_worktree() {
   assert_key "$OUT" STOP_REASON dirty-tracked-files
   [ -d "$WT" ] || fail "a dirty worktree was removed"
   branch_survives || fail "the branch of a dirty worktree was deleted"
+}
+
+test_cleanup_stops_when_worktree_listing_fails() {
+  cleanup_setup pr-merged
+  write_receipt "$REPO" feat/issue-6-x "$SHA_OK"
+  local attempt
+  git() {
+    case "$*" in
+      *"worktree list --porcelain")
+        local count=0
+        [ ! -f "$TEST_TMPDIR/list-count" ] || read -r count <"$TEST_TMPDIR/list-count"
+        count=$((count + 1))
+        printf '%s\n' "$count" >"$TEST_TMPDIR/list-count"
+        [ "$count" != "$FAIL_LIST_AT" ] || return 1 ;;
+      *"worktree remove "*) [ "$FAIL_LIST_AT" != 3 ] || return 1 ;;
+    esac
+    command git "$@"
+  }
+  export -f git
+  for attempt in 2 3; do
+    export FAIL_LIST_AT=$attempt
+    rm -f "$TEST_TMPDIR/list-count"
+    if [ "$attempt" = 2 ]; then git -C "$WT" switch -qc another-task
+    else git -C "$WT" switch -q feat/issue-6-x; fi
+    run_script finish.sh cleanup 6 --branch feat/issue-6-x
+    assert_rc 2
+    assert_key "$OUT" STOP_REASON worktree-list-failed
+    [ -f "$WT/work.txt" ] || fail "an unreadable worktree list allowed removal"
+    branch_survives || fail "an unreadable worktree list allowed local branch deletion"
+    git -C "$REPO" ls-remote --exit-code --heads origin feat/issue-6-x >/dev/null 2>&1 ||
+      fail "an unreadable worktree list allowed remote branch deletion"
+    [ -f "$(receipt_file "$REPO" feat/issue-6-x)" ] || fail "an unreadable list deleted run state"
+  done
 }
 
 test_cleanup_refuses_a_worktree_on_another_branch_or_detached_head() {
@@ -223,9 +280,17 @@ test_cleanup_in_place_deletes_the_checked_out_branch() {
   git -C "$repo" switch -qc feat/issue-6-x main
   git -C "$repo" push -q -u origin feat/issue-6-x 2>/dev/null || true
   use_fake_gh pr-merged
+  run_script finish.sh cleanup 6 --branch feat/issue-6-x --keep-branch
+  assert_rc 0
+  assert_key "$OUT" REMOVED true
+  assert_not_contains "$OUT" "LEFTOVER_DIR="
+  assert_eq feat/issue-6-x "$(git -C "$repo" symbolic-ref --quiet --short HEAD)"
   run_script finish.sh cleanup 6 --branch feat/issue-6-x
   assert_rc 0
+  assert_key "$OUT" REMOVED true
+  assert_not_contains "$OUT" "LEFTOVER_DIR="
   assert_key "$OUT" DELETED_LOCAL true
+  [ -d "$repo/.git" ] || fail "in-place cleanup removed the main checkout"
 }
 
 test_a_traversing_issue_token_deletes_nothing() {

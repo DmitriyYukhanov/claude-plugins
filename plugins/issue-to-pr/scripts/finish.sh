@@ -193,14 +193,19 @@ headless_guard() { # pr-number: returns on an attended merge or the owner's word
   stop headless-unapproved "issue-to-pr: the owner's newest word after the report for ${head_sha:0:12} is not 'merge' (${word:-nothing yet}). Answer it in a new state=review comment (pr=$1 head=$head_sha) on the issue, label agent:review, and end the turn. If this is an attended run, remove the agent:* labels from issue #$issue and re-run."
 }
 
-registered_wt() { # the registered worktree ending in /issue-<N>, or empty
-  git -C "$root" worktree list --porcelain 2>/dev/null | sed -n 's/^worktree //p' | grep -E "/issue-$issue\$" | head -1
+registered_wt() { # the registered worktree on --branch, else the one ending in /issue-<N>, else empty
+  local list by_branch
+  list=$(git -C "$root" worktree list --porcelain 2>/dev/null) || return 1
+  by_branch=$(printf '%s\n' "$list" | awk -v b="refs/heads/$branch" '/^worktree /{p=substr($0,10)} $1=="branch" && $2==b {print p; exit}')
+  if [ -n "$by_branch" ]; then printf '%s\n' "$by_branch"; return 0; fi
+  printf '%s\n' "$list" | sed -n 's/^worktree //p' | grep -E "/issue-$issue\$" | head -1 || true
 }
 
 remove_worktree() { # path -> REMOVED, LEFTOVER; stops on a dirty tree, never forces
-  local wt=$1 status
+  local wt=$1 status registered
   REMOVED=false
   LEFTOVER=""
+  [ "$wt" != "$root" ] || { REMOVED=true; return 0; } # in-place cleanup keeps the main checkout
   if [ ! -e "$wt" ]; then
     git -C "$root" worktree prune 2>/dev/null
     REMOVED=true
@@ -210,7 +215,8 @@ remove_worktree() { # path -> REMOVED, LEFTOVER; stops on a dirty tree, never fo
     REMOVED=true
     return 0
   fi
-  if [ -z "$(registered_wt)" ]; then
+  registered=$(registered_wt) || stop worktree-list-failed "could not list registered worktrees - refusing cleanup"
+  if [ -z "$registered" ]; then
     git -C "$root" worktree prune 2>/dev/null
     LEFTOVER=$wt
     return 0
@@ -233,7 +239,7 @@ cmd_cleanup() {
     [ -z "$dependents" ] || stop base-of-open-pr "$branch is the base of open PR(s) $dependents - retarget or merge them before deleting it"
   fi
 
-  wt_path=$(registered_wt)
+  wt_path=$(registered_wt) || stop worktree-list-failed "could not list registered worktrees - refusing cleanup"
   if [ -n "$wt_path" ] && [ -e "$wt_path" ]; then
     wt_branch=$(git -C "$wt_path" symbolic-ref --quiet --short HEAD 2>/dev/null || printf '')
     [ "$wt_branch" = "$branch" ] ||
