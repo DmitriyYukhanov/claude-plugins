@@ -1,9 +1,13 @@
 """Create the venv in ~/.tg-account/venv and patch opentele for Telegram Desktop 7.x tdata. Idempotent.
 
 The venv lives outside the plugin so plugin updates do not wipe it.
-Run with Python 3.12: python setup.py
+Run with Python 3.12: python setup.py [--transcribe]
 """
-import pathlib, subprocess, sys, venv
+import argparse, pathlib, subprocess, sys, venv
+
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument("--transcribe", action="store_true", help="Install local voice/video-note transcription")
+args = parser.parse_args()
 
 VENV = pathlib.Path.home() / ".tg-account" / "venv"
 PY = VENV / ("Scripts/python.exe" if sys.platform == "win32" else "bin/python")
@@ -32,4 +36,10 @@ for old, new in PATCHES:
         sys.exit(f"patch target not found in {f}, opentele changed: {old[:60]!r}")
     src = src.replace(old, new)
 f.write_text(src, encoding="utf-8", newline="\n")
+if args.transcribe:
+    # PyAV 19 removed metadata_errors, which faster-whisper 1.2.1 still passes to av.open.
+    subprocess.check_call([str(PY), "-m", "pip", "install", "-q", "faster-whisper==1.2.1", "av<19"])
+    print("Preparing Whisper small for local transcription (first download is about 500 MB)...", flush=True)
+    subprocess.check_call([str(PY), "-c",
+                          "from faster_whisper import WhisperModel; WhisperModel('small', device='cpu', compute_type='int8')"])
 print("ok:", PY)
