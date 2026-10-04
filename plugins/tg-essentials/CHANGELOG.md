@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [2.1.0] - 2026-10-04
 
 ### Added
-- Include optional local transcripts of voice messages and video notes in chat exports, with cached results and visible failures.
+- Automatically include local transcripts of voice messages and video notes in chat exports, with cached results and visible failures.
 
 ## [2.0.0] - 2026-09-29
 

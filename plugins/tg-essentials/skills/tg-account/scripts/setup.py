@@ -37,9 +37,6 @@ for old, new in PATCHES:
     src = src.replace(old, new)
 f.write_text(src, encoding="utf-8", newline="\n")
 if args.transcribe:
-    # PyAV 19 removed metadata_errors, which faster-whisper 1.2.1 still passes to av.open.
-    subprocess.check_call([str(PY), "-m", "pip", "install", "-q", "faster-whisper==1.2.1", "av<19"])
     print("Preparing Whisper small for local transcription (first download is about 500 MB)...", flush=True)
-    subprocess.check_call([str(PY), "-c",
-                          "from faster_whisper import WhisperModel; WhisperModel('small', device='cpu', compute_type='int8')"])
+    subprocess.check_call([str(PY), str(pathlib.Path(__file__).with_name("tg_transcribe.py")), "--prepare"])
 print("ok:", PY)

@@ -3,20 +3,58 @@ import contextlib
 import asyncio
 import datetime as dt
 import io
+import json
+import os
 import pathlib
 import subprocess
 import sys
-import threading
+import time
 import unittest
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 from telethon.tl import types
 import tg_export
+import tg_transcribe
 
 
 DATE = dt.datetime(2026, 10, 4, 12, tzinfo=dt.timezone.utc)
+
+FAKE_WHISPER = '''
+import json, pathlib, time
+from types import SimpleNamespace
+root = pathlib.Path(__file__).parent
+class WhisperModel:
+    def __init__(self, *args, **kwargs):
+        with (root / "loads").open("a") as f:
+            f.write("loaded\\n")
+        self.control = json.loads((root / "control.json").read_text())
+        if self.control.get("block_setup"):
+            (root / "started").touch()
+            time.sleep(30)
+        if self.control.get("exit_after_ready"):
+            import os, threading
+            threading.Timer(0.05, lambda: os._exit(17)).start()
+        if self.control.get("setup_error"):
+            raise OSError("private model download error")
+    def transcribe(self, path, **options):
+        if self.control.get("crash"):
+            import os
+            os._exit(17)
+        if self.control.get("inference_error"):
+            raise RuntimeError("private inference error")
+        with open(path, "r", encoding="utf-8") as f:
+            docid = f.read()
+            if self.control.get("block"):
+                (root / "started").touch()
+                deadline = time.monotonic() + 5
+                while not (root / "release").exists() and time.monotonic() < deadline:
+                    time.sleep(0.01)
+        text = self.control.get("text", "Transcript\\n" + docid)
+        segments = [SimpleNamespace(text=text)] if self.control.get("speech", True) else []
+        return iter(segments), SimpleNamespace(language="en")
+'''
 
 
 def message(mid, kind=None, docid=None, caption=""):
@@ -38,10 +76,11 @@ def message(mid, kind=None, docid=None, caption=""):
 
 
 class Client:
-    def __init__(self, messages, download_error=False, missing_media=False):
+    def __init__(self, messages, download_error=False, missing_media=False, download_delay=0):
         self.messages = sorted(messages, key=lambda m: m.id, reverse=True)
         self.download_error = download_error
         self.missing_media = missing_media
+        self.download_delay = download_delay
         self.downloads = []
         self.disconnected = False
 
@@ -50,6 +89,8 @@ class Client:
 
     async def download_media(self, m, file):
         self.downloads.append(pathlib.Path(file))
+        if self.download_delay:
+            await asyncio.to_thread(time.sleep, self.download_delay)
         if self.download_error:
             raise OSError("private download error")
         if self.missing_media:
@@ -69,32 +110,51 @@ class ExportTranscription(unittest.IsolatedAsyncioTestCase):
         self.model_loads = 0
         self.speech = True
         self.inference_error = False
-
-        def whisper_model(*args, **kwargs):
-            self.model_loads += 1
-
-            def transcribe(path, **options):
-                if self.inference_error:
-                    raise RuntimeError("private inference error")
-                docid = pathlib.Path(path).read_text(encoding="utf-8")
-                segments = [SimpleNamespace(text=f"Transcript\n{docid}")] if self.speech else []
-                return iter(segments), SimpleNamespace(language="en")
-
-            return SimpleNamespace(transcribe=transcribe)
-
-        self.whisper = SimpleNamespace(WhisperModel=whisper_model)
+        self.control = {}
+        self.workers = []
+        (self.out / "faster_whisper.py").write_text(FAKE_WHISPER, encoding="utf-8")
+        for package, value in (("faster_whisper", "1.2.1"), ("av", "18.1.0")):
+            metadata = self.out / f"{package}-{value}.dist-info"
+            metadata.mkdir()
+            (metadata / "METADATA").write_text(f"Name: {package.replace('_', '-')}\nVersion: {value}\n")
 
     async def export(self, messages, transcribe=True, account=1, peer=None, **client_options):
         client = Client(messages, **client_options)
+        self.last_client = client
         output = io.StringIO()
         entity = peer or types.User(id=42, first_name="Example")
+        (self.out / "control.json").write_text(json.dumps({"speech": self.speech, "inference_error": self.inference_error, **self.control}))
+        loads = self.out / "loads"
+        before = len(loads.read_text().splitlines()) if loads.exists() else 0
+        start_process = asyncio.create_subprocess_exec
+
+        async def start(*args, **kwargs):
+            kwargs["env"] = {**os.environ, "PYTHONPATH": str(self.out)}
+            worker = await start_process(*args, **kwargs)
+            self.workers.append(worker)
+            return worker
+
         with patch("tgsess.open_chat", AsyncMock(return_value=(client, entity, account))), \
-                patch.dict(sys.modules, {"faster_whisper": self.whisper}), \
+                patch.object(asyncio, "create_subprocess_exec", side_effect=start), \
                 patch.object(tg_export.asyncio, "sleep", AsyncMock()), contextlib.redirect_stdout(output):
-            await tg_export.main("example", "2026-10-04", self.out, transcribe=transcribe)
+            options = {} if transcribe is None else {"transcribe": transcribe}
+            await tg_export.main("example", "2026-10-04", self.out, **options)
+        after = len(loads.read_text().splitlines()) if loads.exists() else 0
+        self.model_loads += after - before
+        self.assertTrue(all(worker.returncode is not None for worker in self.workers))
+        self.assertTrue(client.disconnected)
         files = list(self.out.glob("????-??-??.txt"))
         text = files[0].read_text(encoding="utf-8") if files else ""
         return text, client, output.getvalue()
+
+    async def test_default_export_includes_voice_and_video_in_context(self):
+        text, _, _ = await self.export(
+            [message(1, caption="Before"), message(2, "voice"), message(3, "video_note"), message(4, caption="After")],
+            transcribe=None,
+        )
+        self.assertIn("[voice] Transcript 2", text)
+        self.assertIn("[video note] Transcript 3", text)
+        self.assertEqual([int(line.split("#")[1].split()[0]) for line in text.splitlines()], [1, 2, 3, 4])
 
     async def test_text_only_keeps_media_and_caption_without_whisper(self):
         messages = [message(2, "voice"), message(1, "video_note", caption="Caption\nline")]
@@ -122,6 +182,43 @@ class ExportTranscription(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Transcript 1", text)
         self.assertEqual(client.downloads, [])
         self.assertEqual(self.model_loads, 0)
+
+    async def test_default_text_chat_does_not_start_whisper(self):
+        text, client, _ = await self.export([message(1, caption="Only text")], transcribe=None)
+        self.assertIn("Only text", text)
+        self.assertEqual(client.downloads, [])
+        self.assertEqual(self.workers, [])
+
+    async def test_unicode_and_long_speech_survive_worker_pipe(self):
+        self.control["text"] = "Привет 🌿 " * 10000
+        text, _, _ = await self.export([message(1, "voice")])
+        self.assertIn("[voice] " + self.control["text"].strip(), text)
+
+    async def test_setup_failure_is_attempted_once_and_text_survives(self):
+        self.control["setup_error"] = True
+        text, client, output = await self.export([message(1, "voice"), message(2, "video_note"), message(3, caption="Text survives")])
+        self.assertEqual(text.count("transcription failed"), 2)
+        self.assertIn("Text survives", text)
+        self.assertNotIn("private model download error", text)
+        self.assertIn("transcription_failures=2", output)
+        self.assertEqual(self.model_loads, 1)
+        self.assertEqual(len(self.workers), 1)
+        self.assertEqual(client.downloads, [])
+
+    async def test_worker_crash_is_visible_without_restart_loop(self):
+        self.control["crash"] = True
+        text, client, _ = await self.export([message(1, "voice"), message(2, "video_note"), message(3, caption="Text survives")])
+        self.assertEqual(text.count("transcription failed"), 2)
+        self.assertIn("Text survives", text)
+        self.assertEqual(len(self.workers), 1)
+        self.assertTrue(all(not path.exists() for path in client.downloads))
+
+    async def test_worker_exit_after_readiness_stops_later_downloads(self):
+        self.control["exit_after_ready"] = True
+        text, client, _ = await self.export([message(1, "voice"), message(2, "video_note")], download_delay=0.2)
+        self.assertEqual(text.count("transcription failed"), 2)
+        self.assertLessEqual(len(client.downloads), 1)
+        self.assertEqual(len(self.workers), 1)
 
     async def test_cache_separates_account_chat_type_and_replaced_document(self):
         await self.export([message(1, "voice", docid=7)])
@@ -204,31 +301,52 @@ class ExportTranscription(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(client.disconnected)
 
     async def test_cancel_waits_for_decoder_before_deleting_media(self):
-        started, release = threading.Event(), threading.Event()
-        readable = []
-
-        def transcribe(path, **options):
-            with open(path, "rb"):
-                started.set()
-                release.wait(timeout=3)
-                readable.append(pathlib.Path(path).exists())
-            return iter([SimpleNamespace(text="Speech")]), SimpleNamespace(language="en")
-
-        self.whisper.WhisperModel = lambda *a, **k: SimpleNamespace(transcribe=transcribe)
+        self.control["block"] = True
         task = asyncio.create_task(self.export([message(1, "voice")]))
+
+        def wait_for_decoder():
+            deadline = time.monotonic() + 3
+            while not (self.out / "started").exists() and time.monotonic() < deadline:
+                time.sleep(0.01)
+            return (self.out / "started").exists()
+
         try:
-            self.assertTrue(await asyncio.to_thread(started.wait, 3))
+            self.assertTrue(await asyncio.to_thread(wait_for_decoder))
             task.cancel()
             yielded = asyncio.get_running_loop().create_future()
             asyncio.get_running_loop().call_soon(yielded.set_result, None)
             await yielded
             task.cancel()
-            asyncio.get_running_loop().call_later(0.05, release.set)
+            done, _ = await asyncio.wait([task], timeout=1)
+            self.assertIn(task, done, "Cancellation must stop a stalled decoder")
             with self.assertRaises(asyncio.CancelledError):
                 await task
         finally:
-            release.set()
-        self.assertEqual(readable, [True])
+            (self.out / "release").touch()
+            await asyncio.gather(task, return_exceptions=True)
+        self.assertTrue(all(not path.exists() for path in self.last_client.downloads))
+        self.assertTrue(self.last_client.disconnected)
+        self.assertTrue(all(worker.returncode is not None for worker in self.workers))
+
+    async def test_cancel_stops_stalled_model_preparation_before_media_download(self):
+        self.control["block_setup"] = True
+        task = asyncio.create_task(self.export([message(1, "voice")]))
+
+        def wait_for_setup():
+            deadline = time.monotonic() + 3
+            while not (self.out / "started").exists() and time.monotonic() < deadline:
+                time.sleep(0.01)
+            return (self.out / "started").exists()
+
+        self.assertTrue(await asyncio.to_thread(wait_for_setup))
+        task.cancel()
+        done, _ = await asyncio.wait([task], timeout=2)
+        self.assertIn(task, done)
+        with self.assertRaises(asyncio.CancelledError):
+            await task
+        self.assertEqual(self.last_client.downloads, [])
+        self.assertTrue(self.last_client.disconnected)
+        self.assertTrue(all(worker.returncode is not None for worker in self.workers))
 
 
 class ExportCLI(unittest.TestCase):
@@ -238,6 +356,28 @@ class ExportCLI(unittest.TestCase):
             capture_output=True, text=True,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
+
+
+class AutomaticSetup(unittest.TestCase):
+    def test_ready_dependencies_skip_pip_and_allow_model_download(self):
+        model = Mock()
+        with patch.object(tg_transcribe, "version", side_effect=["1.2.1", "18.1.0"]), \
+                patch.object(tg_transcribe.subprocess, "check_call") as install, \
+                patch.dict(sys.modules, {"faster_whisper": SimpleNamespace(WhisperModel=model)}):
+            tg_transcribe._load_model()
+        install.assert_not_called()
+        model.assert_called_once_with("small", device="cpu", compute_type="int8")
+
+    def test_missing_or_incompatible_dependencies_install_in_current_interpreter(self):
+        for versions in (tg_transcribe.PackageNotFoundError("faster-whisper"), ["1.2.1", "19.0.1"], ["1.1.0"]):
+            with self.subTest(versions=versions), \
+                    patch.object(tg_transcribe, "version", side_effect=versions), \
+                    patch.object(tg_transcribe.subprocess, "check_call") as install, \
+                    patch.dict(sys.modules, {"faster_whisper": SimpleNamespace(WhisperModel=Mock())}), \
+                    contextlib.redirect_stderr(io.StringIO()):
+                tg_transcribe._load_model()
+            self.assertEqual(install.call_count, 1)
+            self.assertEqual(install.call_args.args[0], [sys.executable, "-m", "pip", "install", "-q", "faster-whisper==1.2.1", "av<19"])
 
 
 if __name__ == "__main__":

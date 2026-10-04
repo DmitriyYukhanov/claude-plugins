@@ -1,11 +1,11 @@
 """Export a Telegram chat to per-day text files.
 
-Usage: tg_export.py CHAT SINCE OUT [ACCOUNT_ID] [--transcribe]
+Usage: tg_export.py CHAT SINCE OUT [ACCOUNT_ID] [--no-transcribe]
   CHAT        @username, t.me link or numeric id (-100..., user id for a DM); see tg_find.py
   SINCE       first day to keep, YYYY-MM-DD (local time)
   OUT         output dir, one YYYY-MM-DD.txt per day
   ACCOUNT_ID  tdata account to read with; default: first account that can open CHAT
-  --transcribe  include local transcripts of voice and video notes (setup.py --transcribe first)
+  --no-transcribe  skip automatic voice and video-note transcription
 
 Line format, sorted by id, local time:  [HH:MM] #id ->#reply Name: text
 
@@ -17,13 +17,7 @@ import argparse, asyncio, collections, datetime as dt, os
 from pathlib import Path
 from telethon import errors, utils
 
-async def main(chat, since, out, acc=None, transcribe=False):
-    if transcribe:
-        try:
-            # Load the decoder before opentele's Qt libraries to avoid a Windows native crash.
-            import faster_whisper
-        except ImportError:
-            pass  # Missing optional dependencies are reported on each affected message.
+async def main(chat, since, out, acc=None, transcribe=True):
     from tgsess import name, open_chat
     since = dt.datetime.fromisoformat(since).astimezone()
     os.makedirs(out, exist_ok=True)
@@ -31,8 +25,8 @@ async def main(chat, since, out, acc=None, transcribe=False):
     print(f"account {acc}: {name(ent)}", flush=True)
     days = collections.defaultdict(list)
     n = offset = skips = transcribed = failures = 0
+    transcriber = None
     try:
-        transcriber = None
         if transcribe:
             from tg_transcribe import Transcriber
             transcriber = Transcriber(Path(out) / ".transcripts" / str(acc) / str(utils.get_peer_id(ent)))
@@ -82,7 +76,11 @@ async def main(chat, since, out, acc=None, transcribe=False):
                 print("...", n, f"{t:%Y-%m-%d %H:%M}", "skips", skips, flush=True)
             await asyncio.sleep(0.25)
     finally:
-        await c.disconnect()
+        try:
+            if transcriber:
+                await transcriber.close()
+        finally:
+            await c.disconnect()
     for d, lines in days.items():
         with open(os.path.join(out, d + ".txt"), "w", encoding="utf-8") as fh:
             fh.write("\n".join(line for _, line in sorted(dict(lines).items())))
@@ -98,6 +96,7 @@ if __name__ == "__main__":
     parser.add_argument("since")
     parser.add_argument("out")
     parser.add_argument("account", nargs="?")
-    parser.add_argument("--transcribe", action="store_true", help="Transcribe voice and video notes locally")
+    parser.add_argument("--transcribe", action=argparse.BooleanOptionalAction, default=True,
+                        help="Transcribe voice and video notes locally (enabled by default)")
     args = parser.parse_args()
     asyncio.run(main(args.chat, args.since, args.out, args.account, args.transcribe))

@@ -31,13 +31,13 @@ Reference implementations included for Python async (FastAPI), Python sync (Djan
 Talks to Telegram as you, using the session Telegram Desktop already keeps on disk. You don't log in or scan a QR code.
 
 - Find chats and export their history into one text file per day
-- Include local transcripts of voice messages and video notes with `--transcribe`
+- Include local transcripts of voice messages and video notes automatically
 - Create a group, send, edit and pin posts, and set the group photo
 - Post a native checklist that members can tick (sending one needs Telegram Premium)
 
 Every write waits for your yes first. Requires Telegram Desktop and Python 3.12. Run the skill's setup script once; a portable Telegram install also needs `TG_TDATA` pointing at its `tdata` folder.
 
-For transcription, run `setup.py --transcribe` once, then add `--transcribe` to the export command. This installs faster-whisper and downloads Whisper `small` (about 500 MB). Audio is processed locally on CPU without an API key. Successful transcripts are cached inside the export's `.transcripts` folder; temporary media files are deleted after processing. Keep that folder private along with the exported chat. Transcription failures stay visible in the export and retry on the next run.
+Normal exports include voice messages and video notes on their original message lines. On the first note without a cached transcript, the exporter installs any missing transcription dependencies and downloads Whisper `small` (about 500 MB). One local CPU process handles recognition without an API key or agent tokens. Successful transcripts are cached inside the export's `.transcripts` folder; temporary media files are deleted after processing. Keep that folder private along with the exported chat. Failures stay visible and retry on the next export. Use `--no-transcribe` only when you want to skip speech.
 
 ## Usage
 
