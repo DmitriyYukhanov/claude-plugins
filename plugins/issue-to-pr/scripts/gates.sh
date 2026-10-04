@@ -36,7 +36,7 @@ fi
 [ "$branch" != HEAD ] ||
   degrade detached-head "gates: this checkout is detached, so there is no branch to key the receipt to. Check the feature branch out first."
 log_dir="$(branch_dir "$root" "$branch")/logs"
-if ! ensure_state_dir "$(state_dir "$root")" || ! mkdir -p "$log_dir" 2>/dev/null; then
+if ! ensure_run_dir "$root" "$branch" || ! mkdir -p "$log_dir" 2>/dev/null; then
   degrade log-dir-unwritable "gates: cannot create $log_dir"
 fi
 

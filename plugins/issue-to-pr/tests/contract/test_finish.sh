@@ -197,6 +197,96 @@ test_cleanup_refuses_a_dirty_worktree() {
   branch_survives || fail "the branch of a dirty worktree was deleted"
 }
 
+test_cleanup_preserves_tracked_run_state_before_removing_anything() {
+  cleanup_setup pr-merged
+  local d
+  d=$(run_dir_of "$REPO" feat/issue-6-x)
+  mkdir -p "$d"
+  printf 'keep\n' >"$d/ledger.md"
+  git add .claude/issue-to-pr
+  git commit -qm ledger
+  run_script finish.sh cleanup 6 --branch feat/issue-6-x
+  assert_rc 2
+  assert_key "$OUT" STOP_REASON tracked-run-state
+  assert_eq keep "$(cat "$d/ledger.md")"
+  [ -d "$WT" ] || fail "cleanup removed the worktree before checking tracked state"
+  branch_survives || fail "cleanup removed the branch before checking tracked state"
+}
+
+test_cleanup_preserves_a_tracked_file_at_the_run_directory_path() {
+  cleanup_setup pr-merged
+  local d
+  d=$(run_dir_of "$REPO" feat/issue-6-x)
+  mkdir -p "$(dirname "$d")"
+  printf 'keep\n' >"$d"
+  git add .claude/issue-to-pr
+  git commit -qm collision
+  run_script finish.sh cleanup 6 --branch feat/issue-6-x
+  assert_rc 2
+  assert_key "$OUT" STOP_REASON tracked-run-state
+  assert_eq keep "$(cat "$d")"
+  branch_survives || fail "cleanup removed the branch despite tracked state"
+}
+
+test_cleanup_rechecks_tracked_run_state_after_switching_in_place() {
+  cleanup_setup pr-merged
+  local d
+  d=$(run_dir_of "$REPO" feat/issue-6-x)
+  mkdir -p "$d"
+  printf 'keep\n' >"$d/ledger.md"
+  git add .claude/issue-to-pr
+  git commit -qm ledger
+  git worktree remove "$WT"
+  git switch -q feat/issue-6-x
+  git symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main
+  run_script finish.sh cleanup 6 --branch feat/issue-6-x
+  assert_rc 2
+  assert_key "$OUT" STOP_REASON tracked-run-state
+  assert_eq keep "$(cat "$d/ledger.md")"
+  assert_eq '' "$(git status --short)"
+  branch_survives || fail "cleanup deleted the branch before checking the new index"
+}
+
+test_cleanup_preserves_tracked_run_state_on_a_branch_without_a_worktree() {
+  cleanup_setup pr-merged
+  local d
+  d=$(run_dir_of "$WT" feat/issue-6-x)
+  mkdir -p "$d"
+  printf 'keep\n' >"$d/ledger.md"
+  git -C "$WT" add .claude/issue-to-pr
+  git -C "$WT" commit -qm ledger
+  git -C "$WT" push -q origin feat/issue-6-x
+  git worktree remove "$WT"
+  run_script finish.sh cleanup 6 --branch feat/issue-6-x
+  assert_rc 2
+  assert_key "$OUT" STOP_REASON tracked-run-state
+  branch_survives || fail "cleanup removed the branch containing tracked run state"
+  assert_eq keep "$(MSYS_NO_PATHCONV=1 git show feat/issue-6-x:.claude/issue-to-pr/run-feat-sissue--6--x/ledger.md)"
+  git ls-remote --exit-code --heads origin feat/issue-6-x >/dev/null || fail "cleanup removed the remote branch"
+}
+
+test_cleanup_refuses_symlinks_before_removing_external_state() {
+  cleanup_setup pr-merged
+  local rel link outside d n=0
+  for rel in .claude .claude/issue-to-pr .claude/issue-to-pr/run-feat-sissue--6--x; do
+    n=$((n + 1))
+    outside="$TEST_TMPDIR/outside-$n" link="$REPO/$rel"
+    mkdir -p "$outside" "$(dirname "$link")"
+    MSYS=winsymlinks:nativestrict ln -s "$outside" "$link" || fail "native symlink fixture unavailable"
+    [ -L "$link" ] || fail "the symlink fixture is not a symlink"
+    d=$(run_dir_of "$REPO" feat/issue-6-x)
+    mkdir -p "$d"
+    printf 'keep\n' >"$d/ledger.md"
+    run_script finish.sh cleanup 6 --branch feat/issue-6-x
+    assert_rc 2
+    assert_key "$OUT" STOP_REASON unsafe-state-dir
+    assert_eq keep "$(cat "$d/ledger.md")"
+    [ -d "$WT" ] || fail "cleanup removed the worktree before checking symlinks"
+    branch_survives || fail "cleanup removed the branch before checking symlinks"
+    rm "$link"
+  done
+}
+
 test_cleanup_stops_when_worktree_listing_fails() {
   cleanup_setup pr-merged
   write_receipt "$REPO" feat/issue-6-x "$SHA_OK"

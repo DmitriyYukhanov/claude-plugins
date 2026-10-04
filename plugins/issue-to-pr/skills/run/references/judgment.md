@@ -60,8 +60,11 @@ mid-implementation anything that fits moment (1).
 
 ## Ledger
 
-One entry per judgment call: `{question, decision, rationale, kind: asked|auto}`, written down
-**before the next tool call**, so a compaction cannot lose it. Only the `auto` entries render, as a
+One entry per judgment call: `{question, decision, rationale, kind: asked|auto}`, written to
+`<RUN_DIR>/ledger.md` **before the next tool call**, so a compaction cannot lose it. Initialize
+`RUN_DIR` with `S/state.sh` before writing. Before the owned branch exists, use the unique OS-temp
+directory described in the run skill, retain its absolute path, then move the ledger into
+`RUN_DIR` without overwriting earlier entries. Only the `auto` entries render, as a
 **"Decisions made autonomously"** section in both the Step 7 report and the PR body, so the wrong
 `kind` means the entry never reaches its reader. A long run does compact: afterwards `git status`,
 `gh pr view` and the gate logs under `.claude/issue-to-pr/` in the main checkout say where it

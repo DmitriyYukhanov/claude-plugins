@@ -3,8 +3,9 @@
 ## The config file — `.claude/issue-to-pr/config.md`
 
 Optional per-project settings in YAML frontmatter, in the plugin's own state directory. The scripts
-create that directory with a `.gitignore` that ignores everything in it, receipts and logs
-included; one you wrote there yourself is left as it is.
+create that directory with a default `.gitignore`; an existing file, even an empty one, stays
+unchanged. Each generated `run-*` directory ignores its own contents, so custom parent rules
+cannot expose plans, logs or receipts. Tracked configuration stays tracked and belongs in review.
 
 ```yaml
 ---

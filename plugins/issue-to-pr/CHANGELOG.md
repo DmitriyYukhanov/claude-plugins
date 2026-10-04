@@ -5,6 +5,13 @@ All notable changes to the **issue-to-pr** plugin will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [9.6.0] - 2026-10-04
+
+### Fixed
+- Keep generated plans and run state out of Git from the first write, including in worktrees.
+- Preserve tracked run files during setup and cleanup, and report them for targeted index cleanup.
+- Refuse state paths that redirect writes or cleanup through symbolic links.
+
 ## [9.5.3] - 2026-10-01
 
 ### Fixed
