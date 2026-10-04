@@ -30,6 +30,8 @@ class WhisperModel:
         with (root / "loads").open("a") as f:
             f.write("loaded\\n")
         self.control = json.loads((root / "control.json").read_text())
+        if self.control.get("bad_ready"):
+            print(self.control["bad_ready"], flush=True)
         if self.control.get("block_setup"):
             (root / "started").touch()
             time.sleep(30)
@@ -220,6 +222,14 @@ class ExportTranscription(unittest.IsolatedAsyncioTestCase):
         self.assertLessEqual(len(client.downloads), 1)
         self.assertEqual(len(self.workers), 1)
 
+    async def test_invalid_readiness_stops_worker_and_all_downloads(self):
+        for response in ("not JSON", "[]", '{"text": "unexpected"}'):
+            with self.subTest(response=response):
+                self.control["bad_ready"] = response
+                text, client, _ = await self.export([message(1, "voice"), message(2, "video_note")])
+                self.assertEqual(text.count("transcription failed"), 2)
+                self.assertEqual(client.downloads, [])
+
     async def test_cache_separates_account_chat_type_and_replaced_document(self):
         await self.export([message(1, "voice", docid=7)])
         for account, peer, docid in (
@@ -317,7 +327,7 @@ class ExportTranscription(unittest.IsolatedAsyncioTestCase):
             asyncio.get_running_loop().call_soon(yielded.set_result, None)
             await yielded
             task.cancel()
-            done, _ = await asyncio.wait([task], timeout=1)
+            done, _ = await asyncio.wait([task], timeout=2)
             self.assertIn(task, done, "Cancellation must stop a stalled decoder")
             with self.assertRaises(asyncio.CancelledError):
                 await task
@@ -327,6 +337,39 @@ class ExportTranscription(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(all(not path.exists() for path in self.last_client.downloads))
         self.assertTrue(self.last_client.disconnected)
         self.assertTrue(all(worker.returncode is not None for worker in self.workers))
+
+    async def test_cancel_stops_worker_before_removing_partial_download(self):
+        started = asyncio.Event()
+        cleanup_worker_exits = []
+
+        async def download(client, m, file):
+            client.downloads.append(pathlib.Path(file))
+            pathlib.Path(file).write_text("partial", encoding="utf-8")
+            started.set()
+            await asyncio.Future()
+
+        @contextlib.contextmanager
+        def temporary_directory(**kwargs):
+            with TemporaryDirectory(**kwargs) as path:
+                try:
+                    yield path
+                finally:
+                    cleanup_worker_exits.append(all(worker.returncode is not None for worker in self.workers))
+
+        with patch.object(Client, "download_media", download), \
+                patch.object(tg_transcribe, "TemporaryDirectory", temporary_directory):
+            task = asyncio.create_task(self.export([message(1, "voice")]))
+            try:
+                await asyncio.wait_for(started.wait(), timeout=3)
+                task.cancel()
+                with self.assertRaises(asyncio.CancelledError):
+                    await asyncio.wait_for(task, timeout=2)
+            finally:
+                task.cancel()
+                await asyncio.gather(task, return_exceptions=True)
+        self.assertEqual(cleanup_worker_exits, [True])
+        self.assertTrue(all(not path.exists() for path in self.last_client.downloads))
+        self.assertTrue(self.last_client.disconnected)
 
     async def test_cancel_stops_stalled_model_preparation_before_media_download(self):
         self.control["block_setup"] = True

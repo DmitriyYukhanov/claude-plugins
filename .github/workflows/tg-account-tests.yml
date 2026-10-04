@@ -11,6 +11,9 @@ on:
       - 'plugins/tg-essentials/skills/tg-account/**'
       - '.github/workflows/tg-account-tests.yml'
 
+permissions:
+  contents: read
+
 jobs:
   test:
     strategy:
@@ -20,6 +23,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'

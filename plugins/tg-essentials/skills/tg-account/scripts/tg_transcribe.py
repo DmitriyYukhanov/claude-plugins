@@ -32,8 +32,14 @@ class Transcriber:
         self.worker = await asyncio.shield(self.launch)
         if not self.ready:
             response = await self.worker.stdout.readline()
-            self.error = json.loads(response).get("error") if response else "WorkerExit"
+            try:
+                result = json.loads(response) if response else {"error": "WorkerExit"}
+                self.error = result.get("error") or (None if result.get("ready") is True else "WorkerProtocolError")
+            except (ValueError, AttributeError):
+                self.error = "WorkerProtocolError"
             self.ready = True
+            if self.error == "WorkerProtocolError":
+                await self.close(force=True)
         if self.worker.returncode is not None:
             self.error = self.error or "WorkerExit"
         if self.error:
@@ -109,19 +115,21 @@ class Transcriber:
             await self.close(force=True)
             raise
         with TemporaryDirectory(prefix="tg-transcribe-") as tmp:
-            suffix = ".ogg" if message.voice else ".mp4"
-            path = await client.download_media(message, file=str(Path(tmp) / ("media" + suffix)))
-            if not path:
-                raise FileNotFoundError("Telegram did not return a media file")
-            recognition = asyncio.create_task(self._recognize(path))
+            recognition = None
             try:
+                suffix = ".ogg" if message.voice else ".mp4"
+                path = await client.download_media(message, file=str(Path(tmp) / ("media" + suffix)))
+                if not path:
+                    raise FileNotFoundError("Telegram did not return a media file")
+                recognition = asyncio.create_task(self._recognize(path))
                 text = await asyncio.shield(recognition)
             except asyncio.CancelledError:
                 # Stop the decoder before removing a file it may still hold open.
                 try:
                     await self.close(force=True)
                 finally:
-                    await asyncio.gather(recognition, return_exceptions=True)
+                    if recognition is not None:
+                        await asyncio.gather(recognition, return_exceptions=True)
                 raise
         if text:
             try:

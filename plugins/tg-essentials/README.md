@@ -44,7 +44,6 @@ Normal exports include voice messages and video notes on their original message 
 ```text
 Add Telegram error alerts to this project
 Export last week of the work chat
-Export last week of the work chat, including voice messages and video notes
 Create a Telegram group with @alice, pin the agenda and a checklist
 ```
 
