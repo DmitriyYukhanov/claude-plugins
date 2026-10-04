@@ -5,6 +5,11 @@ All notable changes to the **tg-essentials** plugin (named **tg-alerts** before 
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.1.0] - 2026-10-04
+
+### Added
+- Automatically include local transcripts of voice messages and video notes in chat exports, with cached results and visible failures.
+
 ## [2.0.0] - 2026-09-29
 
 ### Changed
