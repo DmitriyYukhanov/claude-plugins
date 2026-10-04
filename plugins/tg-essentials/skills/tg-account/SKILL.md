@@ -1,6 +1,6 @@
 ---
 name: tg-account
-description: 'Use when the user asks to find, read, export or analyze Telegram chats, including voice messages and video notes, or to create groups, send, edit, pin, post checklists or set chat photos through the local Telegram Desktop session. E.g. "выгрузи чат", "расшифруй голосовые".'
+description: 'Use when reading, exporting, analyzing or transcribing Telegram chats, voice or video notes, or managing messages, groups, checklists and photos via Telegram Desktop. E.g. "выгрузи чат", "расшифруй голосовые".'
 ---
 
 # Telegram as the user, from local tdata
