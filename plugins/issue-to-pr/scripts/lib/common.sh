@@ -77,8 +77,9 @@ branch_dir() { # root branch -> the directory one run owns (receipt, gate logs)
 assert_run_dir_safe() { # checkout branch [ref]: refuse redirected or versioned run state
   local dir tracked
   local query=(ls-files)
-  [ ! -L "$1/.claude" ] && [ ! -L "$(state_dir "$1")" ] && [ ! -L "$(branch_dir "$1" "$2")" ] ||
+  if [ -L "$1/.claude" ] || [ -L "$(state_dir "$1")" ] || [ -L "$(branch_dir "$1" "$2")" ]; then
     stop unsafe-state-dir "issue-to-pr: a state path in $1 is a symlink; refusing writes or cleanup outside its owned directory."
+  fi
   dir=".claude/issue-to-pr/$(basename "$(branch_dir "$1" "$2")")"
   [ -z "${3:-}" ] || query=(ls-tree -r --name-only "$3")
   tracked=$(git -C "$1" "${query[@]}" -- "$dir") ||
