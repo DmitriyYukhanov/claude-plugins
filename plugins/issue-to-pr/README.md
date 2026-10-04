@@ -66,6 +66,9 @@ merges on its own, unless the issue already stopped once or the diff touches `hu
   thread a bot opens is checked like any other review finding: fixed, re-gated and answered with
   the commit, or answered with the reason it was rejected. A CodeRabbit rate limit goes into the
   summary; asking it again is your call.
+- **Commit contents.** Each commit passes an index audit against an explicit file list. The
+  report and PR body show file groups, counts, indexed sizes and reasons for flagged files.
+  Unexplained flagged files are unstaged before the run stops; working files stay on disk.
 - **Beyond a single issue.** A plain request with no number is drafted into an issue and run.
 - **A careful merge gate.** Merge happens only on your explicit in-session approval, never on
   the turn the PR opens. The merge script refuses a head the gates never ran against, a review
@@ -108,6 +111,38 @@ checkout, never in the worktree, so tearing the worktree down can never trip ove
 
 Being ignored, the directory is disposable to `git clean -x`. Nothing breaks permanently: the
 commands get worked out again, and the next merge asks for one more gate run before it lands.
+
+### Staging review
+
+The run records expected files before implementation in `planned-paths.txt` under its run
+directory. This is a plain list of exact repository-relative paths, one per line; LF and CRLF
+line endings are accepted. It supplies
+the files to commit separately as literal arguments after `--`; directories and traversal are
+refused. Paths may contain spaces, leading dashes or glob characters, but not CR, LF or tabs.
+Renames declare both the deleted path and the added path.
+
+`stage.sh review --plan <file> --reasons <file> -- <paths...>` stages each declared file in full.
+`stage.sh commit --plan <file> --reasons <file> --message '<subject>' -- <paths...>` checks the
+current index and commits without staging again. Undeclared staged files stop both commands
+without changing those entries. Both commands require the declared set to match the staged
+changed-path set. Commit hooks run normally; if a hook changes the commit tree, the script
+stops before the run pushes it.
+
+Each file has one primary group: source, tests, fixtures/snapshots, generated, binaries,
+lockfiles or config. Classification uses path conventions, known binary suffixes, Git's
+binary-change detection and a NUL-byte check on indexed blobs that diff attributes cannot
+disable. Binary snapshots stay in fixtures/snapshots. Binary and new-file
+totals are overlapping indicators; the unique-file total counts each file once. Sizes describe
+indexed objects, with zero bytes for deleted files.
+Deleted files retain binary classification from their previous contents.
+
+Flags cover unplanned files, binaries, generated output, common do-not-commit paths (`*.log`,
+`.env*`, `dist/`, `node_modules/`, `.claude/`, `test-results/`) and every member of a primary
+group above 10 MiB. Reasons are exact `path<TAB>one-line explanation` rows in a TSV file; omit
+`--reasons` when none are needed. A missing reason unstages that flagged path and stops with
+exit 2. Generated issue-to-pr run state cannot be committed, even with a reason.
+Policy patterns ignore case so Windows path variants cannot bypass these checks.
+The Markdown inventory is saved as `staging-report.md` in the run directory for the PR and report.
 
 ### Review bots (optional)
 

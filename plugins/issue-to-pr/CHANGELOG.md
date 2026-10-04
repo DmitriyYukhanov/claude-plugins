@@ -5,6 +5,11 @@ All notable changes to the **issue-to-pr** plugin will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [9.7.0] - 2026-10-04
+
+### Added
+- Review each commit's file groups, sizes and flagged-file explanations before committing, and include them in the PR and report.
+
 ## [9.6.0] - 2026-10-04
 
 ### Fixed
