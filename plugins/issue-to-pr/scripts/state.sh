@@ -9,7 +9,7 @@ source "$SCRIPT_DIR/lib/common.sh"
 root=$(repo_root)
 checkout=$(git rev-parse --show-toplevel 2>/dev/null) || degrade not-a-git-repo "state: not inside a git checkout"
 branch=$(git symbolic-ref --quiet --short HEAD) || degrade detached-head "state: check out the owned branch before initializing its state"
-assert_untracked_run_dir "$checkout" "$branch"
+assert_run_dir_safe "$checkout" "$branch"
 ensure_run_dir "$root" "$branch" || degrade state-unwritable "state: cannot protect the run directory"
 
 for tree in "$root" "$checkout"; do

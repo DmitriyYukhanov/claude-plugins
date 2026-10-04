@@ -74,24 +74,28 @@ branch_dir() { # root branch -> the directory one run owns (receipt, gate logs)
   printf '%s/run-%s' "$(state_dir "$1")" "$(printf '%s' "$2" | sed 's/-/--/g; s|/|-s|g')"
 }
 
-assert_untracked_run_dir() { # checkout branch: never overwrite or delete versioned run files
+assert_run_dir_safe() { # checkout branch [ref]: refuse redirected or versioned run state
   local dir tracked
+  local query=(ls-files)
+  [ ! -L "$1/.claude" ] && [ ! -L "$(state_dir "$1")" ] && [ ! -L "$(branch_dir "$1" "$2")" ] ||
+    stop unsafe-state-dir "issue-to-pr: a state path in $1 is a symlink; refusing writes or cleanup outside its owned directory."
   dir=".claude/issue-to-pr/$(basename "$(branch_dir "$1" "$2")")"
-  tracked=$(git -C "$1" ls-files -- "$dir") ||
-    stop state-index-unreadable "issue-to-pr: cannot inspect tracked run state in $1"
+  [ -z "${3:-}" ] || query=(ls-tree -r --name-only "$3")
+  tracked=$(git -C "$1" "${query[@]}" -- "$dir") ||
+    stop state-unreadable "issue-to-pr: cannot inspect tracked run state in $1 ${3:-index}"
   if [ -n "$tracked" ]; then
     warn "$tracked"
-    stop tracked-run-state "issue-to-pr: run state is tracked in $1. Offer targeted git rm --cached -- <paths> after approval; keep the working files and history."
+    stop tracked-run-state "issue-to-pr: run state is tracked in $1 ${3:-index}. Offer targeted git rm --cached -- <paths> after approval; keep the working files and history."
   fi
 }
 
 ensure_run_dir() { # root branch: protect the existing run namespace before any artifact write
   local dir gi
   dir=$(branch_dir "$1" "$2") gi="$dir/.gitignore"
-  assert_untracked_run_dir "$1" "$2"
+  assert_run_dir_safe "$1" "$2"
   ensure_state_dir "$(state_dir "$1")" || return 1
   mkdir -p "$dir" 2>/dev/null || return 1
-  [ ! -L "$dir" ] && [ ! -L "$gi" ] || return 1
+  [ ! -L "$gi" ] || return 1
   # The lower-level rule wins over parent exceptions without editing project ignore rules.
   [ -f "$gi" ] && [ "$(tail -n 1 "$gi")" = '*' ] && return 0
   printf '\n*\n' >>"$gi" 2>/dev/null

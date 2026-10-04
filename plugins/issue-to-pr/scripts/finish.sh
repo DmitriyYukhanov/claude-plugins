@@ -231,8 +231,11 @@ remove_worktree() { # path -> REMOVED, LEFTOVER; stops on a dirty tree, never fo
 
 cmd_cleanup() {
   local pr_state dependents wt_path wt_branch def deleted_local=false deleted_remote=false
-  assert_untracked_run_dir "$root" "$branch"
+  assert_run_dir_safe "$root" "$branch"
   if [ "$keep_branch" -eq 0 ]; then
+    if git -C "$root" show-ref --verify --quiet "refs/heads/$branch"; then
+      assert_run_dir_safe "$root" "$branch" "refs/heads/$branch"
+    fi
     pr_state=$(gh pr view "$branch" --json state --jq .state 2>/dev/null || printf '')
     [ "$pr_state" = MERGED ] || stop pr-not-merged "PR for $branch is '${pr_state:-unknown}', not MERGED - refusing cleanup"
     dependents=$(gh pr list --base "$branch" --state open --json number --jq '[.[].number] | join(", ")' 2>/dev/null) ||
@@ -245,7 +248,7 @@ cmd_cleanup() {
     wt_branch=$(git -C "$wt_path" symbolic-ref --quiet --short HEAD 2>/dev/null || printf '')
     [ "$wt_branch" = "$branch" ] ||
       stop worktree-branch-mismatch "worktree $wt_path is on '${wt_branch:-detached or unreadable}', expected '$branch' - refusing cleanup"
-    assert_untracked_run_dir "$wt_path" "$branch"
+    assert_run_dir_safe "$wt_path" "$branch"
   fi
   [ -n "$wt_path" ] || wt_path="$(dirname "$root")/$(basename "$root")-worktrees/issue-$issue"
   cd "$root" 2>/dev/null || true
@@ -265,7 +268,7 @@ cmd_cleanup() {
       git -C "$root" checkout --detach >/dev/null 2>&1
     fi
   fi
-  assert_untracked_run_dir "$root" "$branch"
+  assert_run_dir_safe "$root" "$branch"
   if git -C "$root" show-ref --verify --quiet "refs/heads/$branch" && git -C "$root" branch -D "$branch" >/dev/null 2>&1; then
     deleted_local=true
   fi

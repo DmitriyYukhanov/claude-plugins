@@ -160,3 +160,22 @@ test_state_refuses_run_files_tracked_only_in_worktree() {
   assert_eq keep "$(cat "$rel/ledger.md")"
   [ ! -e "$REPO/.claude" ] || fail "bootstrap wrote state before checking the worktree index"
 }
+
+test_state_refuses_symlinked_state_ancestors_before_writing() {
+  state_repo
+  local rel link outside n=0
+  for rel in .claude .claude/issue-to-pr; do
+    n=$((n + 1))
+    outside="$TEST_TMPDIR/outside-$n" link="$REPO/$rel"
+    mkdir -p "$outside" "$(dirname "$link")"
+    MSYS=winsymlinks:nativestrict ln -s "$outside" "$link" || fail "native symlink fixture unavailable"
+    [ -L "$link" ] || fail "the symlink fixture is not a symlink"
+    printf 'keep\n' >"$outside/sentinel"
+    run_script state.sh
+    assert_rc 2
+    assert_key "$OUT" STOP_REASON unsafe-state-dir
+    assert_eq sentinel "$(ls -A "$outside")" "bootstrap wrote through the symlink"
+    assert_eq keep "$(cat "$outside/sentinel")"
+    rm "$link"
+  done
+}

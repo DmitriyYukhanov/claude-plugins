@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Fixed
 - Keep generated plans and run state out of Git from the first write, including in worktrees.
 - Preserve tracked run files during setup and cleanup, and report them for targeted index cleanup.
+- Refuse state paths that redirect writes or cleanup through symbolic links.
 
 ## [9.5.3] - 2026-10-01
 
