@@ -40,6 +40,14 @@ gate's own code in `GATE_<NAME>_EXIT`.
 - Stage with **explicit paths** (`git add path1 path2`); never `git add -A`/`.`, which sweeps in
   whatever the project keeps untracked. Use the host's file-editing tools for multi-line code.
   Give PR and issue bodies to `gh` with `--body-file`, not interpolated shell strings.
+- Keep every generated plan, ledger, draft body and resume note under `RUN_DIR` from Step 1,
+  including files written by companions. Before an owned branch exists, use a unique OS-temp
+  directory (`mktemp -d`) and retain its absolute path for resume. Never write early notes into
+  the checkout or a shared `run-main` directory.
+- Inspect tracked-state candidates reported by `S/state.sh`. Preserve project configuration and
+  unrelated files. Report generated files and offer `git rm --cached -- <exact paths>` after
+  approval; never delete them or rewrite history. Exclude confirmed generated paths from review
+  inputs with Git pathspecs, even if tracked, and never stage them. Keep config changes in review.
 - **Evidence before assertion:** no "green/passing" without the command output; look up any claim
   about the world outside this repo before building on it, ledgered either way (`R/judgment.md`).
 - **Humanize** all human-facing text (report, PR body, UI strings > 1–2 words) at every tier,
@@ -73,7 +81,12 @@ ownership before resuming it. Inspect `git status --short` and `git worktree lis
 reuse another task's tree. Permission denied → use the in-place `git switch -c <branch>
 <START_POINT>` fallback only when the main checkout is clean and not owned by another task;
 otherwise stop and report the conflict. `cd` into the tree: all the work
-happens there, one task per tree, never two. Install deps: work the command out from that tree's
+happens there, one task per tree, never two. **Before the first generated file**, run `S/state.sh`
+in the owned checkout and retain its absolute `RUN_DIR`. It protects the existing branch directory
+in the main checkout before gates run, preserving project ignore rules. Stop if initialization
+fails. Move any early notes there without overwriting an existing ledger, then remove the empty
+OS-temp directory. Use `<RUN_DIR>/ledger.md` and `<RUN_DIR>/plans/` for judgments and plans; this
+overrides companion defaults such as `docs/superpowers/`. Install deps: work the command out from that tree's
 manifests as a **literal** (Step 5's rule) and run it as `S/gates.sh install '<install_cmd>'`.
 Board-mode (the config named one): move the card to *in progress* with the chain in `R/board.md`.
 

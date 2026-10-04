@@ -54,10 +54,10 @@ assert_numeric_issue() { # the issue number ends up in a path cleanup rm -rf's
 
 state_dir() { printf '%s/.claude/issue-to-pr' "$1"; }
 
-ensure_state_dir() { # creates it with a .gitignore whose first rule is *, never clobbers one
+ensure_state_dir() { # default ignore for the state root; preserve project-owned rules
   local dir=$1 gi="$1/.gitignore" tmp
   mkdir -p "$dir" 2>/dev/null || return 1
-  [ -s "$gi" ] && return 0
+  [ -e "$gi" ] && return 0
   tmp="$gi.tmp.$$"
   if ! printf '%s\n' \
     '# issue-to-pr keeps its runtime state here: config, gate receipts, logs.' \
@@ -72,6 +72,29 @@ ensure_state_dir() { # creates it with a .gitignore whose first rule is *, never
 branch_dir() { # root branch -> the directory one run owns (receipt, gate logs)
   # -- and -s encode dash and slash; run- keeps old branch-* state out of cleanup.
   printf '%s/run-%s' "$(state_dir "$1")" "$(printf '%s' "$2" | sed 's/-/--/g; s|/|-s|g')"
+}
+
+assert_untracked_run_dir() { # checkout branch: never overwrite or delete versioned run files
+  local dir tracked
+  dir=".claude/issue-to-pr/$(basename "$(branch_dir "$1" "$2")")"
+  tracked=$(git -C "$1" ls-files -- "$dir") ||
+    stop state-index-unreadable "issue-to-pr: cannot inspect tracked run state in $1"
+  if [ -n "$tracked" ]; then
+    warn "$tracked"
+    stop tracked-run-state "issue-to-pr: run state is tracked in $1. Offer targeted git rm --cached -- <paths> after approval; keep the working files and history."
+  fi
+}
+
+ensure_run_dir() { # root branch: protect the existing run namespace before any artifact write
+  local dir gi
+  dir=$(branch_dir "$1" "$2") gi="$dir/.gitignore"
+  assert_untracked_run_dir "$1" "$2"
+  ensure_state_dir "$(state_dir "$1")" || return 1
+  mkdir -p "$dir" 2>/dev/null || return 1
+  [ ! -L "$dir" ] && [ ! -L "$gi" ] || return 1
+  # The lower-level rule wins over parent exceptions without editing project ignore rules.
+  [ -f "$gi" ] && [ "$(tail -n 1 "$gi")" = '*' ] && return 0
+  printf '\n*\n' >>"$gi" 2>/dev/null
 }
 
 receipt_path() { printf '%s/receipt.json' "$(branch_dir "$1" "$2")"; }
@@ -89,8 +112,7 @@ json_escape() {
 receipt_write() { # root branch head_sha gates
   local dir
   dir=$(branch_dir "$1" "$2")
-  ensure_state_dir "$(state_dir "$1")" || return 1
-  mkdir -p "$dir" 2>/dev/null || return 1
+  ensure_run_dir "$1" "$2" || return 1
   printf '{"branch":"%s","head_sha":"%s","gates":"%s","created_at":"%s"}\n' \
     "$(json_escape "$2")" "$(json_escape "$3")" "$(json_escape "$4")" \
     "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >"$dir/receipt.json"

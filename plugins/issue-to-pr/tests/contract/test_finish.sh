@@ -197,6 +197,56 @@ test_cleanup_refuses_a_dirty_worktree() {
   branch_survives || fail "the branch of a dirty worktree was deleted"
 }
 
+test_cleanup_preserves_tracked_run_state_before_removing_anything() {
+  cleanup_setup pr-merged
+  local d
+  d=$(run_dir_of "$REPO" feat/issue-6-x)
+  mkdir -p "$d"
+  printf 'keep\n' >"$d/ledger.md"
+  git add .claude/issue-to-pr
+  git commit -qm ledger
+  run_script finish.sh cleanup 6 --branch feat/issue-6-x
+  assert_rc 2
+  assert_key "$OUT" STOP_REASON tracked-run-state
+  assert_eq keep "$(cat "$d/ledger.md")"
+  [ -d "$WT" ] || fail "cleanup removed the worktree before checking tracked state"
+  branch_survives || fail "cleanup removed the branch before checking tracked state"
+}
+
+test_cleanup_preserves_a_tracked_file_at_the_run_directory_path() {
+  cleanup_setup pr-merged
+  local d
+  d=$(run_dir_of "$REPO" feat/issue-6-x)
+  mkdir -p "$(dirname "$d")"
+  printf 'keep\n' >"$d"
+  git add .claude/issue-to-pr
+  git commit -qm collision
+  run_script finish.sh cleanup 6 --branch feat/issue-6-x
+  assert_rc 2
+  assert_key "$OUT" STOP_REASON tracked-run-state
+  assert_eq keep "$(cat "$d")"
+  branch_survives || fail "cleanup removed the branch despite tracked state"
+}
+
+test_cleanup_rechecks_tracked_run_state_after_switching_in_place() {
+  cleanup_setup pr-merged
+  local d
+  d=$(run_dir_of "$REPO" feat/issue-6-x)
+  mkdir -p "$d"
+  printf 'keep\n' >"$d/ledger.md"
+  git add .claude/issue-to-pr
+  git commit -qm ledger
+  git worktree remove "$WT"
+  git switch -q feat/issue-6-x
+  git symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main
+  run_script finish.sh cleanup 6 --branch feat/issue-6-x
+  assert_rc 2
+  assert_key "$OUT" STOP_REASON tracked-run-state
+  assert_eq keep "$(cat "$d/ledger.md")"
+  assert_eq '' "$(git status --short)"
+  branch_survives || fail "cleanup deleted the branch before checking the new index"
+}
+
 test_cleanup_stops_when_worktree_listing_fails() {
   cleanup_setup pr-merged
   write_receipt "$REPO" feat/issue-6-x "$SHA_OK"

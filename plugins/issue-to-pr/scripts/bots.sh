@@ -96,7 +96,7 @@ cmd_wait() {
   root=$(repo_root)
   [ -n "$root" ] || degrade not-a-git-repo "bots: not inside a git repository"
   state="$(branch_dir "$root" "$pr_branch")/bots"
-  if ! ensure_state_dir "$(state_dir "$root")" || ! mkdir -p "${state%/*}" 2>/dev/null; then
+  if ! ensure_run_dir "$root" "$pr_branch"; then
     degrade state-unwritable "bots: cannot write $state"
   fi
   since=$(now)
