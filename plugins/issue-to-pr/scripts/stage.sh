@@ -19,9 +19,9 @@ while [ "$#" -gt 0 ]; do
     *) degrade bad-arguments "stage: unknown option $1; put literal paths after --" ;;
   esac
 done
-[ "$#" -gt 0 ] && [ -r "$plan" ] || degrade bad-arguments 'stage: supply --plan <path-list> and -- <files...>'
+[[ "$#" -gt 0 && -r "$plan" ]] || degrade bad-arguments 'stage: supply --plan <path-list> and -- <files...>'
 if [ "$action" = commit ]; then
-  [ -n "${message//[[:space:]]/}" ] && [[ "$message" != *$'\n'* && "$message" != *$'\r'* ]] ||
+  [[ -n "${message//[[:space:]]/}" && "$message" != *$'\n'* && "$message" != *$'\r'* ]] ||
     degrade bad-arguments 'stage: commit needs a one-line --message subject'
 fi
 paths=("$@") planned=() reason_paths=() reason_texts=()
@@ -61,7 +61,7 @@ for path in "${paths[@]}"; do
   case "$path" in .claude/issue-to-pr/run-* | .claude/issue-to-pr/branch-*)
     stop generated-run-state "stage: generated run state cannot be committed: $path" ;;
   esac
-  [ ! -d "$path" ] || degrade directory-path "stage: declare each file, not a directory: $path"
+  [[ ! -d "$path" || -L "$path" ]] || degrade directory-path "stage: declare each file, not a directory: $path"
   if [ ! -e "$path" ] && [ ! -L "$path" ]; then
     object_type=$(git cat-file -t ":$path" 2>/dev/null || git cat-file -t "HEAD:$path" 2>/dev/null) ||
       degrade missing-path "stage: file does not exist and is not tracked: $path"
@@ -81,7 +81,7 @@ while IFS= read -r row; do
   [[ "$row" == *$'\t'* ]] || degrade invalid-reason 'stage: reasons must be path<TAB>one-line explanation'
   path=${row%%$'\t'*} reason=${row#*$'\t'}
   validate_path "$path"
-  [[ "$reason" != *$'\t'* && "$reason" != *$'\r'* ]] && [ -n "${reason//[[:space:]]/}" ] ||
+  [[ "$reason" != *$'\t'* && "$reason" != *$'\r'* && -n "${reason//[[:space:]]/}" ]] ||
     degrade invalid-reason "stage: blank or multiline reason for $path"
   has_path "$path" "${paths[@]}" || degrade unknown-reason-path "stage: reason names an undeclared file: $path"
   has_path "$path" "${reason_paths[@]}" && degrade duplicate-reason "stage: duplicate reason for $path"

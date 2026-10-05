@@ -83,6 +83,27 @@ test_stage_deleted_binaries_still_need_a_reason_with_zero_committed_bytes() {
   assert_contains "$(stage_report)" '| binaries | 1 | 0 |'
 }
 
+test_stage_supports_directory_symlinks_as_exact_files() {
+  stage_repo
+  mkdir target
+  printf 'unrelated\n' >target/child.txt
+  if ! MSYS=winsymlinks:nativestrict ln -s target link || [ ! -L link ]; then
+    printf 'SKIP: native symlink creation is unavailable\n'
+    return 0
+  fi
+  git config core.symlinks true
+  printf 'link\n' >"$PLAN"
+  run_script stage.sh review --plan "$PLAN" -- link
+  assert_rc 0
+  assert_eq 120000 "$(git ls-files --stage -- link | cut -d' ' -f1)"
+  assert_eq target "$(git cat-file blob :link)"
+  run_script stage.sh commit --plan "$PLAN" --message 'feat: add directory link' -- link
+  assert_rc 0
+  assert_eq target "$(git show HEAD:link)"
+  assert_eq '' "$(git ls-files -- target)"
+  assert_eq unrelated "$(cat target/child.txt)"
+}
+
 test_stage_accepts_crlf_manifests_but_rejects_embedded_cr() {
   stage_repo
   printf '\0bytes' >blob

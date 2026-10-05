@@ -120,6 +120,7 @@ line endings are accepted. It supplies
 the files to commit separately as literal arguments after `--`; directories and traversal are
 refused. Paths may contain spaces, leading dashes or glob characters, but not CR, LF or tabs.
 Renames declare both the deleted path and the added path.
+Directory symlinks stage the link itself as a file.
 
 `stage.sh review --plan <file> --reasons <file> -- <paths...>` stages each declared file in full.
 `stage.sh commit --plan <file> --reasons <file> --message '<subject>' -- <paths...>` checks the
