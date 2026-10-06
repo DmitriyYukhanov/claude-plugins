@@ -58,7 +58,11 @@ merges on its own, unless the issue already stopped once or the diff touches `hu
   the report and PR body.
 - **Gates.** Design hardening (cross-review or a multi-agent fallback), tests green
   (typecheck + tests, plus visual checks for UI work), and a code-review loop that runs
-  until clean; the review level escalates automatically when passes keep finding real bugs.
+  until clean within the tier's pass cap. Review depth escalates when a pass confirms two or
+  more bugs. If a later pass finds a positive bug count at least as high as the previous one,
+  the run simplifies the affected code before patching and weighs deletion for each open fix.
+  Every confirmed fix, including bot findings, starts with a failing regression test. The
+  report and PR body name any fix without one and explain why.
   Once the diff settles, a last pass builds the change and drives it at its own surface.
 - **Review bots.** After the PR opens, the run waits up to 20 minutes for CodeRabbit and, on
   standard and complex runs, asks Codex for a review with `@codex review`. It works out who is
