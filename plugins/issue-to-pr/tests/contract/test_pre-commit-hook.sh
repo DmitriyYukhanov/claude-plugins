@@ -314,3 +314,17 @@ test_ci_checks_changed_entries_without_blocking_unrelated_baseline_drift() {
   if out=$(bash "$(hook_src)" --ci main HEAD 2>&1); then fail "CI allowed new drift: $out"; fi
   assert_contains "$out" 'plugin.json=9.9.9, marketplace.json=9.9.7'
 }
+
+
+test_ci_accepts_a_valid_bump_when_manifest_paths_are_quoted() {
+  local out
+  fixture_repo "Does the original thing."
+  git switch -q -c feat/work
+  stage_bump "Does the NEW thing." "Does the NEW thing."
+  git mv plugins/foo plugins/café
+  sed -i 's/"name": "foo"/"name": "café"/' plugins/café/.claude-plugin/plugin.json .claude-plugin/marketplace.json
+  printf '\n### café\n' >> README.md
+  git add plugins/café/.claude-plugin/plugin.json .claude-plugin/marketplace.json README.md
+  git commit -q --no-verify -m quoted-manifest
+  out=$(bash "$(hook_src)" --ci main HEAD 2>&1) || fail "CI rejected a valid quoted-path bump: $out"
+}

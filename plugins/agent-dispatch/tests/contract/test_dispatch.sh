@@ -1042,3 +1042,13 @@ test_done_after_launch_clears_running_but_stale_done_does_not() {
   assert_key "$OUT" OUTCOME agent:failed "a previous cycle's done must not hide a new crash"
   assert_contains "$(cat "$FIX/posted-5")" 'state=failed pr=12'
 }
+
+
+test_an_incomplete_done_cannot_hide_a_run_failure() {
+  setup_env
+  open_issue 4 agent
+  export FAKE_CLI_MODE=flip:agent:running FAKE_CLI_COMMENTS='101\tocto\t<!-- issue-to-pr state=done -->\n'
+  dispatch
+  assert_key "$OUT" OUTCOME agent:failed "only a complete done proves completion"
+  assert_contains "$(cat "$FIX/posted-4")" 'state=failed'
+}

@@ -44,15 +44,23 @@ else
   esac
 fi
 
-# Collect unique plugins touched by the candidate snapshot.
-changed_plugins=()
+has_path() {
+  local want=$1 path
+  shift
+  for path in "$@"; do [ "$path" != "$want" ] || return 0; done
+  return 1
+}
+
+# Keep literal paths through every consumer, including C-quoted manifest names.
+changed_plugins=() staged_paths=() changed_plugin_manifests=()
 while IFS= read -r -d '' file; do
+  staged_paths+=("$file")
+  if [[ "$file" =~ ^plugins/[^/]+/\.claude-plugin/plugin\.json$ ]]; then
+    changed_plugin_manifests+=("$file")
+  fi
   if [[ "$file" =~ ^plugins/([^/]+)/ ]]; then
     plugin_name="${BASH_REMATCH[1]}"
-    # Deduplicate
-    if [[ " ${changed_plugins[*]:-} " != *" ${plugin_name} "* ]]; then
-      changed_plugins+=("$plugin_name")
-    fi
+    has_path "$plugin_name" "${changed_plugins[@]:-}" || changed_plugins+=("$plugin_name")
   fi
 done < <(git diff "${diff_args[@]}" --name-only -z)
 
@@ -75,7 +83,7 @@ if [ -n "$release_branch" ] && [ ${#changed_plugins[@]} -gt 0 ]; then
     fi
 
     # Check if plugin.json is in the staged files
-    if ! echo "$staged_files" | grep -qx "$plugin_json"; then
+    if ! has_path "$plugin_json" "${staged_paths[@]}"; then
       version_errors+=("$plugin")
       continue
     fi
@@ -106,17 +114,21 @@ marketplace_entry() {
 sync_errors=()
 old_marketplace_content=''
 marketplace_content=$(git show "${new_ref}:${MARKETPLACE}" 2>/dev/null || echo "")
-plugin_manifests=$(echo "$staged_files" | grep -E '^plugins/[^/]+/\.claude-plugin/plugin\.json$' || true)
-if echo "$staged_files" | grep -qx "$MARKETPLACE"; then
+plugin_manifests=("${changed_plugin_manifests[@]:-}")
+if has_path "$MARKETPLACE" "${staged_paths[@]}"; then
   old_marketplace_content=$(git show "${old_ref}:${MARKETPLACE}" 2>/dev/null || echo "")
-  candidate_files=(ls-files)
-  [ -z "$new_ref" ] || candidate_files=(ls-tree -r --name-only "$new_ref")
-  plugin_manifests=$(git "${candidate_files[@]}" -- plugins | grep -E '^plugins/[^/]+/\.claude-plugin/plugin\.json$' || true)
+  candidate_files=(ls-files -z)
+  [ -z "$new_ref" ] || candidate_files=(ls-tree -r --name-only -z "$new_ref")
+  plugin_manifests=()
+  while IFS= read -r -d '' file; do
+    if [[ "$file" =~ ^plugins/[^/]+/\.claude-plugin/plugin\.json$ ]]; then plugin_manifests+=("$file"); fi
+  done < <(git "${candidate_files[@]}" -- plugins)
 fi
-for plugin_json in $plugin_manifests; do
+for plugin_json in "${plugin_manifests[@]:-}"; do
+  [ -n "$plugin_json" ] || continue
   plugin_name=${plugin_json#plugins/}; plugin_name=${plugin_name%%/*}
   # Unchanged listings do not make this PR responsible for unrelated baseline drift.
-  if ! echo "$staged_files" | grep -qx "$plugin_json" && [ -n "$marketplace_content" ] &&
+  if ! has_path "$plugin_json" "${staged_paths[@]}" && [ -n "$marketplace_content" ] &&
     [ "$(echo "$old_marketplace_content" | marketplace_entry "$plugin_name")" = "$(echo "$marketplace_content" | marketplace_entry "$plugin_name")" ]; then
     continue
   fi
@@ -200,7 +212,8 @@ done
 # ── Check 3: CHANGELOG.md updated when version bumps ──────────────────
 
 changelog_errors=()
-for plugin_json in $(echo "$staged_files" | grep -E '^plugins/[^/]+/\.claude-plugin/plugin\.json$' || true); do
+for plugin_json in "${changed_plugin_manifests[@]:-}"; do
+  [ -n "$plugin_json" ] || continue
   [ -n "$release_branch" ] || break
   plugin_name=${plugin_json#plugins/}; plugin_name=${plugin_name%%/*}
   changelog="plugins/${plugin_name}/CHANGELOG.md"
@@ -219,7 +232,7 @@ for plugin_json in $(echo "$staged_files" | grep -E '^plugins/[^/]+/\.claude-plu
   fi
 
   # CHANGELOG.md must be staged
-  if ! echo "$staged_files" | grep -qx "$changelog"; then
+  if ! has_path "$changelog" "${staged_paths[@]}"; then
     changelog_errors+=("${plugin_name} (v${new_version}): CHANGELOG.md not staged")
     continue
   fi
@@ -240,7 +253,7 @@ for plugin in "${changed_plugins[@]}"; do
   plugin_json="plugins/${plugin}/.claude-plugin/plugin.json"
 
   # Detect NEW plugins: plugin.json is staged AND didn't exist in HEAD
-  if echo "$staged_files" | grep -qx "$plugin_json"; then
+  if has_path "$plugin_json" "${staged_paths[@]}"; then
     if ! git show "${old_ref}:${plugin_json}" &>/dev/null; then
       # This is a brand-new plugin
 
@@ -268,13 +281,13 @@ done
 shellcheck_errors=()
 if command -v shellcheck >/dev/null 2>&1; then
   sc_files=()
-  while IFS= read -r f; do
+  for f in "${staged_paths[@]}"; do
     case "$f" in
       plugins/*/scripts/*.sh | plugins/*/tests/fake-gh/gh)
         [ -f "$f" ] && sc_files+=("$f")
         ;;
     esac
-  done <<< "$staged_files"
+  done
   if [ ${#sc_files[@]} -gt 0 ]; then
     if ! sc_out=$(shellcheck -x -e SC1091 "${sc_files[@]}" 2>&1); then
       shellcheck_errors+=("$sc_out")

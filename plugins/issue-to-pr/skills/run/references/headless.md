@@ -20,6 +20,7 @@ space-separated:
 ```
 
 - `state` is `waiting`, `review`, `failed` or `done`. The first three set their label; `done` clears `agent:running` without adding a label.
+- A `done` marker requires `step=9` and a positive numeric `pr`; incomplete completion markers are malformed.
 - `step`, `tier`, `pr`, `head`, each as far as it exists; leave out a key that has no value yet.
   `head` is the full 40-character SHA of the PR head the report covered.
 - `issue-read`, `pr-read`: the highest comment id, any author, on that thread at your last
@@ -91,11 +92,11 @@ Every headless run starts from GitHub. Step 0 finishes its own work first (the c
 and `<START_POINT>`, the gate commands, and the claim), and only then reads the issue's comments
 and finds the current state. Read the latest `agent` label event from
 `gh api repos/{owner}/{repo}/issues/<N>/events --paginate`, including its actor and `created_at`;
-the dispatcher may already have removed the label. A completed cycle is the current `done` or
-the merged PR found by the row below. A current `waiting` or `review` owns only its named PR:
+the dispatcher may already have removed the label. Only a valid current `done` proves completion.
+A current `waiting` or `review` owns only its named PR:
 when that PR is absent or unmerged, resume that state and ignore all earlier completed cycles.
-Current `failed step=9` keeps its recovery
-blocker and never takes the fresh-queue row. Otherwise, use the old PR's `mergedAt` as completion
+Any merged PR without `done` keeps its Step 9 recovery blocker, before the fresh-queue row.
+With `done`, use the old PR's `mergedAt` as completion
 when it is known, falling back to the `done` comment's `created_at`. This includes a queue placed
 after merge while cleanup or `after_merge` is still running.
 An open issue with an owner-applied queue strictly later than completion starts fresh from Step 1,
@@ -105,9 +106,9 @@ history is a failed stop, not proof of a fresh queue. The first matching row dec
 
 | Current state | What you find | What you do |
 |---|---|---|
+| not `done` | a PR for this issue that `gh pr view <pr> --json state,mergedAt` calls `MERGED`: the state's `pr`, else, on a closed issue, one in `gh issue view <N> --json closedByPullRequestsReferences`, else `gh pr list --head <branch> --state merged` for the branch of the registered `issue-<N>` worktree | no rebuild, the merge already happened. Current state already `failed step=9`: restore `agent:failed`, post nothing. Without `done`, completion is unproven even when the worktree and branch are gone; never rerun a possibly completed deploy. Otherwise: a `state=failed step=9 pr=<pr>` comment naming what Step 9 left undone, flip to `agent:failed`. End the turn |
 | any | the fresh owner queue described above | fresh run from Step 1; preserve any unfinished worktree, and use a new task branch rather than an old merged branch |
 | `done` | no fresh owner queue | remove `agent:running`, post nothing, end the turn |
-| any | a PR for this issue that `gh pr view <pr> --json state` calls `MERGED`: the state's `pr`, else, on a closed issue, one in `gh issue view <N> --json closedByPullRequestsReferences`, else `gh pr list --head <branch> --state merged` for the branch of the registered `issue-<N>` worktree | no rebuild, the merge already happened. Current state already `failed step=9`: restore `agent:failed`, post nothing. Without `done`, completion is unproven even when the worktree and branch are gone; never rerun a possibly completed deploy. Otherwise: a `state=failed step=9 pr=<pr>` comment naming what Step 9 left undone, flip to `agent:failed`. End the turn |
 | any | the issue is closed and no PR for it merged | remove `agent:running` (`gh issue edit <N> --remove-label agent:running`), post nothing, end the turn |
 | none or `failed` | — | fresh run from Step 1; after `failed`, Step 1 reuses the registered worktree, Step 7 the open PR, and the run never self-merges |
 | `waiting` or `review` | no worktree Step 1 would reuse: registered, on this issue's branch, past Step 1's ownership check | a `state=failed` comment naming what is missing, flip to `agent:failed`, end the turn |
