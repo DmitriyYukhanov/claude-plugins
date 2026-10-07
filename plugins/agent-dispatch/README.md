@@ -56,11 +56,14 @@ notification hook and shows how to configure it.
   until you delete it. Create it yourself to stop dispatching: disabling or uninstalling the plugin
   leaves the scheduled tick running.
 - `lock/`: the run in progress. A tick that died leaves it behind; the next tick stops what is
-  left of that run and marks the issue failed.
+  left of that run and marks the issue failed. Process records include the boot identity, so
+  recovery ignores IDs saved before a restart. An uncertain GitHub response keeps the lock for
+  the next tick to reconcile, without repeating an acknowledged failure comment.
 
 ## Limits
 
-One run at a time, on one machine. A run is stopped after four hours. On Windows, install
+One run at a time, on one machine. A run is stopped after four hours of polling; laptop sleep
+and wall-clock changes do not consume extra polling intervals. On Windows, install
 PowerShell with `winget install --id Microsoft.PowerShell -e --source winget --installer-type wix
 --scope machine` rather than from the Store: processes the Store build starts cannot be stopped
 with the rest of the run. Setup offers to run it for you; the Store package can stay once the
@@ -69,3 +72,9 @@ object the launcher needs to hold a run, no run starts at all, and the tick repo
 failure. On macOS and Linux a process that detaches into its own session escapes the stop; none
 of the tested CLIs does. The check for edits runs when the tick picks the issue, so an edit that
 lands in the few seconds before the run reads the issue still gets through.
+
+Boot checks cover full restarts. They do not distinguish reused IDs within one boot or Windows
+Fast Startup, which preserves the kernel. Recovery preserves older records without a readable
+boot identity; check that their processes have stopped before removing those records.
+An applied comment POST whose response is lost, or a crash before its receipt is written, can
+still repeat that comment on recovery.

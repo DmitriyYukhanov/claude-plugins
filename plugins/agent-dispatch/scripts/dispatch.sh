@@ -17,6 +17,7 @@ GRACE_SECONDS=10
 NOTIFY_SECONDS=30 # the owner's hook sends one message; past this it is stopped
 RUN_LABELS="agent,agent:waiting,agent:review,agent:failed"
 OWNER= # Ruling R2: recover() may reconcile before main sets this; reconcile resolves it itself.
+BOOT_ID=
 PICK_WHY='' PICK_IREAD='' PICK_PREAD='' # a reply pick's cursors; empty when recover() reconciles
 
 JQ_ISSUES='.[] | [.number, ([.labels[].name] | join(","))] | @tsv'
@@ -39,7 +40,32 @@ on_windows() {
   case "$(uname -s)" in MINGW* | MSYS* | CYGWIN*) return 0 ;; esac
   return 1
 }
-now() { date +%s; }
+boot_id() {
+  case "$(uname -s)" in
+    Linux) cat /proc/sys/kernel/random/boot_id ;;
+    Darwin) /usr/sbin/sysctl -n kern.bootsessionuuid ;;
+    MINGW* | MSYS* | CYGWIN*)
+      powershell.exe -NoProfile -Command '(Get-CimInstance Win32_OperatingSystem -ErrorAction Stop).LastBootUpTime.ToUniversalTime().Ticks' | tr -d '\r'
+      ;;
+    *) return 1 ;;
+  esac
+}
+
+valid_boot() {
+  [[ "$1" =~ ^[0-9]+$ || "$1" =~ ^[[:xdigit:]]{8}-[[:xdigit:]]{4}-[[:xdigit:]]{4}-[[:xdigit:]]{4}-[[:xdigit:]]{12}$ ]]
+}
+
+load_boot() {
+  [ -n "$BOOT_ID" ] || BOOT_ID=$(boot_id) || return 1
+  valid_boot "$BOOT_ID"
+}
+
+record_boot() { # directory -> 0 current boot, 1 earlier boot, 2 unknown
+  local saved
+  saved=$(cat "$1/boot" 2>/dev/null) || return 2
+  valid_boot "$saved" || return 2
+  [ "$saved" = "$BOOT_ID" ] || return 1
+}
 trim() {
   local s=${1%$'\r'}
   s=${s#"${s%%[![:space:]]*}"}
@@ -229,6 +255,7 @@ write_run_script() { # path host issue tier log -> $LOCK/run.sh
 
 launch() { # [dir, default $LOCK] runs dir/run.sh -> RUN_PID (to wait on); the id that stops it goes to dir/run
   local d=${1:-$LOCK}
+  load_boot && printf '%s\n' "$BOOT_ID" >"$d/boot" || return 96
   : >"$d/launched"
   if on_windows; then
     # job.ps1 holds the run in a job object: stopping it stops every process the run started,
@@ -312,7 +339,7 @@ notify() { # waiting|review|failed repo issue detail -> NOTIFY=sent|failed|timeo
     done
     printf '</dev/null >>%q 2>&1\n' "$AD_HOME/logs/notify.log"
   } >"$d/run.sh"
-  launch "$d"
+  if ! launch "$d"; then say "NOTIFY=failed"; return 0; fi
   while kill -0 "$RUN_PID" 2>/dev/null; do
     if [ "$waited" -ge "$NOTIFY_SECONDS" ]; then
       stop_hook
@@ -335,8 +362,15 @@ notify() { # waiting|review|failed repo issue detail -> NOTIFY=sent|failed|timeo
 }
 
 stop_hook() { # stop the hook before reusing its directory, including a Windows launcher still starting
-  local d="$AD_HOME/.notify" id pid
+  local d="$AD_HOME/.notify" id pid boot_rc
   [ -d "$d" ] || return 0
+  load_boot || return 1
+  record_boot "$d"
+  boot_rc=$?
+  if [ "$boot_rc" -eq 1 ]; then rm -rf "$d"; return 0; fi
+  if [ "$boot_rc" -eq 2 ] && { [ -s "$d/run" ] || [ -s "$d/pid" ] || [ -e "$d/launched" ]; }; then
+    return 1 # unknown legacy process identity must not authorize a signal
+  fi
   pid=$(trim "$(cat "$d/pid" 2>/dev/null)")
   id=$(trim "$(cat "$d/run" 2>/dev/null)")
   if [ -n "$id" ]; then
@@ -357,14 +391,20 @@ stop_hook() { # stop the hook before reusing its directory, including a Windows 
 
 # shellcheck disable=SC2016,SC2088 # the backticks are Markdown; the tilde is shown, not expanded
 reconcile() { # repo issue cause log cli-error(0|1 CLI|2 launcher) -> OUTCOME [PAUSED] [NOTIFY]; rc 1 when GitHub failed
-  local labels body="$AD_HOME/.comment.md" shown=$4 comments prmark='' cause=$3 from=agent:running clierr=$5 why='' state
+  local labels body="$AD_HOME/.comment.md" shown=$4 comments prmark='' cause=$3 from=agent:running clierr=$5 why='' state pending
+  pending=$(cat "$LOCK/failure-from" 2>/dev/null)
+  case "$pending" in agent:running | agent:waiting | agent:review)
+    from=$pending
+    cause=$(cat "$LOCK/cause") || return 1
+    clierr=$(cat "$LOCK/clierr") || return 1
+    ;; *) pending='' ;; esac
   if [ -z "$OWNER" ]; then # Ruling R2: recover() may call us before main() resolves OWNER
     OWNER=$(gh api user --jq .login 2>/dev/null | tr -d '\r')
     [ -n "$OWNER" ] || return 1
   fi
   labels=$(gh issue view "$2" -R "$1" --json labels --jq '.labels[].name' 2>/dev/null) || return 1
   labels=$(printf '%s\n' "$labels" | tr -d '\r')
-  if ! printf '%s\n' "$labels" | grep -qx 'agent:running'; then
+  if [ -z "$pending" ] && ! printf '%s\n' "$labels" | grep -qx 'agent:running'; then
     # A reply run that parked again at the cursors it started from, with the reply that started it
     # still above them, would be picked again every tick: that one fails instead.
     from=$(printf '%s\n' "$labels" | grep -x -E 'agent:(waiting|review)' | head -1)
@@ -383,7 +423,7 @@ reconcile() { # repo issue cause log cli-error(0|1 CLI|2 launcher) -> OUTCOME [P
   case "$state" in
     '' | *[!0-9]*) ;;
     *) if current_state "$comments" && [ "$M_STATE" = "done" ] && [ "$STATE_ID" -gt "$state" ]; then
-      gh issue edit "$2" -R "$1" --remove-label agent:running >/dev/null 2>&1 || return 1
+      gh issue edit "$2" -R "$1" --remove-label agent:running,agent:waiting,agent:review,agent:failed >/dev/null 2>&1 || return 1
       say 'OUTCOME=done'
       return 0
     fi ;;
@@ -407,17 +447,28 @@ reconcile() { # repo issue cause log cli-error(0|1 CLI|2 launcher) -> OUTCOME [P
     fi
     printf '\nTo retry, label the issue `agent` again.\n\n<!-- issue-to-pr state=failed%s -->\n' "$prmark"
   } >"$body"
-  gh issue comment "$2" -R "$1" --body-file "$body" >/dev/null 2>&1 || return 1
-  gh issue edit "$2" -R "$1" --add-label agent:failed --remove-label "$from" >/dev/null 2>&1 || return 1
+  printf '%s\n' "$cause" >"$LOCK/cause" || return 1
+  printf '%s\n' "$clierr" >"$LOCK/clierr" || return 1
+  printf '%s\n' "$from" >"$LOCK/failure-from" || return 1
+  if [ ! -f "$LOCK/failure-posted" ]; then
+    gh issue comment "$2" -R "$1" --body-file "$body" >/dev/null 2>&1 || return 1
+    : >"$LOCK/failure-posted" || return 1
+  fi
+  gh issue edit "$2" -R "$1" --add-label agent:failed --remove-label agent:running,agent:waiting,agent:review >/dev/null 2>&1 || return 1
   say "OUTCOME=agent:failed"
   notify failed "$1" "$2" "$cause.${why:+ Dispatching is paused until you delete ~/.agent-dispatch/paused.}"
 }
 
 recover() { # a lock at tick start: a live tick (busy), or a dead one's run to stop and reconcile
   [ -d "$LOCK" ] || return 0
-  local tick repo n run cause clierr
+  local tick repo n run cause clierr boot_rc
+  record_boot "$LOCK"
+  boot_rc=$?
+  if [ "$boot_rc" -eq 2 ] && { [ -s "$LOCK/tick" ] || [ -s "$LOCK/run" ] || [ -s "$LOCK/pid" ] || [ -e "$LOCK/launched" ]; }; then
+    die recover "the lock has no readable boot identity; verify its processes before removing $LOCK"
+  fi
   tick=$(cat "$LOCK/tick" 2>/dev/null)
-  if [ -n "$tick" ] && kill -0 "$tick" 2>/dev/null; then
+  if [ "$boot_rc" -eq 0 ] && [ -n "$tick" ] && kill -0 "$tick" 2>/dev/null; then
     say "TICK=busy"
     exit 0
   fi
@@ -425,10 +476,10 @@ recover() { # a lock at tick start: a live tick (busy), or a dead one's run to s
   n=$(cat "$LOCK/issue" 2>/dev/null)
   run=$(run_id)
   stop_hook # a notification the dead tick left in flight
-  if [ -n "$run" ]; then
+  if [ "$boot_rc" -eq 0 ] && [ -n "$run" ]; then
     stop_run "$run"
     gone "$run" || die recover "the run of a dead tick ($repo#$n, id $run) is still alive; the next tick retries"
-  elif [ -e "$LOCK/launched" ] && [ -z "$(find "$LOCK/launched" -mmin +1 2>/dev/null)" ]; then
+  elif [ "$boot_rc" -eq 0 ] && [ -e "$LOCK/launched" ] && [ -z "$(find "$LOCK/launched" -mmin +1 2>/dev/null)" ]; then
     # job.ps1 records its pid before it starts bash, so a launcher silent for over a minute never
     # ran the CLI: past that, the lock is reconciled like one with no run.
     die recover "the launcher of a dead tick's run ($repo#$n) has not recorded its id yet; the next tick retries"
@@ -446,39 +497,53 @@ recover() { # a lock at tick start: a live tick (busy), or a dead one's run to s
 
 run_issue() { # the picked issue: lock, flip, launch, wait, reconcile
   local repo=${CONF_REPO[$PICK_I]} path=${CONF_PATH[$PICK_I]} host=${CONF_HOST[$PICK_I]}
-  local tier=${CONF_TIER[$PICK_I]} n=$PICK_N log rc cause='' clierr=0 deadline waited=0 id comments
+  local tier=${CONF_TIER[$PICK_I]} n=$PICK_N log rc cause='' clierr=0 active=0 waited=0 id comments stage
   say "ISSUE=$repo#$n"
   say "PICK=$PICK_WHY"
-  mkdir "$LOCK" 2>/dev/null || {
+  load_boot || die boot "could not read the machine's boot identity"
+  stage=$(mktemp -d "$AD_HOME/.claim.XXXXXX") || die lock "could not prepare the lock"
+  log="$AD_HOME/logs/${repo//\//_}_${n}_$(date -u +%Y%m%dT%H%M%SZ).log"
+  if ! {
+    mkdir "$stage/lock" &&
+    printf '%s\n' "$BOOT_ID" >"$stage/lock/boot" &&
+    printf '%s\n' "$$" >"$stage/lock/tick" &&
+    printf '%s\n' "$repo" >"$stage/lock/repo" &&
+    printf '%s\n' "$n" >"$stage/lock/issue" &&
+    printf '%s\n' "$log" >"$stage/lock/log"
+  }; then
+    rm -rf "$stage"
+    die lock "could not prepare the lock's owner and recovery records"
+  fi
+  # A fixed basename into the parent rejects an existing nonempty lock instead of nesting.
+  if ! mv "$stage/lock" "$AD_HOME/" 2>/dev/null; then
+    rm -rf "$stage"
     say "TICK=busy"
     exit 0
-  }
-  log="$AD_HOME/logs/${repo//\//_}_${n}_$(date -u +%Y%m%dT%H%M%SZ).log"
-  printf '%s\n' "$$" >"$LOCK/tick"
-  printf '%s\n' "$repo" >"$LOCK/repo"
-  printf '%s\n' "$n" >"$LOCK/issue"
-  printf '%s\n' "$log" >"$LOCK/log"
+  fi
+  rmdir "$stage"
   comments=$(gh api "repos/$repo/issues/$n/comments" --paginate --jq "$MARKER_JQ" 2>/dev/null) ||
     die github "could not read the state before launching $repo#$n; the next tick retries"
   STATE_ID=0
   current_state "$comments" || true
   printf '%s\n' "$STATE_ID" >"$LOCK/state-id"
   if ! gh issue edit "$n" -R "$repo" --add-label agent:running --remove-label "$RUN_LABELS" >/dev/null 2>&1; then
-    rm -rf "$LOCK"
+    printf 'the running-label edit failed before anything was launched\n' >"$LOCK/cause"
+    printf '0\n' >"$LOCK/clierr"
+    printf 'agent:running\n' >"$LOCK/failure-from"
     die flip "could not label $repo#$n agent:running; nothing was launched"
   fi
   write_run_script "$path" "$host" "$n" "$tier" "$log"
-  deadline=$(($(now) + DEADLINE_SECONDS))
-  launch
+  launch || die launch "could not record the run's boot identity; nothing was launched"
   if on_windows; then say "LAUNCHER=job"; else say "LAUNCHER=group"; fi
   while kill -0 "$RUN_PID" 2>/dev/null; do
-    if [ "$(now)" -ge "$deadline" ]; then
+    if [ "$active" -ge "$DEADLINE_SECONDS" ]; then
       stop_run "$(run_id)"
       cause="it ran past the $((DEADLINE_SECONDS / 3600))-hour deadline"
       printf '%s\n' "$cause" >"$LOCK/cause" # for recovery, if the stop does not take
       break
     fi
     sleep "$POLL_SECONDS"
+    active=$((active + POLL_SECONDS))
   done
   while kill -0 "$RUN_PID" 2>/dev/null; do # a stop that did not take: never block on a bare wait
     [ "$waited" -lt $((GRACE_SECONDS + 20)) ] ||
@@ -508,6 +573,7 @@ run_issue() { # the picked issue: lock, flip, launch, wait, reconcile
 
 main() {
   mkdir -p "$AD_HOME/logs"
+  load_boot || die boot "could not read the machine's boot identity"
   recover
   if [ -e "$AD_HOME/paused" ]; then
     say "TICK=paused"

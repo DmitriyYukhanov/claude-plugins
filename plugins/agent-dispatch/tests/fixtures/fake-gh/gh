@@ -48,19 +48,37 @@ case "${1:-} ${2:-}" in
     esac
     ;;
   "repo view") serve repo ;;
-  "issue list") serve issues ;;
+  "issue list")
+    [ -e "$F/fail-issues" ] && exit 1
+    while IFS=$'\t' read -r n labels; do
+      [ -n "$n" ] || continue
+      if [ -f "$F/labels-$n" ]; then labels=$(paste -sd, "$F/labels-$n"); fi
+      case ",$labels," in
+        *,agent,* | *,agent:waiting,* | *,agent:review,*) printf '%s\t%s\n' "$n" "$labels" ;;
+      esac
+    done <"$F/issues" 2>/dev/null
+    ;;
   "issue view") serve "labels-$3" ;;
   "issue comment")
     [ -e "$F/fail-comment" ] && exit 1
-    cat "$(value_of --body-file "$@")" >>"$F/posted-$3"
+    body=$(cat "$(value_of --body-file "$@")")
+    printf '%s\n' "$body" >>"$F/posted-$3"
+    comment_id=$(cat "$F/comment-id" 2>/dev/null || printf '1000')
+    comment_id=$((comment_id + 1))
+    printf '%s\n' "$comment_id" >"$F/comment-id"
+    marker=$(printf '%s\n' "$body" | grep '<!-- issue-to-pr state=' | tail -1)
+    printf '%s\t%s\t%s\n' "$comment_id" "$(cat "$F/user")" "$marker" >>"$F/comments-$3"
     ;;
   "issue edit")
     [ -e "$F/fail-edit" ] && exit 1
     add=$(value_of --add-label "$@")
-    { printf '%s\n' "$add"; value_of --remove-label "$@" | tr ',' '\n'; } | grep . >"$F/.drop"
+    [ -e "$F/fail-edit-$add" ] && exit 1
+    { [ -e "$F/fail-remove-only-$add" ] || printf '%s\n' "$add"; value_of --remove-label "$@" | tr ',' '\n'; } | grep . >"$F/.drop"
     touch "$F/labels-$3"
-    { grep -v -x -F -f "$F/.drop" "$F/labels-$3"; printf '%s\n' "$add"; } | grep . >"$F/.labels"
+    { grep -v -x -F -f "$F/.drop" "$F/labels-$3"; [ -e "$F/fail-remove-only-$add" ] || printf '%s\n' "$add"; } | grep . >"$F/.labels"
     mv "$F/.labels" "$F/labels-$3"
+    [ -e "$F/fail-remove-only-$add" ] && exit 1
+    [ -e "$F/fail-after-edit-$add" ] && exit 1
     ;;
 esac
 exit 0

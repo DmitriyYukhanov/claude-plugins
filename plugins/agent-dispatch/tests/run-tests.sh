@@ -27,16 +27,23 @@ fi
 printf '== contract tests ==\n'
 total=0 fail=0 failures=
 for tf in "$HERE"/contract/test_*.sh; do
-  for fn in $("$BASH" --norc -c 'source "$1"; source "$2"; declare -F | awk "{print \$3}" | grep "^test_"' \
-    _ "$ASSERT_LIB" "$tf" 2>/dev/null); do
+  if ! functions=$("$BASH" --norc -c 'source "$1" || exit; source "$2" || exit; declare -F | awk "{print \$3}" | grep "^test_"' \
+    _ "$ASSERT_LIB" "$tf"); then
+    fail=$((fail + 1))
+    failures="$failures
+  ${tf##*/} :: discovery"
+    printf '  FAIL %s :: discovery\n' "${tf##*/}"
+    continue
+  fi
+  for fn in $functions; do
     total=$((total + 1))
     if out=$("$BASH" --norc -c '
         set -uo pipefail
         TEST_TMPDIR=$(mktemp -d)
         export TEST_TMPDIR
         trap "cd / 2>/dev/null; rm -rf \"$TEST_TMPDIR\"" EXIT
-        source "$1"
-        source "$2"
+        source "$1" || exit
+        source "$2" || exit
         cd "$TEST_TMPDIR"
         "$3"
       ' _ "$ASSERT_LIB" "$tf" "$fn" 2>&1); then
