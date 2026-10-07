@@ -441,7 +441,7 @@ reconcile() { # repo issue cause log cli-error(0|1 CLI|2 launcher) -> OUTCOME [P
     say "PAUSED=true"
   fi
   {
-    printf 'The dispatcher marked this run failed: %s. Its log stays on the machine that ran it, at `%s`.\n' "$cause" "$shown"
+    printf 'The dispatcher marked this run failed: %s. Its run log path on the dispatching machine is `%s`.\n' "$cause" "$shown"
     if [ -n "$why" ]; then
       printf '\nDispatching is paused for every repo until you delete `~/.agent-dispatch/paused`. %s\n' "$why"
     fi
@@ -526,12 +526,17 @@ run_issue() { # the picked issue: lock, flip, launch, wait, reconcile
   STATE_ID=0
   current_state "$comments" || true
   printf '%s\n' "$STATE_ID" >"$LOCK/state-id"
+  if ! {
+    printf 'the dispatcher stopped before the run was launched\n' >"$LOCK/cause" &&
+      printf '0\n' >"$LOCK/clierr" &&
+      printf 'agent:running\n' >"$LOCK/failure-from"
+  }; then
+    die lock "could not save the pending launch state; nothing was launched"
+  fi
   if ! gh issue edit "$n" -R "$repo" --add-label agent:running --remove-label "$RUN_LABELS" >/dev/null 2>&1; then
-    printf 'the running-label edit failed before anything was launched\n' >"$LOCK/cause"
-    printf '0\n' >"$LOCK/clierr"
-    printf 'agent:running\n' >"$LOCK/failure-from"
     die flip "could not label $repo#$n agent:running; nothing was launched"
   fi
+  rm -- "$LOCK/failure-from" || die launch "could not clear the pending launch state; nothing was launched"
   write_run_script "$path" "$host" "$n" "$tier" "$log"
   launch || die launch "could not record the run's boot identity; nothing was launched"
   if on_windows; then say "LAUNCHER=job"; else say "LAUNCHER=group"; fi

@@ -1366,3 +1366,28 @@ test_done_clears_parked_labels_after_a_rejected_reply_flip() {
   [ -s "$FIX/labels-4" ] && fail "completion retained the parked label"
   [ -z "$(cli_log)" ] || fail "completion launched another run"
 }
+
+test_a_tick_interrupted_during_the_running_flip_keeps_failure_intent() {
+  setup_env
+  open_issue 4 agent
+  OUT=$("$BASH" -c '
+    source "$1"
+    gh() {
+      case "$*" in "issue edit "*"--add-label agent:running"*)
+        : >"$FIX/labels-4"
+        exit 47 # removal applied, dispatcher stopped before the request returned
+        ;;
+      esac
+      command gh "$@"
+    }
+    main
+  ' _ "$AD_SCRIPTS/dispatch.sh" 2>"$TEST_TMPDIR/.err")
+  RC=$? ERR=$(cat "$TEST_TMPDIR/.err")
+  assert_rc 47
+  [ -s "$FIX/labels-4" ] && fail "the interrupted edit did not remove queue labels"
+  dispatch
+  assert_rc 0
+  assert_eq agent:failed "$(cat "$FIX/labels-4")" "interruption lost the approved issue"
+  [ -s "$FIX/posted-4" ] || fail "interruption lost its diagnostic"
+  [ -z "$(cli_log)" ] || fail "recovery launched without renewed owner approval"
+}
