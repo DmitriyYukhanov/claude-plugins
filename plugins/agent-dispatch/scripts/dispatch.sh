@@ -82,7 +82,8 @@ read_config() { # -> CONF_PATH CONF_HOST CONF_TIER CONF_REPO; dies on a malforme
     if ! valid_line "$p" "$h" "$t" "${rest:-}"; then
       die config "malformed line in $f (want: <checkout path> | claude|codex | trivial|standard|complex|none): $line"
     fi
-    repo=$(cd "$p" && gh repo view --json nameWithOwner --jq .nameWithOwner 2>/dev/null)
+    repo=$(cd "$p" && gh repo view --json nameWithOwner --jq .nameWithOwner 2>/dev/null) ||
+      die github "could not look up the GitHub repo of $p; the next tick retries"
     [ -n "$repo" ] || die config "gh cannot name the GitHub repo of $p (line: $line)"
     CONF_PATH+=("$p")
     CONF_HOST+=("$h")
