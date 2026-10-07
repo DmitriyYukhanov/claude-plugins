@@ -84,6 +84,49 @@ test_skill_grill_reshapes_the_checkpoint_without_adding_a_moment() {
   esac
 }
 
+test_review_convergence_simplifies_before_more_fixes() {
+  local rule
+  rule=$(awk '/^[*][*]Convergence:/ { f = 1 } f && /^## / { exit } f' "$(references_dir)/judgment.md")
+  [ -n "$rule" ] || fail "judgment.md must define review convergence beside escalation"
+  assert_contains "$rule" 'distinct confirmed bugs' "duplicate or rejected findings must not inflate the count"
+  assert_contains "$rule" 'first pass' "the first pass must establish the comparison baseline"
+  assert_contains "$rule" 'one or more' "a clean pass must not trigger simplification on zero equals zero"
+  assert_contains "$rule" 'at least as many' "equal or increasing bug counts must trigger convergence"
+  assert_contains "$rule" 'previous pass' "compare consecutive passes, not the whole run"
+  assert_contains "$rule" 'before applying' "simplification must precede another round of patches"
+  assert_contains "$rule" 'deleting the feature' "each open fix must weigh deletion"
+  assert_contains "$rule" 'agreed behavior' "deletion must preserve the authorized scope"
+  assert_contains "$rule" 'Ledger both counts' "convergence must leave its comparison evidence"
+  assert_contains "$rule" 'choice and rationale' "the ledger must record deletion-versus-fix judgment"
+  assert_contains "$rule" 'pass cap' "simplification must preserve the review budget"
+  assert_contains "$rule" 'no review pass' "simplification must not restart the review loop"
+}
+
+test_confirmed_review_fixes_start_with_a_failing_regression() {
+  local review pr
+  review=$(skill_step Review)
+  assert_contains "$review" 'every confirmed finding' "all confirmed findings need regression coverage"
+  assert_contains "$review" 'local reviewers, the second model and review bots' "the rule must cover every reviewer source"
+  assert_contains "$review" 'fails without the fix' "a green-only test cannot prove the reported defect"
+  assert_contains "$review" 'before applying' "the regression must run before the affected code changes"
+  assert_contains "$review" 'fix, simplification or deletion' "deletion must not bypass regression evidence"
+  assert_contains "$review" 'demonstrate the defect' "an infrastructure failure is not a failing regression"
+  assert_contains "$review" 'ledger the finding and reason' "missing automated coverage needs a concrete explanation"
+  pr=$(skill_step 'PR and report')
+  assert_contains "$pr" "as Step 6 verifies a reviewer's" "bot findings must retain evidence verification before a fix"
+  assert_contains "$pr" "Step 6's regression rule" "bot fixes must follow the same test-first path"
+  assert_contains "$pr" 'it opens no review pass' "bot findings must not extend the convergence loop"
+}
+
+test_report_names_fixes_without_regression_tests_at_every_tier() {
+  local report
+  report=$(skill_step 'PR and report')
+  assert_contains "$report" 'findings fixed without regression tests' "the report must expose missing regression coverage"
+  assert_contains "$report" 'or none' "the report must explicitly account for an empty exception list"
+  assert_contains "$report" 'with reasons' "each missing regression must have a reason"
+  assert_contains "$report" 'report and PR body at every tier' "short reports and the PR body must retain the exceptions"
+}
+
 test_the_second_model_review_only_reports() {
   local row step
   row=$(grep -i 'second-model review' "$(companions_md)")

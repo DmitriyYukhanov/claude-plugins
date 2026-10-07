@@ -5,6 +5,12 @@ All notable changes to the **issue-to-pr** plugin will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [9.8.0] - 2026-10-06
+
+### Changed
+- Simplify code before further fixes when review bug counts stop falling, and weigh deleting the affected feature.
+- Start every confirmed review fix with a failing regression test and report any missing coverage.
+
 ## [9.7.0] - 2026-10-04
 
 ### Added

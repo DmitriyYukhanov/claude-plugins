@@ -31,6 +31,16 @@ like any other — raise the review level once and
 never lower it; the tier's pass cap is still the cap, and the human at the merge gate is the
 backstop. When the cap ends the loop with fixes unread, ledger it ("Work no reviewer saw", below).
 
+**Convergence:** ledger the number of distinct confirmed bugs in each completed review pass,
+including the second model; exclude duplicate reports, rejected findings and suggestions. The
+first pass establishes the baseline. When a later pass confirms one or more real bugs and
+at least as many as the previous pass, simplify the code where they cluster before applying
+more fixes, using the deletion and simplification capabilities in `R/companions.md`. For each
+open fix, first weigh deleting the feature against patching it. Preserve agreed behavior;
+removals that change it follow the ask contract below. Ledger both counts, the deletion-versus-fix
+choice and rationale. Keep the tier's pass cap; simplification adds no review pass. Changes after
+the last review still require "Work no reviewer saw".
+
 ## The ask contract — what the spine's three moments mean
 
 The checkpoint needs no state of its own: the ledger already carries it. Write the `asked` entry
