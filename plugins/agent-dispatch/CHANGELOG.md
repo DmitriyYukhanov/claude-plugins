@@ -5,6 +5,11 @@ All notable changes to the **agent-dispatch** plugin will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.3.0] - 2026-10-07
+
+### Added
+- Recognize completed runs without hiding failures from a later retry.
+
 ## [1.2.0] - 2026-10-01
 
 ### Added

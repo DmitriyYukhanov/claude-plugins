@@ -19,7 +19,7 @@ space-separated:
 <!-- issue-to-pr state=waiting step=3 tier=standard pr=12 head=<sha> issue-read=<id> pr-read=<id> -->
 ```
 
-- `state` is `waiting`, `review` or `failed`: the label this comment flips to.
+- `state` is `waiting`, `review`, `failed` or `done`. The first three set their label; `done` clears `agent:running` without adding a label.
 - `step`, `tier`, `pr`, `head`, each as far as it exists; leave out a key that has no value yet.
   `head` is the full 40-character SHA of the PR head the report covered.
 - `issue-read`, `pr-read`: the highest comment id, any author, on that thread at your last
@@ -66,8 +66,7 @@ Codex job. Wait for it in the foreground instead, one bounded tool call after an
 finishes or fails. A second-model review still out after the 30 minutes Step 6 budgets at most is no second
 opinion: say so in the ledger and go on.
 
-After Step 9, and after `after_merge` when there is one, remove `agent:running`: a closed issue
-carries no `agent:*` label, except `agent:failed` on a run that ended there.
+After Step 9, complete the final state transition in "After Step 9" below.
 
 Any stop the attended skill would hand back on (an exit-2 livelock, a red gate you cannot fix,
 Step 7's several-matches stop): a `state=failed` comment naming the reason, flip to
@@ -90,11 +89,25 @@ blocks a comment or a stop.
 
 Every headless run starts from GitHub. Step 0 finishes its own work first (the config, `<BASE>`
 and `<START_POINT>`, the gate commands, and the claim), and only then reads the issue's comments
-and finds the current state. The first matching row decides:
+and finds the current state. Read the latest `agent` label event from
+`gh api repos/{owner}/{repo}/issues/<N>/events --paginate`, including its actor and `created_at`;
+the dispatcher may already have removed the label. A completed cycle is the current `done` or
+the merged PR found by the row below. A current `waiting` or `review` owns only its named PR:
+when that PR is absent or unmerged, resume that state and ignore all earlier completed cycles.
+Current `failed step=9` keeps its recovery
+blocker and never takes the fresh-queue row. Otherwise, use the old PR's `mergedAt` as completion
+when it is known, falling back to the `done` comment's `created_at`. This includes a queue placed
+after merge while cleanup or `after_merge` is still running.
+An open issue with an owner-applied queue strictly later than completion starts fresh from Step 1,
+ignoring the completed cycle's PR, branch and reply cursors. Equal timestamps are ambiguous:
+post `state=failed` asking the owner to apply `agent` again, then end the turn. An unreadable event
+history is a failed stop, not proof of a fresh queue. The first matching row decides:
 
 | Current state | What you find | What you do |
 |---|---|---|
-| any | a PR for this issue that `gh pr view <pr> --json state` calls `MERGED`: the state's `pr`, else, on a closed issue, one in `gh issue view <N> --json closedByPullRequestsReferences`, else `gh pr list --head <branch> --state merged` for the branch of the registered `issue-<N>` worktree | no rebuild, the merge already happened. Current state already `failed step=9`: restore `agent:failed`, post nothing. Step 9 already done (the worktree and the branch are gone and, with `after_merge` set, its deploy landed): remove `agent:running`, post nothing. Otherwise: a `state=failed step=9 pr=<pr>` comment naming what Step 9 left undone, flip to `agent:failed`. End the turn |
+| any | the fresh owner queue described above | fresh run from Step 1; preserve any unfinished worktree, and use a new task branch rather than an old merged branch |
+| `done` | no fresh owner queue | remove `agent:running`, post nothing, end the turn |
+| any | a PR for this issue that `gh pr view <pr> --json state` calls `MERGED`: the state's `pr`, else, on a closed issue, one in `gh issue view <N> --json closedByPullRequestsReferences`, else `gh pr list --head <branch> --state merged` for the branch of the registered `issue-<N>` worktree | no rebuild, the merge already happened. Current state already `failed step=9`: restore `agent:failed`, post nothing. Without `done`, completion is unproven even when the worktree and branch are gone; never rerun a possibly completed deploy. Otherwise: a `state=failed step=9 pr=<pr>` comment naming what Step 9 left undone, flip to `agent:failed`. End the turn |
 | any | the issue is closed and no PR for it merged | remove `agent:running` (`gh issue edit <N> --remove-label agent:running`), post nothing, end the turn |
 | none or `failed` | — | fresh run from Step 1; after `failed`, Step 1 reuses the registered worktree, Step 7 the open PR, and the run never self-merges |
 | `waiting` or `review` | no worktree Step 1 would reuse: registered, on this issue's branch, past Step 1's ownership check | a `state=failed` comment naming what is missing, flip to `agent:failed`, end the turn |
@@ -177,6 +190,14 @@ top of whatever skill it names:
   PR) do the asking.
 - Red → `agent:failed`, the deploy's failure report in a `state=failed` comment, end the turn. No
   retry, no revert beyond what the deploy skill does itself.
+
+Once cleanup reports no leftovers, smoke passes when configured, and `after_merge` succeeds
+(including any verification it requires), post a final state comment on the issue:
+`<!-- issue-to-pr state=done step=9 pr=<pr> -->`. Post the state comment first, then remove
+`agent:running` and end the turn. A failed post leaves the run incomplete; report `state=failed`
+when GitHub is reachable. Keep a newly applied `agent` label for the next queue. Do not add
+`agent:done`. A crash before this marker leaves completion unproven; inspect external effects
+before retrying a deployment.
 
 ## What headless never does
 

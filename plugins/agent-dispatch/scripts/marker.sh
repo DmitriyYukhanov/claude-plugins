@@ -29,6 +29,6 @@ parse_marker() { # marker-line -> M_STATE M_PR M_HEAD M_IREAD M_PREAD; rc 1 unle
         ;;
     esac
   done
-  case "$M_STATE" in waiting | review | failed) return 0 ;; esac
+  case "$M_STATE" in waiting | review | failed | done) return 0 ;; esac
   return 1
 }

@@ -166,3 +166,151 @@ $out" ;;
 $out" ;;
   esac
 }
+
+
+test_ci_checks_committed_feature_changes_without_touching_the_index() {
+  local out
+  fixture_repo "Does the original thing."
+  git switch -q -c feat/work
+  printf 'notes\n' > plugins/foo/notes.md
+  git add plugins/foo/notes.md
+  git commit -q --no-verify -m work
+  if out=$(bash "$(hook_src)" --ci main HEAD 2>&1); then
+    fail "CI allowed a committed PR without a bump: $out"
+  fi
+  assert_contains "$out" 'Plugin version bump required'
+  assert_eq '' "$(git diff --cached --name-only)" "CI must preserve the index"
+}
+
+test_ci_checks_changelog_and_sync_across_the_whole_pr() {
+  local out
+  fixture_repo "Does the original thing."
+  git switch -q -c feat/work
+  stage_bump "Does the NEW thing." "Does the NEW thing."
+  git restore --staged --worktree plugins/foo/CHANGELOG.md
+  git commit -q --no-verify -m bump
+  if out=$(bash "$(hook_src)" --ci main HEAD 2>&1); then fail "CI allowed no changelog: $out"; fi
+  assert_contains "$out" 'CHANGELOG.md update required'
+  stage_bump "Does the NEW thing." "Does the NEW thing."
+  git commit -q --no-verify -m changelog
+  out=$(bash "$(hook_src)" --ci main HEAD 2>&1) || fail "CI rejected split bookkeeping: $out"
+  marketplace_json "Does the NEW thing." 1.2.0 > .claude-plugin/marketplace.json
+  git add .claude-plugin/marketplace.json
+  git commit -q --no-verify -m mismatch
+  if out=$(bash "$(hook_src)" --ci main HEAD 2>&1); then fail "CI allowed drift: $out"; fi
+  assert_contains "$out" 'plugin.json=1.1.0, marketplace.json=1.2.0'
+}
+
+
+test_ci_requires_a_dated_heading_for_the_exact_new_version() {
+  local out
+  fixture_repo "Does the original thing."
+  git switch -q -c feat/work
+  stage_bump "Does the NEW thing." "Does the NEW thing."
+  printf '# Changelog\n\n## [1x1x0] - 2026-01-02\n' > plugins/foo/CHANGELOG.md
+  git add plugins/foo/CHANGELOG.md
+  git commit -q --no-verify -m wrong-heading
+  if out=$(bash "$(hook_src)" --ci main HEAD 2>&1); then fail "CI accepted another heading: $out"; fi
+  assert_contains "$out" 'missing entry for [1.1.0]'
+  printf '# Changelog\n\nMention [1.1.0] without a release heading.\n' > plugins/foo/CHANGELOG.md
+  git add plugins/foo/CHANGELOG.md
+  git commit -q --no-verify -m mention
+  if out=$(bash "$(hook_src)" --ci main HEAD 2>&1); then fail "CI accepted a mention as a release: $out"; fi
+  assert_contains "$out" 'missing entry for [1.1.0]'
+}
+
+
+test_ci_rejects_downgrades_and_manifest_only_changes_without_a_bump() {
+  local out
+  fixture_repo "Does the original thing."
+  git switch -q -c feat/work
+  plugin_json 1.0.0 "Does the NEW thing." > plugins/foo/.claude-plugin/plugin.json
+  marketplace_json "Does the NEW thing." 1.0.0 > .claude-plugin/marketplace.json
+  git add plugins/foo/.claude-plugin/plugin.json .claude-plugin/marketplace.json
+  git commit -q --no-verify -m manifest-only
+  if out=$(bash "$(hook_src)" --ci main HEAD 2>&1); then fail "CI allowed no bump: $out"; fi
+  assert_contains "$out" 'Plugin version bump required'
+  plugin_json 0.9.0 "Does the NEW thing." > plugins/foo/.claude-plugin/plugin.json
+  marketplace_json "Does the NEW thing." 0.9.0 > .claude-plugin/marketplace.json
+  printf '# Changelog\n\n## [0.9.0] - 2026-01-02\n' > plugins/foo/CHANGELOG.md
+  git add plugins/foo/.claude-plugin/plugin.json .claude-plugin/marketplace.json plugins/foo/CHANGELOG.md
+  git commit -q --no-verify -m downgrade
+  if out=$(bash "$(hook_src)" --ci main HEAD 2>&1); then fail "CI allowed a downgrade: $out"; fi
+  assert_contains "$out" 'Plugin version bump required'
+}
+
+
+test_ci_checks_a_plugin_when_git_quotes_its_changed_path() {
+  local out
+  fixture_repo "Does the original thing."
+  git switch -q -c feat/work
+  printf 'notes\n' > plugins/foo/café.md
+  git add plugins/foo/café.md
+  git commit -q --no-verify -m quoted-path
+  if out=$(bash "$(hook_src)" --ci main HEAD 2>&1); then fail "CI missed a quoted path: $out"; fi
+  assert_contains "$out" 'Plugin version bump required'
+}
+
+test_ci_allows_whole_plugin_removal_but_not_just_its_manifest() {
+  local out
+  fixture_repo "Does the original thing."
+  git switch -q -c feat/work
+  git rm -q plugins/foo/.claude-plugin/plugin.json
+  git commit -q --no-verify -m remove-manifest
+  if out=$(bash "$(hook_src)" --ci main HEAD 2>&1); then fail "CI allowed a missing manifest: $out"; fi
+  assert_contains "$out" 'Plugin manifest missing'
+  git rm -q plugins/foo/CHANGELOG.md
+  git commit -q --no-verify -m remove-plugin
+  out=$(bash "$(hook_src)" --ci main HEAD 2>&1) || fail "CI blocked a removed plugin: $out"
+}
+
+test_ci_rejects_marketplace_only_drift() {
+  local out
+  fixture_repo "Does the original thing."
+  git switch -q -c feat/work
+  marketplace_json "Does the original thing." 1.1.0 > .claude-plugin/marketplace.json
+  git add .claude-plugin/marketplace.json
+  git commit -q --no-verify -m marketplace-only
+  if out=$(bash "$(hook_src)" --ci main HEAD 2>&1); then fail "CI allowed marketplace drift: $out"; fi
+  assert_contains "$out" 'plugin.json=1.0.0, marketplace.json=1.1.0'
+}
+
+
+test_ci_rejects_missing_marketplace_metadata() {
+  local out mode allowed=''
+  fixture_repo "Does the original thing."
+  git switch -q -c feat/work
+  for mode in version empty deleted; do
+    marketplace_json "Does the original thing." 1.0.0 > .claude-plugin/marketplace.json
+    case "$mode" in
+      version) sed -i '/"version": "1.0.0"/d' .claude-plugin/marketplace.json ;;
+      empty) : > .claude-plugin/marketplace.json ;;
+      deleted) rm -- .claude-plugin/marketplace.json ;;
+    esac
+    git add .claude-plugin/marketplace.json
+    git commit -q --no-verify -m "missing-$mode"
+    if out=$(bash "$(hook_src)" --ci main HEAD 2>&1); then allowed="$allowed $mode"
+    else assert_contains "$out" 'marketplace.json'; fi
+  done
+  [ -z "$allowed" ] || fail "CI allowed missing marketplace metadata:$allowed"
+}
+
+
+test_ci_checks_changed_entries_without_blocking_unrelated_baseline_drift() {
+  local out
+  fixture_repo "Does the original thing."
+  sed -i 's/"version": "9.9.9"/"version": "9.9.8"/' .claude-plugin/marketplace.json
+  git add .claude-plugin/marketplace.json
+  git commit -q --no-verify -m baseline-drift
+  git switch -q -c feat/work
+  stage_bump "Does the NEW thing." "Does the NEW thing."
+  sed -i 's/"version": "9.9.9"/"version": "9.9.8"/' .claude-plugin/marketplace.json
+  git add .claude-plugin/marketplace.json
+  git commit -q --no-verify -m foo-bump
+  out=$(bash "$(hook_src)" --ci main HEAD 2>&1) || fail "CI blocked unrelated baseline drift: $out"
+  sed -i 's/"version": "9.9.8"/"version": "9.9.7"/' .claude-plugin/marketplace.json
+  git add .claude-plugin/marketplace.json
+  git commit -q --no-verify -m changed-decoy
+  if out=$(bash "$(hook_src)" --ci main HEAD 2>&1); then fail "CI allowed new drift: $out"; fi
+  assert_contains "$out" 'plugin.json=9.9.9, marketplace.json=9.9.7'
+}

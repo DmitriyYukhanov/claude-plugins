@@ -589,20 +589,20 @@ test_human_paths_as_a_yaml_list_is_refused() {
   done
 }
 
-test_auto_merge_refuses_a_human_path_with_a_quote() {
+test_auto_merge_refuses_a_c_quoted_human_path() {
   merge_setup happy
-  # Windows refuses a quote in a filename and update-index rejects the name, so build the commit
-  # with plumbing - mktree takes the raw bytes - and let git, not the filesystem, hold the path
-  local blob subtree tree commit
+  # Git objects hold names Windows cannot create; Git matches raw pathspecs before quoting output.
+  local blob subtree tree commit name
   blob=$(printf 'x\n' | git -C "$WT" hash-object -w --stdin)
-  subtree=$(printf '100644 blob %s\ta"b.sql\n' "$blob" | git -C "$WT" mktree)
-  tree=$({ git -C "$WT" ls-tree HEAD; printf '040000 tree %s\tmigrations\n' "$subtree"; } | git -C "$WT" mktree)
-  commit=$(git -C "$WT" commit-tree "$tree" -p HEAD -m "quoted path")
-  git -C "$WT" update-ref refs/heads/feat/issue-6-x "$commit"
-  git -C "$WT" push -q -f origin feat/issue-6-x
-  write_config "$REPO" human_paths "migrations/*"
-  assert_human_path_blocks_merge "a C-quoted human path with a double quote merged unattended"
-  assert_key "$OUT" HUMAN_PATH '"migrations/a\"b.sql"'
+  for name in 'a"b.sql' $'a\tb.sql' $'a\nb.sql'; do
+    subtree=$(printf '100644 blob %s\t%s\0' "$blob" "$name" | git -C "$WT" mktree -z)
+    tree=$({ git -C "$WT" ls-tree HEAD | grep -v $'\tmigrations$'; printf '040000 tree %s\tmigrations\n' "$subtree"; } | git -C "$WT" mktree)
+    commit=$(git -C "$WT" commit-tree "$tree" -p HEAD -m "quoted path")
+    git -C "$WT" update-ref refs/heads/feat/issue-6-x "$commit"
+    write_config "$REPO" human_paths "migrations/*"
+    assert_human_path_blocks_merge "a C-quoted human path merged unattended"
+    assert_key "$OUT" HUMAN_PATH "$(git -C "$WT" diff --name-only origin/main...HEAD -- migrations/)"
+  done
 }
 
 test_auto_merge_refuses_an_empty_diff() {
