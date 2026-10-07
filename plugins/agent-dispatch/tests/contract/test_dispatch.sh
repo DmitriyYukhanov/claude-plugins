@@ -276,9 +276,38 @@ test_a_malformed_config_line_stops_the_tick() {
     assert_contains "$ERR" "$line"
   done
   printf '%s | claude | trivial\n' "$TEST_TMPDIR/checkout" >"$HOME/.agent-dispatch/repos.conf"
-  : >"$FIX/fail-repo"
+  : >"$FIX/repo"
   dispatch
+  assert_rc 1
   assert_key "$OUT" REASON config "a checkout gh cannot name is a config error"
+}
+
+test_a_failed_repo_lookup_stops_the_tick_and_retries() {
+  local repo
+  setup_env
+  mkdir -p "$TEST_TMPDIR/other-checkout"
+  printf '%s | claude | trivial\n' "$TEST_TMPDIR/other-checkout" >>"$HOME/.agent-dispatch/repos.conf"
+  open_issue 4 agent
+  for repo in '' octo/widgets; do
+    printf '%s\n' "$repo" >"$FIX/repo"
+    # Keep any output, but exit nonzero as a failed gh lookup would.
+    # shellcheck disable=SC2329 # exported to the child dispatch process
+    gh() { cat "$FIX/repo"; return 1; }
+    export -f gh
+    dispatch
+    assert_rc 1
+    assert_key "$OUT" REASON github
+    assert_key "$OUT" TICK error
+    assert_contains "$ERR" "$TEST_TMPDIR/checkout"
+    [ -z "$(cli_log)" ] || fail "launched despite a failed repository lookup"
+    [ -e "$HOME/.agent-dispatch/paused" ] && fail "a lookup failure must not pause dispatching"
+  done
+  unset -f gh
+  export FAKE_CLI_MODE=flip:agent:review
+  dispatch
+  assert_rc 0
+  assert_key "$OUT" ISSUE "octo/widgets#4"
+  assert_key "$OUT" TICK "done"
 }
 
 test_codex_runs_the_skill_through_exec_with_the_sandbox_bypassed() {
