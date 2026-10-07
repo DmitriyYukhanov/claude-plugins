@@ -281,3 +281,17 @@ test_headless_state_lives_in_marked_comments_on_the_issue() {
   assert_contains "$hard" 'owner reply' "the merge Hard rule must name the owner reply as the headless go-ahead"
   assert_contains "$hard" 'never self-merges' "the merge Hard rule must hold a resumed run back from self-merging"
 }
+
+
+# shellcheck disable=SC2016 # Markdown code spans are literal contract text.
+test_headless_done_follows_verified_completion_and_allows_a_fresh_owner_queue() {
+  local hl after
+  hl=$(cat "$(references_dir)/headless.md")
+  after=$(sed -n '/^## After Step 9/,$p' "$(references_dir)/headless.md")
+  assert_contains "$after" '<!-- issue-to-pr state=done step=9 pr=<pr> -->'
+  assert_contains "$after" '`after_merge` succeeds' "done requires the post-merge action to succeed"
+  assert_contains "$after" 'Post the state comment first' "the label clears only after done is durable"
+  assert_contains "$hl" 'strictly later than completion' "a reopened issue needs fresh owner authorization"
+  assert_contains "$hl" 'Without `done`, completion is unproven' "missing worktree is not a completion receipt"
+  assert_contains "$hl" 'ignoring the completed cycle' "a new queue must not resume its old merged PR"
+}

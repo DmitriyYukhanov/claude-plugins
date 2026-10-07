@@ -8,7 +8,7 @@
 MARKER_JQ='.[] | [.id, .user.login, ((.body | split("\n") | map(rtrimstr("\r")) | map(select(startswith("<!-- issue-to-pr"))) | last) // ""), (.body | gsub("^\\s+|\\s+$"; "") | ascii_downcase)] | @tsv'
 
 parse_marker() { # marker-line -> M_STATE M_PR M_HEAD M_IREAD M_PREAD; rc 1 unless a well-formed state marker
-  local m=${1%$'\r'} tok k v toks
+  local m=${1%$'\r'} tok k v toks completion_step=''
   M_STATE='' M_PR='' M_HEAD='' M_IREAD='' M_PREAD=''
   case "$m" in '<!-- issue-to-pr '*' -->') ;; *) return 1 ;; esac
   m=${m#'<!-- issue-to-pr '}
@@ -21,7 +21,7 @@ parse_marker() { # marker-line -> M_STATE M_PR M_HEAD M_IREAD M_PREAD; rc 1 unle
     [ "$k" != "$tok" ] || continue
     case "$k" in
       state) M_STATE=$v ;;
-      step) ;; # the resuming model reads it; no script does
+      step) completion_step=$v ;; # only done requires a specific step
       head) M_HEAD=$v ;;
       pr | issue-read | pr-read)
         case "$v" in *[!0-9]*) return 1 ;; esac
@@ -29,6 +29,9 @@ parse_marker() { # marker-line -> M_STATE M_PR M_HEAD M_IREAD M_PREAD; rc 1 unle
         ;;
     esac
   done
-  case "$M_STATE" in waiting | review | failed) return 0 ;; esac
+  case "$M_STATE" in
+    waiting | review | failed) return 0 ;;
+    done) [ "$completion_step" = 9 ] && [ -n "$M_PR" ] && [ "$M_PR" -gt 0 ] && return 0 ;;
+  esac
   return 1
 }

@@ -15,13 +15,24 @@ on:
       - '.githooks/pre-commit'
       - '.github/workflows/issue-to-pr-tests.yml'
   pull_request:
-    paths:
-      - 'plugins/issue-to-pr/**'
-      - '.claude-plugin/marketplace.json'
-      - '.githooks/pre-commit'
-      - '.github/workflows/issue-to-pr-tests.yml'
 
 jobs:
+  release-metadata:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check plugin versions and changelogs against the PR merge base
+        env:
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: bash .githooks/pre-commit --ci "$PR_BASE" "$PR_HEAD"
+
   test:
     strategy:
       fail-fast: false

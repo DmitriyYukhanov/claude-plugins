@@ -985,6 +985,7 @@ test_a_parked_state_is_found_behind_a_requeued_agent_label() {
   notify_hook
   # The owner labelled it `agent` again as the run parked, and gh lists that label first.
   printf 'agent\nagent:review\n' >"$FIX/labels-4"
+  : >"$FIX/fail-comments-4" # settled labels do not need another comments fetch
   OUT=$("$BASH" -c 'source "$1/dispatch.sh"; reconcile octo/widgets 4 unused "" 0' _ "$AD_SCRIPTS" \
     2>"$TEST_TMPDIR/.err")
   assert_key "$OUT" OUTCOME agent
@@ -1004,4 +1005,50 @@ test_a_hook_with_no_published_pid_keeps_its_directory() {
   assert_eq 'original hook' "$(cat "$AD_HOME/.notify/run.sh")"
   [ -e "$FIX/notified" ] && fail "started another hook before the old launcher was resolved"
   return 0
+}
+
+
+test_done_supersedes_waiting_but_a_new_waiting_state_can_resume() {
+  setup_env
+  open_issue 7 agent:waiting
+  comment 7 101 octo '<!-- issue-to-pr state=waiting issue-read=100 -->'
+  comment 7 102 octo '<!-- issue-to-pr state=done step=9 pr=12 -->'
+  comment 7 103 octo
+  dispatch
+  assert_key "$OUT" TICK idle "done must suppress replies to an old waiting state"
+  comment 7 104 mallory '<!-- issue-to-pr state=waiting issue-read=100 -->'
+  dispatch
+  assert_key "$OUT" TICK idle "a foreign state must not supersede done"
+  comment 7 105 octo '<!-- issue-to-pr state=waiting issue-read=104 -->'
+  comment 7 106 octo
+  dispatch
+  assert_key "$OUT" PICK reply "a newer owner waiting state starts a new cycle"
+}
+
+test_done_after_launch_clears_running_but_stale_done_does_not() {
+  setup_env
+  open_issue 4 agent
+  comment 4 100 octo '<!-- issue-to-pr state=done step=9 pr=12 -->'
+  export FAKE_CLI_MODE=flip:agent:running FAKE_CLI_COMMENTS='101\tocto\t<!-- issue-to-pr state=done step=9 pr=13 -->\n'
+  dispatch
+  assert_key "$OUT" OUTCOME "done" "a crash after posting done must not become failed"
+  assert_eq '' "$(cat "$FIX/labels-4")"
+  [ ! -e "$FIX/posted-4" ] || fail "done needs no dispatcher failure comment"
+  : >"$FIX/issues"
+  open_issue 5 agent
+  comment 5 100 octo '<!-- issue-to-pr state=done step=9 pr=12 -->'
+  export FAKE_CLI_MODE=exit:0 FAKE_CLI_COMMENTS=''
+  dispatch
+  assert_key "$OUT" OUTCOME agent:failed "a previous cycle's done must not hide a new crash"
+  assert_contains "$(cat "$FIX/posted-5")" 'state=failed pr=12'
+}
+
+
+test_an_incomplete_done_cannot_hide_a_run_failure() {
+  setup_env
+  open_issue 4 agent
+  export FAKE_CLI_MODE=flip:agent:running FAKE_CLI_COMMENTS='101\tocto\t<!-- issue-to-pr state=done -->\n'
+  dispatch
+  assert_key "$OUT" OUTCOME agent:failed "only a complete done proves completion"
+  assert_contains "$(cat "$FIX/posted-4")" 'state=failed'
 }

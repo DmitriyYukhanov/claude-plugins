@@ -28,3 +28,23 @@ test_marker_jq_takes_the_last_marker_line_and_a_trimmed_lowercased_body() {
   assert_contains "$out" $'101\tocto\t<!-- issue-to-pr state=review pr=12 -->\treport' "the last marker line"
   assert_contains "$out" $'\n102\tocto\t\tmerge' "an unmarked body, trimmed and lowercased"
 }
+
+
+test_marker_accepts_done_without_weakening_numeric_fields() {
+  source "$ITP_SCRIPTS/lib/marker.sh"
+  parse_marker '<!-- issue-to-pr state=done step=9 pr=12 -->' || fail "done was rejected"
+  assert_eq 'done 12' "$M_STATE $M_PR"
+  ! parse_marker '<!-- issue-to-pr state=done pr=x -->' || fail "invalid done PR was accepted"
+}
+
+
+test_done_requires_the_completion_step_and_a_positive_pr() {
+  local m
+  source "$ITP_SCRIPTS/lib/marker.sh"
+  for m in '<!-- issue-to-pr state=done -->' '<!-- issue-to-pr state=done step=9 -->' \
+    '<!-- issue-to-pr state=done pr=12 -->' '<!-- issue-to-pr state=done step=7 pr=12 -->' \
+    '<!-- issue-to-pr state=done step=9 pr=0 -->' '<!-- issue-to-pr state=done step=9 pr= -->'; do
+    ! parse_marker "$m" || fail "incomplete done was accepted: $m"
+  done
+  parse_marker '<!-- issue-to-pr state=done step=9 pr=12 -->' || fail "complete done was rejected"
+}

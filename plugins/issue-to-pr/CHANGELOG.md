@@ -5,6 +5,11 @@ All notable changes to the **issue-to-pr** plugin will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [9.9.0] - 2026-10-07
+
+### Added
+- Record completed headless runs and restart reopened issues only after a fresh owner queue.
+
 ## [9.8.0] - 2026-10-06
 
 ### Changed

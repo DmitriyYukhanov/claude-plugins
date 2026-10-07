@@ -92,15 +92,15 @@ read_config() { # -> CONF_PATH CONF_HOST CONF_TIER CONF_REPO; dies on a malforme
 }
 
 current_state() { # comments-tsv -> M_* of the newest well-formed owner state comment; rc 1 when none
-  local line s='' p='' i='' r=''
+  local line s='' p='' i='' r='' id=0
   while IFS= read -r line; do
     row "$line" || continue
     [ "$R_LOGIN" = "$OWNER" ] || continue
     parse_marker "$R_MARKER" || continue
-    s=$M_STATE p=$M_PR i=$M_IREAD r=$M_PREAD
+    s=$M_STATE p=$M_PR i=$M_IREAD r=$M_PREAD id=$R_ID
   done <<<"$1"
   [ -n "$s" ] || return 1
-  M_STATE=$s M_PR=$p M_IREAD=$i M_PREAD=$r
+  M_STATE=$s M_PR=$p M_IREAD=$i M_PREAD=$r STATE_ID=$id
 }
 
 reply_in() { # comments-tsv cursor -> rc 0 on an unmarked owner comment above the cursor
@@ -376,9 +376,19 @@ reconcile() { # repo issue cause log cli-error(0|1 CLI|2 launcher) -> OUTCOME [P
     fi
     cause="the run parked again without reading your reply" clierr=0 # whatever the CLI exited with
   fi
+  comments=$(gh api "repos/$1/issues/$2/comments" --paginate --jq "$MARKER_JQ" 2>/dev/null) || return 1
+  # Accept only a done posted during this launch; a reopened issue may carry an old done.
+  state=$(cat "$LOCK/state-id" 2>/dev/null)
+  case "$state" in
+    '' | *[!0-9]*) ;;
+    *) if current_state "$comments" && [ "$M_STATE" = "done" ] && [ "$STATE_ID" -gt "$state" ]; then
+      gh issue edit "$2" -R "$1" --remove-label agent:running >/dev/null 2>&1 || return 1
+      say 'OUTCOME=done'
+      return 0
+    fi ;;
+  esac
   # Amendment #2: carry the run's PR, if the issue's own current state already named one, so a
   # retry (or a human) can still find it from the failure comment alone.
-  comments=$(gh api "repos/$1/issues/$2/comments" --paginate --jq "$MARKER_JQ" 2>/dev/null) || return 1
   if current_state "$comments" && [ -n "$M_PR" ]; then prmark=" pr=$M_PR"; fi
   case "$shown" in "$HOME"/*) shown="~${shown#"$HOME"}" ;; esac
   case "$clierr" in # a failure every next run would repeat pauses dispatching
@@ -435,7 +445,7 @@ recover() { # a lock at tick start: a live tick (busy), or a dead one's run to s
 
 run_issue() { # the picked issue: lock, flip, launch, wait, reconcile
   local repo=${CONF_REPO[$PICK_I]} path=${CONF_PATH[$PICK_I]} host=${CONF_HOST[$PICK_I]}
-  local tier=${CONF_TIER[$PICK_I]} n=$PICK_N log rc cause='' clierr=0 deadline waited=0 id
+  local tier=${CONF_TIER[$PICK_I]} n=$PICK_N log rc cause='' clierr=0 deadline waited=0 id comments
   say "ISSUE=$repo#$n"
   say "PICK=$PICK_WHY"
   mkdir "$LOCK" 2>/dev/null || {
@@ -447,6 +457,11 @@ run_issue() { # the picked issue: lock, flip, launch, wait, reconcile
   printf '%s\n' "$repo" >"$LOCK/repo"
   printf '%s\n' "$n" >"$LOCK/issue"
   printf '%s\n' "$log" >"$LOCK/log"
+  comments=$(gh api "repos/$repo/issues/$n/comments" --paginate --jq "$MARKER_JQ" 2>/dev/null) ||
+    die github "could not read the state before launching $repo#$n; the next tick retries"
+  STATE_ID=0
+  current_state "$comments" || true
+  printf '%s\n' "$STATE_ID" >"$LOCK/state-id"
   if ! gh issue edit "$n" -R "$repo" --add-label agent:running --remove-label "$RUN_LABELS" >/dev/null 2>&1; then
     rm -rf "$LOCK"
     die flip "could not label $repo#$n agent:running; nothing was launched"
