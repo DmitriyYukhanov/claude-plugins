@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [1.3.2] - 2026-10-08
 
 ### Fixed
-- Recover interrupted runs after restarts and uncertain GitHub responses without repeating failure comments.
+- Recover interrupted runs after restarts and uncertain GitHub responses without repeating acknowledged failure comments.
 - Publish each lock with its owner and preserve the four-hour polling budget across laptop sleep.
 - Fail incomplete test runs and make Windows launcher checks reliable.
 
