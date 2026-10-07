@@ -291,7 +291,7 @@ test_a_failed_repo_lookup_stops_the_tick_and_retries() {
   for repo in '' octo/widgets; do
     printf '%s\n' "$repo" >"$FIX/repo"
     # Keep any output, but exit nonzero as a failed gh lookup would.
-    # shellcheck disable=SC2329 # exported to the child dispatch process
+    # shellcheck disable=SC2317,SC2329 # exported to the child dispatch process
     gh() { cat "$FIX/repo"; return 1; }
     export -f gh
     dispatch
