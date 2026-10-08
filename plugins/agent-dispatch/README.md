@@ -59,6 +59,8 @@ notification hook and shows how to configure it.
   left of that run and marks the issue failed. Process records include the boot identity, so
   recovery ignores IDs saved before a restart. An uncertain GitHub response keeps the lock for
   the next tick to reconcile, without repeating an acknowledged failure comment.
+  A failed attempt before launch clears its old queue label; apply `agent` again to retry.
+  A queue label you add after launch survives failure of that run.
 
 ## Limits
 

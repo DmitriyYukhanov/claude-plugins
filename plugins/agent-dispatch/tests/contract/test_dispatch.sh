@@ -268,6 +268,12 @@ test_a_failed_running_flip_launches_nothing() {
   export FAKE_CLI_MODE=flip:agent:review
   dispatch
   assert_rc 0
+  assert_eq agent:failed "$(cat "$FIX/labels-4")" "a recorded prelaunch failure must wait for owner retry"
+  [ -z "$(cli_log)" ] || fail "recovery relaunched the failed attempt from its old queue label"
+  printf 'agent\nagent:failed\n' >"$FIX/labels-4"
+  printf 'agent\tocto\n' >>"$FIX/events-4"
+  dispatch
+  assert_rc 0
   assert_eq agent:review "$(cat "$FIX/labels-4")"
   assert_key "$OUT" TICK 'done'
   assert_eq 1 "$(wc -l <"$FIX/cli.log" | tr -d ' ')" "a rejected flip must launch only on retry"
@@ -1390,4 +1396,14 @@ test_a_tick_interrupted_during_the_running_flip_keeps_failure_intent() {
   assert_eq agent:failed "$(cat "$FIX/labels-4")" "interruption lost the approved issue"
   [ -s "$FIX/posted-4" ] || fail "interruption lost its diagnostic"
   [ -z "$(cli_log)" ] || fail "recovery launched without renewed owner approval"
+}
+
+test_failure_after_launch_preserves_a_fresh_owner_queue_label() {
+  setup_env
+  open_issue 4 agent,agent:running
+  source "$AD_SCRIPTS/dispatch.sh"
+  mkdir -p "$LOCK"
+  : >"$LOCK/launched"
+  OUT=$(reconcile octo/widgets 4 stopped "$AD_HOME/logs/run.log" 0)
+  assert_eq $'agent\nagent:failed' "$(cat "$FIX/labels-4")" "a fresh owner retry label was discarded"
 }

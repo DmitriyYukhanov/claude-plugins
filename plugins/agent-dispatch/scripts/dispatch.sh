@@ -391,7 +391,7 @@ stop_hook() { # stop the hook before reusing its directory, including a Windows 
 
 # shellcheck disable=SC2016,SC2088 # the backticks are Markdown; the tilde is shown, not expanded
 reconcile() { # repo issue cause log cli-error(0|1 CLI|2 launcher) -> OUTCOME [PAUSED] [NOTIFY]; rc 1 when GitHub failed
-  local labels body="$AD_HOME/.comment.md" shown=$4 comments prmark='' cause=$3 from=agent:running clierr=$5 why='' state pending
+  local labels body="$AD_HOME/.comment.md" shown=$4 comments prmark='' cause=$3 from=agent:running clierr=$5 why='' state pending remove_labels=agent:running,agent:waiting,agent:review
   pending=$(cat "$LOCK/failure-from" 2>/dev/null)
   case "$pending" in agent:running | agent:waiting | agent:review)
     from=$pending
@@ -454,7 +454,8 @@ reconcile() { # repo issue cause log cli-error(0|1 CLI|2 launcher) -> OUTCOME [P
     gh issue comment "$2" -R "$1" --body-file "$body" >/dev/null 2>&1 || return 1
     : >"$LOCK/failure-posted" || return 1
   fi
-  gh issue edit "$2" -R "$1" --add-label agent:failed --remove-label agent:running,agent:waiting,agent:review >/dev/null 2>&1 || return 1
+  [ -e "$LOCK/launched" ] || remove_labels="agent,$remove_labels"
+  gh issue edit "$2" -R "$1" --add-label agent:failed --remove-label "$remove_labels" >/dev/null 2>&1 || return 1
   say "OUTCOME=agent:failed"
   notify failed "$1" "$2" "$cause.${why:+ Dispatching is paused until you delete ~/.agent-dispatch/paused.}"
 }
