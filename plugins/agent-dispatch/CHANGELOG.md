@@ -5,6 +5,13 @@ All notable changes to the **agent-dispatch** plugin will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.3.2] - 2026-10-08
+
+### Fixed
+- Recover interrupted runs after restarts and uncertain GitHub responses without repeating acknowledged failure comments.
+- Publish each lock with its owner and preserve the four-hour polling budget across laptop sleep.
+- Fail incomplete test runs and make Windows launcher checks reliable.
+
 ## [1.3.1] - 2026-10-07
 
 ### Fixed

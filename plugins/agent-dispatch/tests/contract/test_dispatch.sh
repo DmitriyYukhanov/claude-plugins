@@ -24,8 +24,12 @@ setup_env() { # [host] -> HOME, $FIX, PATH with the fakes, one configured repo o
 assert_gh_called_with() { assert_contains "$(cat "$FIX/gh.log" 2>/dev/null)" "gh $1" "gh was not called with: $1"; }
 on_windows_host() { case "$(uname -s)" in MINGW* | MSYS* | CYGWIN*) return 0 ;; esac; return 1; }
 
-dispatch() { # -> OUT ERR RC
-  OUT=$("$BASH" "$AD_SCRIPTS/dispatch.sh" 2>"$TEST_TMPDIR/.err")
+dispatch() { # [accelerated test poll interval] -> OUT ERR RC
+  if [ "$#" -gt 0 ]; then
+    OUT=$("$BASH" -c 'source "$1"; POLL_SECONDS=$2; main' _ "$AD_SCRIPTS/dispatch.sh" "$1" 2>"$TEST_TMPDIR/.err")
+  else
+    OUT=$("$BASH" "$AD_SCRIPTS/dispatch.sh" 2>"$TEST_TMPDIR/.err")
+  fi
   RC=$?
   ERR=$(cat "$TEST_TMPDIR/.err")
 }
@@ -259,8 +263,20 @@ test_a_failed_running_flip_launches_nothing() {
   assert_rc 1
   assert_key "$OUT" REASON flip
   [ -z "$(cli_log)" ] || fail "launched without the running label"
-  [ -d "$HOME/.agent-dispatch/lock" ] && fail "a failed flip must release the lock"
-  return 0
+  [ -d "$HOME/.agent-dispatch/lock" ] || fail "an uncertain flip must keep its recovery record"
+  rm "$FIX/fail-edit"
+  export FAKE_CLI_MODE=flip:agent:review
+  dispatch
+  assert_rc 0
+  assert_eq agent:failed "$(cat "$FIX/labels-4")" "a recorded prelaunch failure must wait for owner retry"
+  [ -z "$(cli_log)" ] || fail "recovery relaunched the failed attempt from its old queue label"
+  printf 'agent\nagent:failed\n' >"$FIX/labels-4"
+  printf 'agent\tocto\n' >>"$FIX/events-4"
+  dispatch
+  assert_rc 0
+  assert_eq agent:review "$(cat "$FIX/labels-4")"
+  assert_key "$OUT" TICK 'done'
+  assert_eq 1 "$(wc -l <"$FIX/cli.log" | tr -d ' ')" "a rejected flip must launch only on retry"
 }
 
 test_a_malformed_config_line_stops_the_tick() {
@@ -369,7 +385,12 @@ dead_tick_lock() { # [log] -> the lock a tick that died left for octo/widgets#4
   printf 'octo/widgets\n' >"$lock/repo"
   printf '4\n' >"$lock/issue"
   dead_pid >"$lock/tick"
+  write_boot_record "$lock"
   if [ -n "${1:-}" ]; then printf '%s\n' "$1" >"$lock/log"; fi
+}
+
+write_boot_record() { # directory -> bind controlled process records to this real boot
+  (source "$AD_SCRIPTS/dispatch.sh"; boot_id >"$1/boot")
 }
 
 assert_dead() { # pid what
@@ -403,7 +424,7 @@ test_the_deadline_stops_the_run_and_fails_it() {
   open_issue 4 agent
   export FAKE_CLI_MODE=hang FAKE_SLEEP_STEP=3600 FAKE_SLEEP_REAL=1
   start=$SECONDS
-  dispatch
+  dispatch 3600
   # SECONDS is bash's own real-time clock, untouched by the fake date/sleep fixtures: a stop that
   # does nothing would still "pass" once the real 600s sleep ends on its own, just 500x too slow.
   [ "$((SECONDS - start))" -lt 120 ] || fail "the tick took $((SECONDS - start))s; the stop did nothing and it waited out the real 600s sleep"
@@ -422,6 +443,7 @@ test_a_live_ticks_lock_is_left_alone() {
   open_issue 4 agent
   mkdir -p "$HOME/.agent-dispatch/lock"
   printf '%s\n' "$$" >"$HOME/.agent-dispatch/lock/tick"
+  write_boot_record "$HOME/.agent-dispatch/lock"
   dispatch
   assert_key "$OUT" TICK busy
   [ -f "$HOME/.agent-dispatch/lock/tick" ] || fail "a live tick's lock was touched"
@@ -685,12 +707,12 @@ test_the_windows_launcher_records_its_own_pid_before_bash_starts() {
   on_windows_host || { printf 'job.ps1 only runs on Windows; skipped\n'; return 0; }
   local d="$TEST_TMPDIR/lock"
   mkdir -p "$d"
-  # The script checks, from inside the run, that `run` already names a live powershell.exe.
-  # shellcheck disable=SC2016 # $(cat ...) runs inside the generated script, not here
-  printf 'tasklist //FI "PID eq $(cat %q)" //NH > %q\n' "$d/run" "$d/seen" >"$d/run.sh"
+  # Query the saved native PID while Bash runs; process-list formatting is irrelevant here.
+  printf 'launcher=$(cat %q)\npowershell.exe -NoProfile -Command "[Diagnostics.Process]::GetProcessById($launcher).ProcessName" > %q\n' \
+    "$d/run" "$d/seen" >"$d/run.sh"
   run_job "$BASH" "$d/run.sh"
   assert_eq 0 "$?" "exit code"
-  assert_contains "$(tr '[:upper:]' '[:lower:]' <"$d/seen")" powershell.exe "run did not name the launcher while bash ran"
+  assert_eq powershell "$(tr -d '\r' <"$d/seen" | tr '[:upper:]' '[:lower:]')" "run did not name the live launcher while bash ran"
 }
 
 test_launcher_exit_codes_name_their_cause() {
@@ -739,6 +761,7 @@ test_a_launcher_failure_pauses_without_blaming_a_logout() {
   # shellcheck source=../../scripts/dispatch.sh
   source "$AD_SCRIPTS/dispatch.sh"
   mkdir -p "$AD_HOME/logs"
+  mkdir -p "$LOCK"
   OUT=$(reconcile octo/widgets 4 "the Windows launcher could not start the run" "$AD_HOME/logs/x.log" 2)
   assert_key "$OUT" PAUSED true
   [ -e "$HOME/.agent-dispatch/paused" ] || fail "paused was not created"
@@ -769,7 +792,7 @@ test_a_run_that_outlives_its_stop_keeps_the_lock() {
   export FAKE_CLI_MODE=hang FAKE_SLEEP_STEP=3600 FAKE_SLEEP_REAL=0.1
   # A stop that does nothing stands in for one that did not take: the tick must not block on wait.
   # shellcheck disable=SC2016 # $1 belongs to the nested shell
-  OUT=$("$BASH" -c 'source "$1"; stop_run() { :; }; main' _ "$AD_SCRIPTS/dispatch.sh" 2>"$TEST_TMPDIR/.err")
+  OUT=$("$BASH" -c 'source "$1"; POLL_SECONDS=3600; stop_run() { :; }; main' _ "$AD_SCRIPTS/dispatch.sh" 2>"$TEST_TMPDIR/.err")
   RC=$?
   ERR=$(cat "$TEST_TMPDIR/.err")
   assert_rc 1
@@ -1027,6 +1050,7 @@ test_a_hook_with_no_published_pid_keeps_its_directory() {
   # shellcheck source=../../scripts/dispatch.sh
   source "$AD_SCRIPTS/dispatch.sh"
   mkdir -p "$AD_HOME/.notify"
+  write_boot_record "$AD_HOME/.notify"
   : >"$AD_HOME/.notify/launched"
   printf 'original hook\n' >"$AD_HOME/.notify/run.sh"
   OUT=$(notify review octo/widgets 4 '')
@@ -1080,4 +1104,306 @@ test_an_incomplete_done_cannot_hide_a_run_failure() {
   dispatch
   assert_key "$OUT" OUTCOME agent:failed "only a complete done proves completion"
   assert_contains "$(cat "$FIX/posted-4")" 'state=failed'
+}
+
+test_a_running_flip_applied_before_error_is_recovered() {
+  setup_env
+  open_issue 4 agent
+  : >"$FIX/fail-after-edit-agent:running"
+  dispatch
+  assert_rc 1
+  [ -z "$(cli_log)" ] || fail "launched after an uncertain running flip"
+  [ -d "$HOME/.agent-dispatch/lock" ] || fail "lost the remotely applied running flip"
+  rm "$FIX/fail-after-edit-agent:running"
+  dispatch
+  assert_rc 0
+  assert_key "$OUT" RECOVERED octo/widgets#4
+  assert_eq agent:failed "$(cat "$FIX/labels-4")"
+  [ -z "$(cli_log)" ] || fail "recovery launched the uncertain run"
+}
+
+test_a_failure_comment_is_not_repeated_after_a_failed_label_edit() {
+  setup_env
+  open_issue 4 agent
+  : >"$FIX/fail-edit-agent:failed"
+  dispatch
+  assert_rc 1
+  dispatch
+  assert_rc 1
+  rm "$FIX/fail-edit-agent:failed"
+  dispatch
+  assert_rc 0
+  assert_eq 1 "$(grep -c 'state=failed' "$FIX/posted-4")" "failure POST repeated on retry"
+  assert_eq agent:failed "$(cat "$FIX/labels-4")"
+}
+
+test_an_unread_reply_failure_finishes_after_a_label_error() {
+  setup_env
+  open_issue 7 agent:waiting
+  comment 7 101 octo '<!-- issue-to-pr state=waiting step=3 issue-read=100 -->'
+  comment 7 102 octo
+  export FAKE_CLI_MODE=flip:agent:waiting FAKE_CLI_EXIT=3
+  : >"$FIX/fail-edit-agent:failed"
+  dispatch
+  assert_rc 1
+  rm "$FIX/fail-edit-agent:failed"
+  dispatch
+  assert_rc 0
+  assert_eq agent:failed "$(cat "$FIX/labels-7")"
+  assert_eq 1 "$(grep -c 'state=failed' "$FIX/posted-7")"
+  assert_contains "$(cat "$FIX/posted-7")" 'parked again without reading your reply'
+  [ -e "$HOME/.agent-dispatch/paused" ] && fail "an unread reply is not a CLI outage"
+  return 0
+}
+
+test_previous_boot_ids_are_neither_checked_nor_signalled() {
+  setup_env
+  open_issue 4 agent:running
+  dead_tick_lock
+  printf '%s\n' "$$" >"$HOME/.agent-dispatch/lock/tick"
+  printf '424242\n' >"$HOME/.agent-dispatch/lock/run"
+  printf '111\n' >"$HOME/.agent-dispatch/lock/boot"
+  : >"$FIX/issues"
+  OUT=$("$BASH" -c '
+    source "$1"
+    boot_id() { printf "222\n"; }
+    stop_run() { printf "signalled\n" >>"$FIX/signals"; }
+    gone() { printf "checked\n" >>"$FIX/signals"; return 0; }
+    main
+  ' _ "$AD_SCRIPTS/dispatch.sh" 2>"$TEST_TMPDIR/.err")
+  RC=$? ERR=$(cat "$TEST_TMPDIR/.err")
+  assert_rc 0
+  assert_key "$OUT" RECOVERED octo/widgets#4
+  [ -e "$FIX/signals" ] && fail "used a process ID from a previous boot"
+  return 0
+}
+
+test_previous_boot_hook_ids_are_never_signalled() {
+  setup_env
+  source "$AD_SCRIPTS/dispatch.sh"
+  BOOT_ID=222
+  mkdir -p "$AD_HOME/.notify"
+  printf '111\n' >"$AD_HOME/.notify/boot"
+  printf '424242\n' >"$AD_HOME/.notify/run"
+  # shellcheck disable=SC2317,SC2329
+  stop_run() { printf 'signalled\n' >>"$FIX/signals"; }
+  # shellcheck disable=SC2317,SC2329
+  gone() { return 0; }
+  stop_hook || fail "an earlier boot cannot leave a hook alive"
+  [ -e "$FIX/signals" ] && fail "signalled an earlier boot's hook ID"
+  [ -d "$AD_HOME/.notify" ] && fail "kept an earlier boot's hook record"
+  return 0
+}
+
+test_recovery_cannot_see_an_ownerless_lock_during_publication() {
+  setup_env
+  open_issue 4 agent
+  export FAKE_CLI_MODE=flip:agent:review
+  OUT=$("$BASH" -c '
+    source "$1"
+    mkdir() {
+      command mkdir "$@" || return
+      if [ "$1" = "$LOCK" ]; then (recover); fi
+    }
+    main
+  ' _ "$AD_SCRIPTS/dispatch.sh" 2>"$TEST_TMPDIR/.err")
+  RC=$? ERR=$(cat "$TEST_TMPDIR/.err")
+  assert_rc 0
+  assert_key "$OUT" OUTCOME agent:review
+  assert_eq '' "$ERR" "recovery removed a lock before its owner record existed"
+}
+
+test_wall_clock_jumps_do_not_exhaust_the_poll_budget() {
+  setup_env
+  source "$AD_SCRIPTS/dispatch.sh"
+  open_issue 4 agent
+  PICK_I=0 PICK_N=4 PICK_WHY=queue
+  read_config
+  OWNER=octo
+  DEADLINE_SECONDS=60 POLL_SECONDS=20
+  # Keep the controlled run alive for three polls, without spawning a real worker.
+  # shellcheck disable=SC2317,SC2329
+  launch() { RUN_PID=424242; }
+  # shellcheck disable=SC2317,SC2329
+  kill() { [ ! -e "$FIX/stopped" ]; }
+  # shellcheck disable=SC2317,SC2329
+  stop_run() { touch "$FIX/stopped"; }
+  # shellcheck disable=SC2317,SC2329
+  wait() { return 0; }
+  # shellcheck disable=SC2317,SC2329
+  sleep() {
+    printf '1000000\n' >"$FAKE_CLOCK"
+    printf 'poll\n' >>"$FIX/polls"
+  }
+  OUT=$(run_issue)
+  assert_eq 3 "$(wc -l <"$FIX/polls" | tr -d ' ')" "wall clock jump used the poll budget"
+  assert_key "$OUT" TICK 'done'
+}
+
+test_publication_preserves_a_competing_lock_without_nesting() {
+  setup_env
+  source "$AD_SCRIPTS/dispatch.sh"
+  read_config
+  PICK_I=0 PICK_N=4 PICK_WHY=queue
+  mkdir -p "$LOCK"
+  printf 'original-owner\n' >"$LOCK/tick"
+  OUT=$(run_issue)
+  assert_key "$OUT" TICK busy
+  assert_eq original-owner "$(cat "$LOCK/tick")"
+  [ -d "$LOCK/lock" ] && fail "publication nested its candidate in the winner's lock"
+  [ -n "$(find "$AD_HOME" -name '.claim.*' -print)" ] && fail "a losing candidate was kept"
+  [ -z "$(cli_log)" ] || fail "a competing tick launched another run"
+}
+
+test_unknown_boot_records_are_preserved_without_signals() {
+  local invalid
+  setup_env
+  open_issue 4 agent:running
+  for invalid in '' '------------------------------------'; do
+    mkdir -p "$HOME/.agent-dispatch/lock"
+    printf '424242\n' >"$HOME/.agent-dispatch/lock/run"
+    printf '%s\n' "$invalid" >"$HOME/.agent-dispatch/lock/boot"
+    OUT=$("$BASH" -c '
+      source "$1"
+      boot_id() { printf "222\n"; }
+      stop_run() { printf "signalled\n" >>"$FIX/signals"; }
+      gone() { return 0; }
+      main
+    ' _ "$AD_SCRIPTS/dispatch.sh" 2>"$TEST_TMPDIR/.err")
+    RC=$? ERR=$(cat "$TEST_TMPDIR/.err")
+    assert_rc 1
+    assert_key "$OUT" REASON recover
+    [ -e "$FIX/signals" ] && fail "an unknown boot authorized a signal"
+    [ -d "$HOME/.agent-dispatch/lock" ] || fail "unknown process records were discarded"
+  done
+}
+
+test_fresh_done_clears_a_failure_label_applied_before_error() {
+  setup_env
+  open_issue 4 agent
+  : >"$FIX/fail-after-edit-agent:failed"
+  dispatch
+  assert_rc 1
+  assert_eq agent:failed "$(cat "$FIX/labels-4")"
+  rm "$FIX/fail-after-edit-agent:failed"
+  comment 4 2000 octo '<!-- issue-to-pr state=done step=9 tier=standard pr=12 issue-read=1900 pr-read=1800 -->'
+  dispatch
+  assert_rc 0
+  assert_key "$OUT" OUTCOME 'done'
+  [ -s "$FIX/labels-4" ] && fail "a fresh completion retained the dispatcher's failure label"
+  assert_eq 1 "$(grep -c 'state=failed' "$FIX/posted-4")" "completion reposted failure"
+}
+
+test_an_unrelated_cli_failed_state_does_not_replace_the_dispatcher_comment() {
+  setup_env
+  open_issue 4 agent
+  export FAKE_CLI_MODE=flip:agent:running FAKE_CLI_COMMENTS='101\tocto\t<!-- issue-to-pr state=failed step=3 -->\n'
+  : >"$FIX/fail-comment"
+  dispatch
+  assert_rc 1
+  [ -e "$FIX/posted-4" ] && fail "a rejected comment was posted"
+  rm "$FIX/fail-comment"
+  dispatch
+  assert_rc 0
+  [ -s "$FIX/posted-4" ] || fail "another failed state suppressed the dispatcher diagnostic"
+  assert_eq 1 "$(grep -c 'state=failed' "$FIX/posted-4")"
+  assert_eq agent:failed "$(cat "$FIX/labels-4")"
+}
+
+test_a_running_flip_with_only_removals_applied_is_reconciled() {
+  setup_env
+  open_issue 4 agent
+  : >"$FIX/fail-remove-only-agent:running"
+  dispatch
+  assert_rc 1
+  [ -s "$FIX/labels-4" ] && fail "fixture did not apply just the removals"
+  [ -z "$(cli_log)" ] || fail "launched after a partial running flip"
+  rm "$FIX/fail-remove-only-agent:running"
+  dispatch
+  assert_rc 0
+  assert_key "$OUT" RECOVERED octo/widgets#4
+  assert_eq agent:failed "$(cat "$FIX/labels-4")" "partial flip lost the issue"
+  [ -s "$FIX/posted-4" ] || fail "partial flip lost its diagnostic"
+  [ -z "$(cli_log)" ] || fail "recovery renewed approval after a partial flip"
+}
+
+test_rejected_reply_flips_clear_parked_labels_before_owner_retry() {
+  local base_tmp="$TEST_TMPDIR" base_path=$PATH state
+  for state in waiting review; do
+    TEST_TMPDIR="$base_tmp/$state"
+    PATH=$base_path
+    mkdir -p "$TEST_TMPDIR"
+    setup_env
+    open_issue 4 "agent:$state"
+    comment 4 101 octo "<!-- issue-to-pr state=$state issue-read=100 -->"
+    comment 4 102 octo
+    : >"$FIX/fail-edit"
+    dispatch
+    assert_rc 1
+    rm "$FIX/fail-edit"
+    dispatch
+    assert_rc 0
+    assert_eq agent:failed "$(cat "$FIX/labels-4")" "recovery left a parked $state label"
+    [ -z "$(cli_log)" ] || fail "recovery launched without owner retry"
+    printf 'agent\nagent:failed\n' >"$FIX/labels-4"
+    printf 'agent\tocto\n' >>"$FIX/events-4"
+    export FAKE_CLI_MODE=flip:agent:review
+    dispatch
+    assert_rc 0
+    assert_eq agent:review "$(cat "$FIX/labels-4")"
+    assert_eq 1 "$(wc -l <"$FIX/cli.log" | tr -d ' ')" "owner retry must start one run"
+  done
+  TEST_TMPDIR=$base_tmp
+}
+
+test_done_clears_parked_labels_after_a_rejected_reply_flip() {
+  setup_env
+  open_issue 4 agent:waiting
+  comment 4 101 octo '<!-- issue-to-pr state=waiting issue-read=100 -->'
+  comment 4 102 octo
+  : >"$FIX/fail-edit"
+  dispatch
+  assert_rc 1
+  rm "$FIX/fail-edit"
+  comment 4 2000 octo '<!-- issue-to-pr state=done step=9 pr=12 -->'
+  dispatch
+  assert_rc 0
+  assert_key "$OUT" OUTCOME 'done'
+  [ -s "$FIX/labels-4" ] && fail "completion retained the parked label"
+  [ -z "$(cli_log)" ] || fail "completion launched another run"
+}
+
+test_a_tick_interrupted_during_the_running_flip_keeps_failure_intent() {
+  setup_env
+  open_issue 4 agent
+  OUT=$("$BASH" -c '
+    source "$1"
+    gh() {
+      case "$*" in "issue edit "*"--add-label agent:running"*)
+        : >"$FIX/labels-4"
+        exit 47 # removal applied, dispatcher stopped before the request returned
+        ;;
+      esac
+      command gh "$@"
+    }
+    main
+  ' _ "$AD_SCRIPTS/dispatch.sh" 2>"$TEST_TMPDIR/.err")
+  RC=$? ERR=$(cat "$TEST_TMPDIR/.err")
+  assert_rc 47
+  [ -s "$FIX/labels-4" ] && fail "the interrupted edit did not remove queue labels"
+  dispatch
+  assert_rc 0
+  assert_eq agent:failed "$(cat "$FIX/labels-4")" "interruption lost the approved issue"
+  [ -s "$FIX/posted-4" ] || fail "interruption lost its diagnostic"
+  [ -z "$(cli_log)" ] || fail "recovery launched without renewed owner approval"
+}
+
+test_failure_after_launch_preserves_a_fresh_owner_queue_label() {
+  setup_env
+  open_issue 4 agent,agent:running
+  source "$AD_SCRIPTS/dispatch.sh"
+  mkdir -p "$LOCK"
+  : >"$LOCK/launched"
+  OUT=$(reconcile octo/widgets 4 stopped "$AD_HOME/logs/run.log" 0)
+  assert_eq $'agent\nagent:failed' "$(cat "$FIX/labels-4")" "a fresh owner retry label was discarded"
 }
