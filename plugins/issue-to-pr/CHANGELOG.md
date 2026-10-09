@@ -7,9 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [9.10.0] - 2026-10-09
 
-### Added
-- Check task activation, unrelated requests, and merge decisions on Codex and Claude Code.
-
 ### Fixed
 - Use the originating issue number when merging and cleaning up an approved PR.
 
